@@ -7,8 +7,11 @@ import net.minecraft.client.gui.navigation.ScreenPosition;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.ARGB;
 import net.minecraft.util.CommonColors;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import org.joml.Vector2f;
 import org.jspecify.annotations.NonNull;
 
@@ -32,15 +35,18 @@ public class TestScreen extends Screen {
                 CommonColors.WHITE
         );
 
-//        BezierCurveRenderer.renderControlLines(graphics, controlPoints, this.width, this.height);
+        var renderBounds = new ScreenRectangle(new ScreenPosition(100, 100), 140, 320);
 
-        BezierCurveRenderer.render(graphics, curve,
-                new ScreenRectangle(new ScreenPosition(100, 100), 140, 320));
+        graphics.fill(renderBounds.left(), renderBounds.top(), renderBounds.right(), renderBounds.bottom(),
+                ARGB.color(0.5f, CommonColors.GRAY));
 
-        // BIND SHADER
-        // PASS TWO POINTS
-        // DRAW
-        // ????
-        // PROFIT
+        BezierCurveRenderer.render(graphics, curve, renderBounds);
+
+        graphics.nextStratum();
+
+        for(var point : curve.realControlPoints())
+            graphics.renderFakeItem(new ItemStack(Items.ENDER_PEARL), (int) point.x() - 8, (int) point.y() - 8);
+
+        BezierCurveRenderer.renderControlLines(graphics, curve.realControlPoints(), renderBounds);
     }
 }

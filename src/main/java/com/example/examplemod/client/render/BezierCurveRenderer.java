@@ -6,6 +6,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import org.joml.Matrix3x2f;
 import org.joml.Vector2f;
+import org.joml.Vector2fc;
 
 import java.util.Collection;
 
@@ -31,29 +32,29 @@ public class BezierCurveRenderer {
     /**
      * Renders control lines connecting P0-P1 and P2-P3.
      */
-    public static void renderControlLines(GuiGraphics graphics, Collection<Vector2f> controlPoints,
-                                          int canvasWidth, int canvasHeight) {
-        if (controlPoints == null || controlPoints.size() != 4) {
+    public static void renderControlLines(GuiGraphics graphics, Vector2fc[] controlPoints,
+                                          ScreenRectangle bounds) {
+        if (controlPoints == null || controlPoints.length != 4) {
             return;
         }
 
         int lineColor = 0x80FFFFFF;
 
         // P0 to P1
-//        drawDashedLine(graphics,
-//                (int) (controlPoints[0].x * canvasWidth),
-//                (int) (controlPoints[0].y * canvasHeight),
-//                (int) (controlPoints[1].x * canvasWidth),
-//                (int) (controlPoints[1].y * canvasHeight),
-//                lineColor);
-//
-//        // P2 to P3
-//        drawDashedLine(graphics,
-//                (int) (controlPoints[2].x * canvasWidth),
-//                (int) (controlPoints[2].y * canvasHeight),
-//                (int) (controlPoints[3].x * canvasWidth),
-//                (int) (controlPoints[3].y * canvasHeight),
-//                lineColor);
+        drawDashedLine(graphics,
+                (int) (controlPoints[0].x() * bounds.width()),
+                (int) (controlPoints[0].y() * bounds.height()),
+                (int) (controlPoints[1].x() * bounds.width()),
+                (int) (controlPoints[1].y() * bounds.height()),
+                lineColor);
+
+        // P2 to P3
+        drawDashedLine(graphics,
+                (int) (controlPoints[2].x() * bounds.width()),
+                (int) (controlPoints[2].y() * bounds.height()),
+                (int) (controlPoints[3].x() * bounds.width()),
+                (int) (controlPoints[3].y() * bounds.height()),
+                lineColor);
     }
 
     private static void drawDashedLine(GuiGraphics graphics, int x1, int y1, int x2, int y2, int color) {
