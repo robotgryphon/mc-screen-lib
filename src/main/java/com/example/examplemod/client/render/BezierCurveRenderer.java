@@ -1,81 +1,31 @@
 package com.example.examplemod.client.render;
 
+import com.example.examplemod.client.render.pip.BezierCurveRenderState;
+import com.example.examplemod.graph.NodeConnection;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.render.TextureSetup;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
 import org.joml.Matrix3x2f;
 import org.joml.Vector2f;
-import org.joml.Vector2fc;
 
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
-import java.util.Set;
 
 /**
  * Renders bezier curves using the Minecraft GUI rendering pipeline with custom shaders.
  */
 public class BezierCurveRenderer {
 
-    private static final int SAMPLES = 100;
-    private static final float THICKNESS = 3.0f;
-    private static final int START_COLOR = 0xFFFF0000; // Red
-    private static final int END_COLOR = 0xFF00FF00;   // Green
-
     /**
      * Renders a cubic bezier curve with a red-to-green gradient using the custom shader pipeline.
      *
-     * @param graphics      The GUI graphics context
-     * @param controlPoints Array of 4 control points in normalized coordinates (0-1)
-     * @param canvasWidth   Width of the canvas area in pixels
-     * @param canvasHeight  Height of the canvas area in pixels
+     * @param graphics The GUI graphics context
      */
-    public static void render(GuiGraphics graphics, List<Vector2f> controlPoints,
-                              int canvasWidth, int canvasHeight) {
-        if (controlPoints == null || controlPoints.size() != 4) {
-            return;
-        }
-
-        float halfThickness = THICKNESS / 2.0f;
-        Matrix3x2f pose = new Matrix3x2f(graphics.pose());
-
-        for (int i = 0; i < SAMPLES - 1; i++) {
-            float t1 = (float) i / (SAMPLES - 1);
-            float t2 = (float) (i + 1) / (SAMPLES - 1);
-
-            Vector2f p1 = evaluateBezier(controlPoints, t1);
-            Vector2f p2 = evaluateBezier(controlPoints, t2);
-
-            float x1 = p1.x * canvasWidth;
-            float y1 = p1.y * canvasHeight;
-            float x2 = p2.x * canvasWidth;
-            float y2 = p2.y * canvasHeight;
-
-            float dx = x2 - x1;
-            float dy = y2 - y1;
-            float len = (float) Math.sqrt(dx * dx + dy * dy);
-
-            if (len < 0.001f) {
-                continue;
-            }
-
-            float px = -dy / len * halfThickness;
-            float py = dx / len * halfThickness;
-
-            int color1 = lerpColor(START_COLOR, END_COLOR, t1);
-            int color2 = lerpColor(START_COLOR, END_COLOR, t2);
-
-            Vector2f[] list = new Vector2f[]{
-                    new Vector2f(x1 - px, y1 - py),
-                    new Vector2f(x1 + px, y1 + py),
-                    new Vector2f(x2 + px, y2 + py),
-                    new Vector2f(x2 - px, y2 - py)
-            };
-
-            graphics.submitGuiElementRenderState(BezierCurveRenderState.from(
-                    pose,
-                    list
-            ));
-        }
+    public static void render(GuiGraphics graphics, NodeConnection connection, ScreenRectangle bounds) {
+        graphics.submitPictureInPictureRenderState(BezierCurveRenderState.from(
+                new Matrix3x2f(graphics.pose()),
+                connection.realControlPoints(),
+                connection.relativeControlPoints(bounds),
+                connection.color()
+        ));
     }
 
     /**
@@ -127,30 +77,6 @@ public class BezierCurveRenderer {
                 graphics.fill(sx, Math.min(sy, ey), sx + 1, Math.max(sy, ey) + 1, color);
             }
         }
-    }
-
-    /**
-     * Evaluates a cubic bezier curve at parameter t.
-     * B(t) = (1-t)^3 * P0 + 3*(1-t)^2*t * P1 + 3*(1-t)*t^2 * P2 + t^3 * P3
-     */
-    private static Vector2f evaluateBezier(List<Vector2f> points, float t) {
-        float u = 1 - t;
-        float tt = t * t;
-        float uu = u * u;
-        float uuu = uu * u;
-        float ttt = tt * t;
-
-        float x = uuu * points.get(0).x
-                + 3 * uu * t * points.get(1).x
-                + 3 * u * tt * points.get(2).x
-                + ttt * points.get(3).x;
-
-        float y = uuu * points.get(0).y
-                + 3 * uu * t * points.get(1).y
-                + 3 * u * tt * points.get(2).y
-                + ttt * points.get(3).y;
-
-        return new Vector2f(x, y);
     }
 
     /**
