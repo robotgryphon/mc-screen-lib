@@ -49,13 +49,11 @@ float udBezier(vec2 p0, in vec2 p1, in vec2 p2, in vec2 p3, vec2 pos)
 }
 
 void main() {
-    // gl_FragCoord is GL window-space (y-up), but relativePoints are computed
-    // from GUI coords (y-down). Flip Y so fragPos lives in the same space.
     vec2 fragPos = vec2(gl_FragCoord.x, size.y - gl_FragCoord.y) / size;
 
     float f = udBezier(point1, point2, point3, point4, fragPos);
 
-    float alpha = 1.0 - smoothstep(0.0, 0.001, f);
+    float alpha = 1.0 - smoothstep(0.0, 0.0002, f);
     if (alpha < 0.0002) {
         discard;
     }
