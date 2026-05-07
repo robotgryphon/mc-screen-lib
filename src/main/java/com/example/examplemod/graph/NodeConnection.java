@@ -1,6 +1,7 @@
 package com.example.examplemod.graph;
 
 import com.example.examplemod.math.BezierCurveCalculator;
+import net.minecraft.client.gui.navigation.ScreenPosition;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import org.joml.Vector2f;
 import org.joml.Vector2fc;
@@ -25,6 +26,12 @@ public record NodeConnection(Vector2fc start, NodeSide startSide, Vector2fc end,
         }
 
         return transformed;
+    }
+
+    public ScreenRectangle bounds() {
+        return new ScreenRectangle(new ScreenPosition((int) start.x(), (int) start.y()),
+                (int) (end.x() - start.x()),
+                (int) (end.y() - start.y()));
     }
 
     enum NodeSide {

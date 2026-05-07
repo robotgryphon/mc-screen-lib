@@ -53,7 +53,7 @@ void main() {
 
     float f = udBezier(point1, point2, point3, point4, fragPos);
 
-    float alpha = 1.0 - smoothstep(0.0, 0.0002, f);
+    float alpha = 1.0 - smoothstep(0.0, 0.00002, f);
     if (alpha < 0.0002) {
         discard;
     }

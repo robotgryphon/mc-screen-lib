@@ -13,7 +13,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.joml.Vector2f;
-import org.jspecify.annotations.NonNull;
 
 public class TestScreen extends Screen {
     private final Player player;
@@ -31,22 +30,18 @@ public class TestScreen extends Screen {
 
         var curve = NodeConnection.rightToLeft(
                 new Vector2f(100, 100),
-                new Vector2f(240, 420f),
-                CommonColors.WHITE
+                new Vector2f(240, 220f),
+                CommonColors.GREEN
         );
 
-        var renderBounds = new ScreenRectangle(new ScreenPosition(100, 100), 140, 320);
+//        graphics.fill(renderBounds.left(), renderBounds.top(), renderBounds.right(), renderBounds.bottom(),
+//                ARGB.color(0.5f, CommonColors.GRAY));
 
-        graphics.fill(renderBounds.left(), renderBounds.top(), renderBounds.right(), renderBounds.bottom(),
-                ARGB.color(0.5f, CommonColors.GRAY));
-
-        BezierCurveRenderer.render(graphics, curve, renderBounds);
+        BezierCurveRenderer.render(graphics, curve, curve.bounds());
 
         graphics.nextStratum();
 
-        for(var point : curve.realControlPoints())
-            graphics.fakeItem(new ItemStack(Items.ENDER_PEARL), (int) point.x() - 8, (int) point.y() - 8);
-
-        BezierCurveRenderer.renderControlLines(graphics, curve.realControlPoints(), renderBounds);
+        graphics.fakeItem(new ItemStack(Items.ENDER_PEARL), (int) curve.start().x() - 8, (int) curve.start().y() - 8);
+        graphics.fakeItem(new ItemStack(Items.ENDER_PEARL), (int) curve.end().x() - 8, (int) curve.end().y() - 8);
     }
 }
