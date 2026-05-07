@@ -2,8 +2,8 @@ package com.example.examplemod.client.render;
 
 import com.example.examplemod.client.render.uniforms.BezierCurveUniform;
 import com.mojang.blaze3d.pipeline.BlendFunction;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
-import com.mojang.blaze3d.platform.DepthTestFunction;
 import com.mojang.blaze3d.shaders.UniformType;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
@@ -20,9 +20,8 @@ public class ExRenderPipelines {
             .withLocation(Identifier.fromNamespaceAndPath(MODID, "pipeline/bezier_curve"))
             .withVertexShader(Identifier.fromNamespaceAndPath(MODID, "bezier_curve"))
             .withFragmentShader(Identifier.fromNamespaceAndPath(MODID, "bezier_curve"))
-            .withBlend(BlendFunction.TRANSLUCENT)
             .withCull(false)
-            .withVertexFormat(DefaultVertexFormat.POSITION_COLOR, VertexFormat.Mode.QUADS)
-            .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
+            .withVertexFormat(DefaultVertexFormat.POSITION_COLOR_NORMAL, VertexFormat.Mode.QUADS)
+            .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
             .build();
 }

@@ -2,10 +2,9 @@ package com.example.examplemod.client.render;
 
 import com.example.examplemod.client.render.pip.BezierCurveRenderState;
 import com.example.examplemod.graph.NodeConnection;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import org.joml.Matrix3x2f;
-import org.joml.Vector2f;
 import org.joml.Vector2fc;
 
 import java.util.Collection;
@@ -20,7 +19,7 @@ public class BezierCurveRenderer {
      *
      * @param graphics The GUI graphics context
      */
-    public static void render(GuiGraphics graphics, NodeConnection connection, ScreenRectangle bounds) {
+    public static void render(GuiGraphicsExtractor graphics, NodeConnection connection, ScreenRectangle bounds) {
         graphics.submitPictureInPictureRenderState(BezierCurveRenderState.from(
                 new Matrix3x2f(graphics.pose()),
                 connection.realControlPoints(),
@@ -32,7 +31,7 @@ public class BezierCurveRenderer {
     /**
      * Renders control lines connecting P0-P1 and P2-P3.
      */
-    public static void renderControlLines(GuiGraphics graphics, Vector2fc[] controlPoints,
+    public static void renderControlLines(GuiGraphicsExtractor graphics, Vector2fc[] controlPoints,
                                           ScreenRectangle bounds) {
         if (controlPoints == null || controlPoints.length != 4) {
             return;
@@ -57,7 +56,7 @@ public class BezierCurveRenderer {
                 lineColor);
     }
 
-    private static void drawDashedLine(GuiGraphics graphics, int x1, int y1, int x2, int y2, int color) {
+    private static void drawDashedLine(GuiGraphicsExtractor graphics, int x1, int y1, int x2, int y2, int color) {
         float dx = x2 - x1;
         float dy = y2 - y1;
         float length = (float) Math.sqrt(dx * dx + dy * dy);

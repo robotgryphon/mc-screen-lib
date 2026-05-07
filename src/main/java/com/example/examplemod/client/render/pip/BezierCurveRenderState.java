@@ -2,7 +2,7 @@ package com.example.examplemod.client.render.pip;
 
 import com.example.examplemod.math.BezierCurveCalculator;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
-import net.minecraft.client.gui.render.state.pip.PictureInPictureRenderState;
+import net.minecraft.client.renderer.state.gui.pip.PictureInPictureRenderState;
 import org.joml.Matrix3x2f;
 import org.joml.Vector2fc;
 import org.jspecify.annotations.Nullable;

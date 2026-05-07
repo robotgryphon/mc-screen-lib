@@ -2,7 +2,7 @@ package com.example.examplemod.client;
 
 import com.example.examplemod.client.render.BezierCurveRenderer;
 import com.example.examplemod.graph.NodeConnection;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.navigation.ScreenPosition;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.gui.screens.Screen;
@@ -24,10 +24,10 @@ public class TestScreen extends Screen {
     }
 
     @Override
-    public void render(@NonNull GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
-        super.render(graphics, mouseX, mouseY, partialTicks);
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
+        super.extractRenderState(graphics, mouseX, mouseY, a);
 
-        graphics.drawString(minecraft.font, "Hello!", 10, 10, CommonColors.WHITE);
+        graphics.text(minecraft.font, "Hello!", 10, 10, CommonColors.WHITE);
 
         var curve = NodeConnection.rightToLeft(
                 new Vector2f(100, 100),
@@ -45,7 +45,7 @@ public class TestScreen extends Screen {
         graphics.nextStratum();
 
         for(var point : curve.realControlPoints())
-            graphics.renderFakeItem(new ItemStack(Items.ENDER_PEARL), (int) point.x() - 8, (int) point.y() - 8);
+            graphics.fakeItem(new ItemStack(Items.ENDER_PEARL), (int) point.x() - 8, (int) point.y() - 8);
 
         BezierCurveRenderer.renderControlLines(graphics, curve.realControlPoints(), renderBounds);
     }
