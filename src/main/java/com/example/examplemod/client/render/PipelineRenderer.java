@@ -70,7 +70,7 @@ public class PipelineRenderer {
         var uniforms = getDynamicUniforms(color);
 
         try (mesh; var pass = device.createCommandEncoder().createRenderPass(
-                () -> "Olympus Pipeline Render Pass for: " + pipeline.getLocation(),
+                () -> "Pipeline Render Pass for: " + pipeline.getLocation(),
                 Objects.requireNonNullElse(RenderSystem.outputColorTextureOverride, target.getColorTextureView()),
                 OptionalInt.empty(),
                 target.useDepth ? Objects.requireNonNullElse(RenderSystem.outputDepthTextureOverride, target.getDepthTextureView()) : null,
