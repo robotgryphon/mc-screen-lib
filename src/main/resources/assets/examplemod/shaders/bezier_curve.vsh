@@ -12,14 +12,14 @@ layout(std140) uniform Projection {
     mat4 ProjMat;
 };
 
-in vec3 Position;
-in vec4 Color;
+in vec3 position;
+in vec4 color;
 
 out vec4 vertexPosition;
 out vec4 vertexColor;
 
 void main() {
-    gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);
-    vertexColor = Color;
+    gl_Position = ProjMat * ModelViewMat * vec4(position, 1.0);
+    vertexColor = color;
     vertexPosition = gl_Position;
 }

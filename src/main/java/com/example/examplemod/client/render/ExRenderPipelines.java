@@ -14,14 +14,12 @@ import static com.example.examplemod.ExampleMod.MODID;
 public class ExRenderPipelines {
 
     public static final RenderPipeline BEZIER_CURVED_LINES = RenderPipeline.builder()
-            .withUniform("DynamicTransforms", UniformType.UNIFORM_BUFFER)
-            .withUniform("Projection", UniformType.UNIFORM_BUFFER)
             .withUniform(BezierCurveUniform.NAME, UniformType.UNIFORM_BUFFER)
             .withLocation(Identifier.fromNamespaceAndPath(MODID, "pipeline/bezier_curve"))
             .withVertexShader(Identifier.fromNamespaceAndPath(MODID, "bezier_curve"))
             .withFragmentShader(Identifier.fromNamespaceAndPath(MODID, "bezier_curve"))
             .withCull(false)
-            .withVertexFormat(DefaultVertexFormat.POSITION_COLOR_NORMAL, VertexFormat.Mode.QUADS)
+            .withVertexFormat(DefaultVertexFormat.POSITION_COLOR, VertexFormat.Mode.QUADS)
             .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
             .build();
 }

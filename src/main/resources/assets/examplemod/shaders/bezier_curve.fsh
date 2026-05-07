@@ -57,14 +57,9 @@ void main() {
         (gl_FragCoord.xy / size) - 0.5
     );
 
-    float s = smoothstep(0.0002,0.00,f);
-    fragColor = mix(Color, vec4(0, 0, 0, 1), s);
-    if(s < 0.0002) {
+    float alpha = 1.0 - smoothstep(0.0, 0.0002, f);
+    if (alpha < 0.0002) {
         discard;
     }
-
-//    if (fragColor.a || Color.a < 0.01) {
-//        discard;
-//    }
-
+    fragColor = vec4(vertexColor.rgb, vertexColor.a * alpha);
 }
