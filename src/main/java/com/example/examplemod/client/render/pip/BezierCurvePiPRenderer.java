@@ -7,7 +7,6 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import org.jetbrains.annotations.NotNull;
 
@@ -34,20 +33,16 @@ public class BezierCurvePiPRenderer
     protected void renderToTexture(BezierCurveRenderState state, PoseStack stack) {
         var bounds = state.bounds();
 
-        float scale = (float) Minecraft.getInstance().getWindow().getGuiScale();
-        float scaledWidth = bounds.width() * scale;
-        float scaledHeight = bounds.height() * scale;
-
         var buffer = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS,
                 DefaultVertexFormat.POSITION_COLOR);
 
         buffer.addVertex(0f, 0f, 0f).setColor(state.color());
-        buffer.addVertex(0f, scaledHeight, 0f).setColor(state.color());
-        buffer.addVertex(scaledWidth, scaledHeight, 0f).setColor(state.color());
-        buffer.addVertex(scaledWidth, 0f, 0f).setColor(state.color());
+        buffer.addVertex(0f, bounds.height(), 0f).setColor(state.color());
+        buffer.addVertex(bounds.width(), bounds.height(), 0f).setColor(state.color());
+        buffer.addVertex(bounds.width(), 0f, 0f).setColor(state.color());
 
         PipelineRenderer.builder(ExRenderPipelines.BEZIER_CURVED_LINES, buffer.buildOrThrow())
-                .uniform(BezierCurveUniform.STORAGE, new BezierCurveUniform(state.relativePoints(), state.bounds()))
+                .uniform(BezierCurveUniform.STORAGE, new BezierCurveUniform(state.relativePoints(), bounds))
                 .draw();
 
         this.lastState = state;
