@@ -34,9 +34,9 @@ public class CanvasWidget extends AbstractWidget {
      */
     private boolean panning;
 
-    public CanvasWidget(int x, int y, int width, int height) {
+    public CanvasWidget(Canvas canvas, int x, int y, int width, int height) {
         super(x, y, width, height, Component.empty());
-        this.canvas = new Canvas();
+        this.canvas = canvas;
     }
 
     // -- Mouse input --------------------------------------------------------
