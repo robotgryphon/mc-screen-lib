@@ -178,30 +178,17 @@ public class DraggableWidget extends AbstractWidget {
         }
         int newX = (int) Math.round(event.x() - this.grabOffsetX);
         int newY = (int) Math.round(event.y() - this.grabOffsetY);
-        this.setPositionClamped(newX, newY);
+        // No clamp: nodes live in their parent canvas's coordinate space, which
+        // is conceptually unbounded for a graph editor. The host (e.g., Canvas)
+        // is responsible for any pan/zoom or boundary policy it wants to apply.
+        this.setX(newX);
+        this.setY(newY);
     }
 
     @Override
     public void onRelease(MouseButtonEvent event) {
         super.onRelease(event);
         this.dragging = false;
-    }
-
-    /**
-     * Move the widget to ({@code x}, {@code y}), clamped so it stays inside the
-     * current Minecraft window. Falls back to the requested position if the
-     * window dimensions are unavailable.
-     */
-    public void setPositionClamped(int x, int y) {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc != null && mc.getWindow() != null) {
-            int screenWidth = mc.getWindow().getGuiScaledWidth();
-            int screenHeight = mc.getWindow().getGuiScaledHeight();
-            x = Math.max(0, Math.min(x, screenWidth - this.getWidth()));
-            y = Math.max(0, Math.min(y, screenHeight - this.getHeight()));
-        }
-        this.setX(x);
-        this.setY(y);
     }
 
     @Override
