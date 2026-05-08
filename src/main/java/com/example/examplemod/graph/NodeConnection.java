@@ -33,13 +33,16 @@ public record NodeConnection(Vector2fc start, NodeSide startSide, Vector2fc end,
         int minY = (int) Math.min(start.y(), end.y());
         int maxX = (int) Math.max(start.x(), end.x());
         int maxY = (int) Math.max(start.y(), end.y());
-        return new ScreenRectangle(new ScreenPosition(minX, minY), maxX - minX, maxY - minY);
+        // Enforce a minimum 1x1 size so the picture-in-picture renderer never
+        // tries to allocate a 0-dimension GPU texture (and so relativeControlPoints
+        // never divides by zero) when start and end are axis-aligned.
+        int width = Math.max(1, maxX - minX);
+        int height = Math.max(1, maxY - minY);
+        return new ScreenRectangle(new ScreenPosition(minX, minY), width, height);
     }
 
-    enum NodeSide {
+    public enum NodeSide {
         LEFT,
-        RIGHT,
-        TOP,
-        BOTTOM
+        RIGHT
     }
 }

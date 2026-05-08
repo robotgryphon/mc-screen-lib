@@ -1,0 +1,196 @@
+package com.example.examplemod.client.widget;
+
+import com.example.examplemod.graph.NodeConnection.NodeSide;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.ARGB;
+import org.joml.Vector2f;
+import org.joml.Vector2fc;
+import org.jspecify.annotations.Nullable;
+
+/**
+ * A panel-style widget that the user can either grab and drag, or use as a
+ * connection node. Each widget exposes a small set of "ports" (one on each
+ * configured edge); clicking on the body itself drags the widget, while
+ * clicking on a port is meant to be intercepted by the parent screen to start
+ * a connection between two widgets.
+ */
+public class DraggableWidget extends AbstractWidget {
+
+    private static final int BACKGROUND_COLOR = 0xCC1F1F23;
+    private static final int BACKGROUND_HOVER_COLOR = 0xCC2A2A33;
+    private static final int BORDER_COLOR = 0xFF7F7F8C;
+    private static final int BORDER_DRAG_COLOR = 0xFFFFD24A;
+    private static final int TITLE_BAR_COLOR = 0xFF3A3A45;
+    private static final int TITLE_BAR_HEIGHT = 12;
+
+    private static final int PORT_RADIUS = 3;
+    private static final int PORT_HIT_RADIUS = 5;
+    private static final int PORT_FILL_COLOR = 0xFF8FA0FF;
+    private static final int PORT_HOVER_COLOR = 0xFFFFD24A;
+    private static final int PORT_OUTLINE_COLOR = 0xFF101012;
+
+    /** The sides on which this widget exposes connection ports. */
+    private final NodeSide[] sides;
+
+    private boolean dragging;
+    /** Offset from the widget's top-left to the mouse when the body drag started. */
+    private double grabOffsetX;
+    private double grabOffsetY;
+
+    public DraggableWidget(int x, int y, int width, int height, Component title, NodeSide[] sides) {
+        super(x, y, width, height, title);
+        this.sides = sides;
+    }
+
+    public boolean isDragging() {
+        return this.dragging;
+    }
+
+    /** The sides on which this widget exposes ports. */
+    public NodeSide[] sides() {
+        return this.sides;
+    }
+
+    /** World-space center of the port on the given side, in GUI-scaled coordinates. */
+    public Vector2fc portCenter(NodeSide side) {
+        int cx;
+        int cy;
+        switch (side) {
+            case LEFT -> {
+                cx = this.getX();
+                cy = this.getY() + this.getHeight() / 2;
+            }
+            case RIGHT -> {
+                cx = this.getX() + this.getWidth();
+                cy = this.getY() + this.getHeight() / 2;
+            }
+            default -> throw new IllegalStateException("Unknown side: " + side);
+        }
+        return new Vector2f(cx, cy);
+    }
+
+    /**
+     * If ({@code mouseX}, {@code mouseY}) lands on one of this widget's ports,
+     * return that side; otherwise {@code null}. The hit radius is a few pixels
+     * larger than the visible port so it's easy to grab.
+     */
+    public @Nullable NodeSide portAt(double mouseX, double mouseY) {
+        for (NodeSide side : this.sides) {
+            Vector2fc center = this.portCenter(side);
+            double dx = center.x() - mouseX;
+            double dy = center.y() - mouseY;
+            if (dx * dx + dy * dy <= PORT_HIT_RADIUS * PORT_HIT_RADIUS) {
+                return side;
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        // Don't claim clicks that landed on a port — those are for the screen
+        // to interpret as the start of a connection drag. By returning false
+        // here we prevent ContainerEventHandler from setting this widget as
+        // focused/dragging, which would otherwise hijack the drag.
+        if (this.isValidClickButton(event.buttonInfo()) && this.portAt(event.x(), event.y()) != null) {
+            return false;
+        }
+        return super.mouseClicked(event, doubleClick);
+    }
+
+    @Override
+    public void onClick(MouseButtonEvent event, boolean doubleClick) {
+        super.onClick(event, doubleClick);
+        this.dragging = true;
+        this.grabOffsetX = event.x() - this.getX();
+        this.grabOffsetY = event.y() - this.getY();
+    }
+
+    @Override
+    protected void onDrag(MouseButtonEvent event, double dx, double dy) {
+        if (!this.dragging) {
+            return;
+        }
+        int newX = (int) Math.round(event.x() - this.grabOffsetX);
+        int newY = (int) Math.round(event.y() - this.grabOffsetY);
+        this.setPositionClamped(newX, newY);
+    }
+
+    @Override
+    public void onRelease(MouseButtonEvent event) {
+        super.onRelease(event);
+        this.dragging = false;
+    }
+
+    /**
+     * Move the widget to ({@code x}, {@code y}), clamped so it stays inside the
+     * current Minecraft window. Falls back to the requested position if the
+     * window dimensions are unavailable.
+     */
+    public void setPositionClamped(int x, int y) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc != null && mc.getWindow() != null) {
+            int screenWidth = mc.getWindow().getGuiScaledWidth();
+            int screenHeight = mc.getWindow().getGuiScaledHeight();
+            x = Math.max(0, Math.min(x, screenWidth - this.getWidth()));
+            y = Math.max(0, Math.min(y, screenHeight - this.getHeight()));
+        }
+        this.setX(x);
+        this.setY(y);
+    }
+
+    @Override
+    protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        int left = this.getX();
+        int top = this.getY();
+        int right = left + this.getWidth();
+        int bottom = top + this.getHeight();
+
+        int background = (this.isHovered() || this.dragging) ? BACKGROUND_HOVER_COLOR : BACKGROUND_COLOR;
+        int border = this.dragging ? BORDER_DRAG_COLOR : BORDER_COLOR;
+
+        // Drop shadow underneath so the widget feels like it floats.
+        graphics.fill(left + 2, top + 2, right + 2, bottom + 2, 0x66000000);
+
+        // Body fill.
+        graphics.fill(left, top, right, bottom, ARGB.multiply(background, ARGB.white(this.getAlpha())));
+
+        // Title bar.
+        graphics.fill(left, top, right, top + TITLE_BAR_HEIGHT, ARGB.multiply(TITLE_BAR_COLOR, ARGB.white(this.getAlpha())));
+
+        // Outline + title-bar separator.
+        graphics.outline(left, top, this.getWidth(), this.getHeight(), border);
+        graphics.horizontalLine(left, right - 1, top + TITLE_BAR_HEIGHT - 1, border);
+
+        // Title text — centered in the title bar.
+        Font font = Minecraft.getInstance().font;
+        int titleColor = ARGB.color((int) (255 * this.getAlpha()), 0xFF, 0xFF, 0xFF);
+        graphics.centeredText(font, this.getMessage(), left + this.getWidth() / 2, top + 2, titleColor);
+
+        // Connection ports — small squares centered on each configured edge.
+        for (NodeSide side : this.sides) {
+            this.renderPort(graphics, side, mouseX, mouseY);
+        }
+    }
+
+    private void renderPort(GuiGraphicsExtractor graphics, NodeSide side, int mouseX, int mouseY) {
+        Vector2fc center = this.portCenter(side);
+        int px = (int) center.x();
+        int py = (int) center.y();
+        boolean hovered = this.portAt(mouseX, mouseY) == side;
+        int fill = hovered ? PORT_HOVER_COLOR : PORT_FILL_COLOR;
+        graphics.fill(px - PORT_RADIUS, py - PORT_RADIUS, px + PORT_RADIUS + 1, py + PORT_RADIUS + 1, fill);
+        graphics.outline(px - PORT_RADIUS, py - PORT_RADIUS, 2 * PORT_RADIUS + 1, 2 * PORT_RADIUS + 1, PORT_OUTLINE_COLOR);
+    }
+
+    @Override
+    protected void updateWidgetNarration(NarrationElementOutput output) {
+        this.defaultButtonNarrationText(output);
+    }
+}
