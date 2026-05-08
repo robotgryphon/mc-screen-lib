@@ -49,6 +49,9 @@ float udBezier(vec2 p0, in vec2 p1, in vec2 p2, in vec2 p3, vec2 pos)
 }
 
 void main() {
+    // PiP framework uses a y-flipped projection (vertex y=0 → NDC top), so
+    // gl_FragCoord.y=0 ends up at the bottom of the texture while controlPoints
+    // put y=0 at the top. Flip y here to bring them into the same space.
     vec2 fragPos = vec2(gl_FragCoord.x, size.y - gl_FragCoord.y) / size;
 
     float f = udBezier(point1, point2, point3, point4, fragPos);

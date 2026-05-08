@@ -8,15 +8,14 @@ import org.joml.Vector2fc;
 import org.jspecify.annotations.Nullable;
 
 public record BezierCurveRenderState(Matrix3x2f pose,
-                                     Vector2fc[] relativePoints,
-                                     Vector2fc[] screenPoints,
+                                     Vector2fc[] controlPoints,
                                      int color,
                                      ScreenRectangle bounds) implements PictureInPictureRenderState {
 
     public static BezierCurveRenderState from(Matrix3x2f pose,
                                               Vector2fc[] screenPoints, Vector2fc[] relativePoints, int color) {
         var bounds = BezierCurveCalculator.getBounds(screenPoints, pose);
-        return new BezierCurveRenderState(pose, relativePoints, screenPoints, color, bounds);
+        return new BezierCurveRenderState(pose, relativePoints, color, bounds);
     }
 
     @Override

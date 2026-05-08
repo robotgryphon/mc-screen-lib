@@ -29,9 +29,11 @@ public record NodeConnection(Vector2fc start, NodeSide startSide, Vector2fc end,
     }
 
     public ScreenRectangle bounds() {
-        return new ScreenRectangle(new ScreenPosition((int) start.x(), (int) start.y()),
-                (int) (end.x() - start.x()),
-                (int) (end.y() - start.y()));
+        int minX = (int) Math.min(start.x(), end.x());
+        int minY = (int) Math.min(start.y(), end.y());
+        int maxX = (int) Math.max(start.x(), end.x());
+        int maxY = (int) Math.max(start.y(), end.y());
+        return new ScreenRectangle(new ScreenPosition(minX, minY), maxX - minX, maxY - minY);
     }
 
     enum NodeSide {
