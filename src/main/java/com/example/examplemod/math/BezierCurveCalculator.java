@@ -8,6 +8,15 @@ import org.jspecify.annotations.NonNull;
 
 public class BezierCurveCalculator {
 
+    /**
+     * Pixels of headroom added around the curve's natural bounding box so the
+     * line — which has a fixed pixel width in the shader — has somewhere to
+     * render even when the curve is axis-aligned (bbox height or width near
+     * zero would otherwise clip the line down to a sliver). Must agree with
+     * the padding applied in {@link com.example.examplemod.graph.NodeConnection#bounds()}.
+     */
+    public static final int LINE_PADDING_PX = 6;
+
     public static Vector2fc[] calculateRightToLeft(Vector2fc start, Vector2fc end) {
         Vector2fc point1 = new Vector2f((start.x() + end.x()) / 2f, start.y());
         Vector2fc point2 = new Vector2f((start.x() + end.x()) / 2f, end.y());
@@ -19,10 +28,10 @@ public class BezierCurveCalculator {
             Vector2fc[] points,
             Matrix3x2fc pose
     ) {
-        int minX = (int) Math.floor(Math.min(Math.min(points[0].x(), points[1].x()), Math.min(points[2].x(), points[3].x())));
-        int minY = (int) Math.floor(Math.min(Math.min(points[0].y(), points[1].y()), Math.min(points[2].y(), points[3].y())));
-        int maxX = (int) Math.ceil(Math.max(Math.max(points[0].x(), points[1].x()), Math.max(points[2].x(), points[3].x())));
-        int maxY = (int) Math.ceil(Math.max(Math.max(points[0].y(), points[1].y()), Math.max(points[2].y(), points[3].y())));
+        int minX = (int) Math.floor(Math.min(Math.min(points[0].x(), points[1].x()), Math.min(points[2].x(), points[3].x()))) - LINE_PADDING_PX;
+        int minY = (int) Math.floor(Math.min(Math.min(points[0].y(), points[1].y()), Math.min(points[2].y(), points[3].y()))) - LINE_PADDING_PX;
+        int maxX = (int) Math.ceil(Math.max(Math.max(points[0].x(), points[1].x()), Math.max(points[2].x(), points[3].x()))) + LINE_PADDING_PX;
+        int maxY = (int) Math.ceil(Math.max(Math.max(points[0].y(), points[1].y()), Math.max(points[2].y(), points[3].y()))) + LINE_PADDING_PX;
 
         return new ScreenRectangle(minX, minY, maxX - minX, maxY - minY).transformMaxBounds(pose);
     }

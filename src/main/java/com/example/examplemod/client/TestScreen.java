@@ -3,6 +3,7 @@ package com.example.examplemod.client;
 import com.example.examplemod.client.render.BezierCurveRenderer;
 import com.example.examplemod.client.widget.DraggableWidget;
 import com.example.examplemod.client.widget.DraggableWidgetBuilder;
+import com.example.examplemod.client.widget.Port;
 import com.example.examplemod.graph.NodeConnection;
 import com.example.examplemod.graph.NodeConnection.NodeSide;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -44,33 +45,43 @@ public class TestScreen extends Screen {
         this.widgets.clear();
         // Don't clear connections — preserve them across resize.
 
-        int widgetWidth = 100;
-        int widgetHeight = 50;
+        int widgetWidth = 110;
+        int widgetHeight = 70;
         int gap = 80;
         int totalWidth = widgetWidth * 2 + gap;
         int leftX = (this.width - totalWidth) / 2;
         int rightX = leftX + widgetWidth + gap;
         int y = (this.height - widgetHeight) / 2;
 
-        DraggableWidget left = new DraggableWidgetBuilder(leftX, y)
+        DraggableWidget toolInv = new DraggableWidgetBuilder(leftX, y - 60)
                 .setWidth(widgetWidth)
                 .setHeight(widgetHeight)
-                .setTitle(Component.literal("Source"))
-                .addConnection(NodeSide.RIGHT)
+                .setTitle(Component.literal("Inventory Reference"))
+                .addPort(NodeSide.RIGHT, "Items")
                 .build();
 
-        DraggableWidget right = new DraggableWidgetBuilder(rightX, y)
+        DraggableWidget dropsInv = new DraggableWidgetBuilder(leftX, y + 60)
                 .setWidth(widgetWidth)
                 .setHeight(widgetHeight)
-                .setTitle(Component.literal("Target"))
-                .addConnection(NodeSide.LEFT)
+                .setTitle(Component.literal("Inventory Reference"))
+                .addPort(NodeSide.RIGHT, "Items")
                 .build();
 
-        addRenderableWidget(left);
-        addRenderableWidget(right);
+        DraggableWidget upgrade = new DraggableWidgetBuilder(rightX, y)
+                .setWidth(widgetWidth)
+                .setHeight(widgetHeight)
+                .setTitle(Component.literal("Treecutter Upgrade"))
+                .addPort(NodeSide.LEFT, "Tool Storage")
+                .addPort(NodeSide.LEFT, "Outputs")
+                .build();
 
-        widgets.add(left);
-        widgets.add(right);
+        addRenderableWidget(toolInv);
+        addRenderableWidget(dropsInv);
+        addRenderableWidget(upgrade);
+
+        widgets.add(toolInv);
+        widgets.add(dropsInv);
+        widgets.add(upgrade);
 
         // If we already had connections, drop ones whose endpoints aren't in
         // the rebuilt widget list (defensive — same screen instance always
@@ -85,9 +96,9 @@ public class TestScreen extends Screen {
             // on top wins over an overlapping port underneath.
             for (int i = this.widgets.size() - 1; i >= 0; i--) {
                 DraggableWidget widget = this.widgets.get(i);
-                NodeSide side = widget.portAt(event.x(), event.y());
-                if (side == NodeSide.RIGHT) {
-                    this.pending = new PendingConnection(widget, side, event.x(), event.y());
+                Port port = widget.portAt(event.x(), event.y());
+                if (port != null && port.side() == NodeSide.RIGHT) {
+                    this.pending = new PendingConnection(widget, port, event.x(), event.y());
                     // We're handling the drag ourselves, but keep
                     // ContainerEventHandler in a sane state.
                     this.setDragging(true);
@@ -122,10 +133,10 @@ public class TestScreen extends Screen {
                     if (widget == p.source) {
                         continue;
                     }
-                    NodeSide side = widget.portAt(event.x(), event.y());
-                    if (side != null) {
+                    Port port = widget.portAt(event.x(), event.y());
+                    if (port != null) {
                         int color = CONNECTION_PALETTE[this.connections.size() % CONNECTION_PALETTE.length];
-                        this.connections.add(new WidgetConnection(p.source, p.sourceSide, widget, side, color));
+                        this.connections.add(new WidgetConnection(p.source, p.sourcePort, widget, port, color));
                         break;
                     }
                 }
@@ -149,7 +160,7 @@ public class TestScreen extends Screen {
         }
 
         if (this.pending != null) {
-            Vector2fc start = this.pending.source.portCenter(this.pending.sourceSide);
+            Vector2fc start = this.pending.source.portAttachment(this.pending.sourcePort);
             Vector2fc end = new Vector2f((float) mouseX, (float) mouseY);
             NodeConnection curve = NodeConnection.rightToLeft(start, end, IN_FLIGHT_COLOR);
             BezierCurveRenderer.render(graphics, curve, curve.bounds());
@@ -157,13 +168,13 @@ public class TestScreen extends Screen {
     }
 
     /** A finalized connection between two widget ports. */
-    private record WidgetConnection(DraggableWidget source, NodeSide sourceSide,
-                                    DraggableWidget target, NodeSide targetSide,
+    private record WidgetConnection(DraggableWidget source, Port sourcePort,
+                                    DraggableWidget target, Port targetPort,
                                     int color) {
         NodeConnection toNodeConnection() {
             return NodeConnection.rightToLeft(
-                    this.source.portCenter(this.sourceSide),
-                    this.target.portCenter(this.targetSide),
+                    this.source.portAttachment(this.sourcePort),
+                    this.target.portAttachment(this.targetPort),
                     this.color);
         }
     }
@@ -171,13 +182,13 @@ public class TestScreen extends Screen {
     /** State held between mouseClicked-on-a-port and the corresponding mouseReleased. */
     private static final class PendingConnection {
         final DraggableWidget source;
-        final NodeSide sourceSide;
+        final Port sourcePort;
         double mouseX;
         double mouseY;
 
-        PendingConnection(DraggableWidget source, NodeSide sourceSide, double mouseX, double mouseY) {
+        PendingConnection(DraggableWidget source, Port sourcePort, double mouseX, double mouseY) {
             this.source = source;
-            this.sourceSide = sourceSide;
+            this.sourcePort = sourcePort;
             this.mouseX = mouseX;
             this.mouseY = mouseY;
         }

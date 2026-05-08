@@ -13,12 +13,19 @@ import org.joml.Vector2f;
 import org.joml.Vector2fc;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+
 /**
  * A panel-style widget that the user can either grab and drag, or use as a
- * connection node. Each widget exposes a small set of "ports" (one on each
- * configured edge); clicking on the body itself drags the widget, while
- * clicking on a port is meant to be intercepted by the parent screen to start
- * a connection between two widgets.
+ * connection node. Each widget exposes a list of {@link Port}s; clicking on
+ * the body itself drags the widget, while clicking on a port is meant to be
+ * intercepted by the parent screen to start a connection between two widgets.
+ *
+ * <p>Multiple ports on the same side are distributed evenly along that side's
+ * body extent (the area below the title bar).
  */
 public class DraggableWidget extends AbstractWidget {
 
@@ -31,62 +38,114 @@ public class DraggableWidget extends AbstractWidget {
 
     private static final int PORT_RADIUS = 3;
     private static final int PORT_HIT_RADIUS = 5;
+    private static final int PORT_LABEL_GAP = 3;
     private static final int PORT_FILL_COLOR = 0xFF8FA0FF;
     private static final int PORT_HOVER_COLOR = 0xFFFFD24A;
     private static final int PORT_OUTLINE_COLOR = 0xFF101012;
 
-    /** The sides on which this widget exposes connection ports. */
-    private final NodeSide[] sides;
+    private final Port[] ports;
+    /** Ports grouped by side, in declaration order — used to compute layout positions. */
+    private final Map<NodeSide, List<Port>> portsBySide;
 
     private boolean dragging;
     /** Offset from the widget's top-left to the mouse when the body drag started. */
     private double grabOffsetX;
     private double grabOffsetY;
 
-    public DraggableWidget(int x, int y, int width, int height, Component title, NodeSide[] sides) {
+    public DraggableWidget(int x, int y, int width, int height, Component title, Port[] ports) {
         super(x, y, width, height, title);
-        this.sides = sides;
+        this.ports = ports;
+        this.portsBySide = groupBySide(ports);
+    }
+
+    private static Map<NodeSide, List<Port>> groupBySide(Port[] ports) {
+        Map<NodeSide, List<Port>> map = new EnumMap<>(NodeSide.class);
+        for (Port p : ports) {
+            map.computeIfAbsent(p.side(), k -> new ArrayList<>()).add(p);
+        }
+        return map;
     }
 
     public boolean isDragging() {
         return this.dragging;
     }
 
-    /** The sides on which this widget exposes ports. */
-    public NodeSide[] sides() {
-        return this.sides;
+    public Port[] ports() {
+        return this.ports;
     }
 
-    /** World-space center of the port on the given side, in GUI-scaled coordinates. */
-    public Vector2fc portCenter(NodeSide side) {
-        int cx;
-        int cy;
-        switch (side) {
+    /**
+     * The on-screen center of the given port. Ports on the same side share the
+     * body extent equally: with N ports on a side, the i-th port (0-indexed)
+     * sits at (i+1)/(N+1) along the body.
+     */
+    public Vector2fc portCenter(Port port) {
+        List<Port> sidePorts = this.portsBySide.get(port.side());
+        if (sidePorts == null) {
+            throw new IllegalArgumentException("Port not on this widget: " + port);
+        }
+        // Reference equality so duplicate-equals records don't collide.
+        int index = -1;
+        for (int i = 0; i < sidePorts.size(); i++) {
+            if (sidePorts.get(i) == port) {
+                index = i;
+                break;
+            }
+        }
+        if (index < 0) {
+            throw new IllegalArgumentException("Port not on this widget: " + port);
+        }
+        int count = sidePorts.size();
+        float t = (index + 1f) / (count + 1f);
+
+        // Reserve the title-bar slice; ports lay out within the body region.
+        int bodyTop = this.getY() + TITLE_BAR_HEIGHT;
+        int bodyHeight = this.getHeight() - TITLE_BAR_HEIGHT;
+        int left = this.getX();
+        int width = this.getWidth();
+
+        switch (port.side()) {
             case LEFT -> {
-                cx = this.getX();
-                cy = this.getY() + this.getHeight() / 2;
+                return new Vector2f(left, bodyTop + bodyHeight * t);
             }
             case RIGHT -> {
-                cx = this.getX() + this.getWidth();
-                cy = this.getY() + this.getHeight() / 2;
+                return new Vector2f(left + width, bodyTop + bodyHeight * t);
             }
-            default -> throw new IllegalStateException("Unknown side: " + side);
+            default -> throw new IllegalStateException("Unknown side: " + port.side());
         }
-        return new Vector2f(cx, cy);
+    }
+
+    /**
+     * The point a connection line should attach to, sitting just outside the
+     * visible port square so the curve doesn't overdraw the port. Matches the
+     * edge of the rendered port box plus 1 px of breathing room.
+     */
+    public Vector2fc portAttachment(Port port) {
+        Vector2fc center = this.portCenter(port);
+        int offset = PORT_RADIUS + 1;
+        switch (port.side()) {
+            case LEFT -> {
+                return new Vector2f(center.x() - offset, center.y());
+            }
+            case RIGHT -> {
+                return new Vector2f(center.x() + offset, center.y());
+            }
+            default -> throw new IllegalStateException("Unknown side: " + port.side());
+        }
     }
 
     /**
      * If ({@code mouseX}, {@code mouseY}) lands on one of this widget's ports,
-     * return that side; otherwise {@code null}. The hit radius is a few pixels
+     * return that port; otherwise {@code null}. The hit radius is a few pixels
      * larger than the visible port so it's easy to grab.
      */
-    public @Nullable NodeSide portAt(double mouseX, double mouseY) {
-        for (NodeSide side : this.sides) {
-            Vector2fc center = this.portCenter(side);
+    public @Nullable Port portAt(double mouseX, double mouseY) {
+        for (Port p : this.ports) {
+            Vector2fc center = this.portCenter(p);
             double dx = center.x() - mouseX;
             double dy = center.y() - mouseY;
             if (dx * dx + dy * dy <= PORT_HIT_RADIUS * PORT_HIT_RADIUS) {
-                return side;
+                return p;
             }
         }
         return null;
@@ -173,20 +232,32 @@ public class DraggableWidget extends AbstractWidget {
         int titleColor = ARGB.color((int) (255 * this.getAlpha()), 0xFF, 0xFF, 0xFF);
         graphics.centeredText(font, this.getMessage(), left + this.getWidth() / 2, top + 2, titleColor);
 
-        // Connection ports — small squares centered on each configured edge.
-        for (NodeSide side : this.sides) {
-            this.renderPort(graphics, side, mouseX, mouseY);
+        // Connection ports — small squares + per-port label inside the body.
+        for (Port port : this.ports) {
+            this.renderPort(graphics, font, port, mouseX, mouseY);
         }
     }
 
-    private void renderPort(GuiGraphicsExtractor graphics, NodeSide side, int mouseX, int mouseY) {
-        Vector2fc center = this.portCenter(side);
+    private void renderPort(GuiGraphicsExtractor graphics, Font font, Port port, int mouseX, int mouseY) {
+        Vector2fc center = this.portCenter(port);
         int px = (int) center.x();
         int py = (int) center.y();
-        boolean hovered = this.portAt(mouseX, mouseY) == side;
+        boolean hovered = this.portAt(mouseX, mouseY) == port;
         int fill = hovered ? PORT_HOVER_COLOR : PORT_FILL_COLOR;
         graphics.fill(px - PORT_RADIUS, py - PORT_RADIUS, px + PORT_RADIUS + 1, py + PORT_RADIUS + 1, fill);
         graphics.outline(px - PORT_RADIUS, py - PORT_RADIUS, 2 * PORT_RADIUS + 1, 2 * PORT_RADIUS + 1, PORT_OUTLINE_COLOR);
+
+        Component title = port.title();
+        if (title == null || title.getString().isEmpty()) {
+            return;
+        }
+        int labelColor = ARGB.color((int) (255 * this.getAlpha()), 0xCC, 0xCC, 0xD4);
+        int textWidth = font.width(title);
+        int textY = py - font.lineHeight / 2 + 1;
+        switch (port.side()) {
+            case LEFT -> graphics.text(font, title, px + PORT_RADIUS + 1 + PORT_LABEL_GAP, textY, labelColor, false);
+            case RIGHT -> graphics.text(font, title, px - PORT_RADIUS - PORT_LABEL_GAP - textWidth, textY, labelColor, false);
+        }
     }
 
     @Override
