@@ -3,16 +3,18 @@ package dev.robotgryphon.screenlib.client.ui;
 import dev.robotgryphon.screenlib.ScreenLib;
 import dev.robotgryphon.screenlib.client.ui.widget.CanvasWidget;
 import dev.robotgryphon.screenlib.client.ui.widget.NodeBuilder;
-import dev.robotgryphon.screenlib.client.ui.widget.NodeWidget;
 import dev.robotgryphon.screenlib.graph.Canvas;
 import dev.robotgryphon.screenlib.graph.PortSide;
 import dev.robotgryphon.screenlib.types.NodeDefinition;
-import net.minecraft.client.gui.screens.Screen;
+import dev.robotgryphon.screenlib.types.PortDefinition;
+import dev.robotgryphon.screenlib.types.PropertyType;
+import net.minecraft.core.Holder;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.network.chat.Component;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.player.Player;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public class TestScreen extends Screen {
     private final Player player;
@@ -27,47 +29,46 @@ public class TestScreen extends Screen {
     private void initCanvas() {
         int widgetWidth = 110;
         int widgetHeight = 70;
-        int gap = 80;
-        int totalWidth = widgetWidth * 2 + gap;
-        int leftX = (this.width - totalWidth) / 2;
-        int rightX = leftX + widgetWidth + gap;
-        int y = (this.height - widgetHeight) / 2;
+        int gap = 20;
 
-        canvas.addNode(new NodeBuilder(leftX, y - 60)
-                .setWidth(widgetWidth)
-                .setHeight(widgetHeight)
-                .setTitle(Component.literal("Inventory Reference"))
-                .addPort(PortSide.RIGHT, Component.literal("Items"))
-                .build());
-
-        canvas.addNode(new NodeBuilder(leftX, y + 60)
-                .setWidth(widgetWidth)
-                .setHeight(widgetHeight)
-                .setTitle(Component.literal("Inventory Reference"))
-                .addPort(PortSide.RIGHT, Component.literal("Items"))
-                .build());
+        // Move canvas to be in the center of the screen
+        canvas.pan((float) -this.width / 2, 0);
 
         // Loop through all node definitions and add one to the canvas
-        minecraft.level.registryAccess()
+        final var nodes = minecraft.level.registryAccess()
                 .lookupOrThrow(NodeDefinition.REGISTRY_KEY)
                 .listElements()
-                .forEach(ref -> {
-                    final var title = Component.translatable(ref.key().identifier().toLanguageKey("node"));
-                    final var node = new NodeBuilder(rightX, y)
-                            .setWidth(widgetWidth)
-                            .setHeight(widgetHeight)
-                            .setTitle(title);
+                .toList();
 
-                    final var def = ref.value();
+        int x = (this.width - widgetWidth) / 2;
+        int y = 20;
 
-                    def.inputs().stream()
-                            .sorted()
-                            .forEach(propIn -> node.addPort(PortSide.LEFT, Component.literal(propIn)));
-                    
-                    def.outputs().forEach(propOut -> node.addPort(PortSide.RIGHT, Component.literal(propOut)));
+        for (final var nodeRef : nodes) {
+            final var title = Component.translatable(nodeRef.key().identifier().toLanguageKey("node"));
+            final var node = new NodeBuilder(x, y)
+                    .setWidth(widgetWidth)
+                    .setHeight(widgetHeight)
+                    .setTitle(title);
 
-                    canvas.addNode(node.build());
-                });
+            final var def = nodeRef.value();
+
+            for (PortDefinition input : def.inputs()) {
+                node.addPort(PortSide.LEFT, input);
+            }
+
+            for (PortDefinition output : def.outputs()) {
+                node.addPort(PortSide.RIGHT, output);
+            }
+
+            canvas.addNode(node.build());
+            y += widgetHeight + gap;
+        }
+    }
+
+    private static Holder<PropertyType<?>> lookup(HolderLookup.RegistryLookup<PropertyType<?>> registry,
+                                                  String namespace, String path) {
+        return registry.getOrThrow(ResourceKey.create(
+                PropertyType.REGISTRY_KEY, Identifier.fromNamespaceAndPath(namespace, path)));
     }
 
     @Override

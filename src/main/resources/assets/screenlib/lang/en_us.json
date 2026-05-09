@@ -1,3 +1,15 @@
 {
+  "node.screenlib.block_position": "Block Position",
+  "node.screenlib.direction": "Direction",
+  "node.screenlib.resource_access_items": "Resource Access (Items)",
+  "node.screenlib.tree_cutter_upgrade": "Tree Cutter Upgrade",
 
+  "property_type.minecraft.block_pos": "Position",
+  "property_type.minecraft.direction": "Direction",
+  "property_type.minecraft.int": "Integer",
+  "property_type.minecraft.float": "Float",
+  "property_type.minecraft.double": "Double",
+  "property_type.minecraft.string": "String",
+  "property_type.minecraft.bool": "Boolean",
+  "property_type.screenlib.item_handler": "Item Handler"
 }

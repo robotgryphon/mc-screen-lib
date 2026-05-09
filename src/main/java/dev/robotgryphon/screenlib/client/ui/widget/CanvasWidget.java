@@ -10,7 +10,6 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.CommonColors;
 import org.joml.Vector2dc;
 import org.joml.Vector2f;
 import org.jspecify.annotations.Nullable;
@@ -126,8 +125,10 @@ public class CanvasWidget extends AbstractWidget {
                         .filter(p2 -> !p2.node().equals(p.source()))
                         .findFirst();
 
-                // If we have a match, create the connection
-                port.ifPresent(n -> canvas.connect(p.sourcePort(), n, CommonColors.BLUE));
+                // If we have a match, create the connection. The line takes the
+                // source port's type color so wires read as "this is a Position"
+                // / "this is an Item Handler" at a glance, matching the diamond.
+                port.ifPresent(n -> canvas.connect(p.sourcePort(), n, p.sourcePort().color()));
             }
             return true;
         }

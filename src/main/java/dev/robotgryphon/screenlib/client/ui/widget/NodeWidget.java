@@ -37,12 +37,11 @@ public class NodeWidget extends AbstractWidget {
 
     private static final int PORT_RADIUS = 3;
     private static final int PORT_HIT_RADIUS = 5;
-    private static final int PORT_LABEL_GAP = 3;
-    private static final int PORT_FILL_COLOR = 0xFF8FA0FF;
+    private static final int PORT_LABEL_GAP = 4;
     private static final int PORT_HOVER_COLOR = 0xFFFFD24A;
     private static final int PORT_OUTLINE_COLOR = 0xFF101012;
 
-    private final Set<Port> ports;
+    private final List<Port> ports;
     /** Ports grouped by side, in declaration order — used to compute layout positions. */
     private final Map<PortSide, List<Port>> portsBySide;
 
@@ -51,13 +50,16 @@ public class NodeWidget extends AbstractWidget {
     private double grabOffsetX;
     private double grabOffsetY;
 
-    public NodeWidget(int x, int y, int width, int height, Component title, Function<NodeWidget, Set<Port>> ports) {
+    public NodeWidget(int x, int y, int width, int height, Component title, Function<NodeWidget, List<Port>> ports) {
         super(x, y, width, height, title);
+        // List preserves declaration order; groupBySide walks it linearly so
+        // the first port added on a side ends up at index 0 of that side's
+        // list, which portCenter() turns into the topmost slot.
         this.ports = ports.apply(this);
         this.portsBySide = groupBySide(this.ports);
     }
 
-    private static Map<PortSide, List<Port>> groupBySide(Set<Port> ports) {
+    private static Map<PortSide, List<Port>> groupBySide(List<Port> ports) {
         Map<PortSide, List<Port>> map = new EnumMap<>(PortSide.class);
         for (Port p : ports) {
             map.computeIfAbsent(p.side(), k -> new ArrayList<>()).add(p);
@@ -126,10 +128,9 @@ public class NodeWidget extends AbstractWidget {
     /**
      * The point a connection line should attach to. The shader uses butt caps
      * (perpendicular cuts at the curve endpoints), so the attachment should
-     * land exactly on the port box's outer edge — putting the cap flush with
-     * the port at any zoom. The port box spans {@code 2*PORT_RADIUS + 1}
-     * pixels, so its half-extent from the visual center is {@code PORT_RADIUS
-     * + 0.5}.
+     * land at the diamond's outer tip — putting the cap flush with the port
+     * at any zoom. The diamond's horizontal half-extent from the visual
+     * center is {@code PORT_RADIUS + 0.5}.
      */
     public Vector2fc portAttachment(Port port) {
         Vector2fc center = this.portCenter(port);
@@ -230,7 +231,7 @@ public class NodeWidget extends AbstractWidget {
         int titleColor = ARGB.color((int) (255 * this.getAlpha()), 0xFF, 0xFF, 0xFF);
         graphics.centeredText(font, this.getMessage(), left + this.getWidth() / 2, top + 2, titleColor);
 
-        // Connection ports — small squares + per-port label inside the body.
+        // Connection ports — diamond + per-port label inside the body.
         for (Port port : this.ports) {
             this.renderPort(graphics, font, port, mouseX, mouseY);
         }
@@ -238,12 +239,18 @@ public class NodeWidget extends AbstractWidget {
 
     private void renderPort(GuiGraphicsExtractor graphics, Font font, Port port, int mouseX, int mouseY) {
         Vector2fc center = this.portCenter(port);
+        // Truncate to the integer pixel anchor used by the diamond geometry;
+        // the +0.5 in portCenter() is for the bezier endpoint, not for raster.
         int px = (int) center.x();
         int py = (int) center.y();
         boolean hovered = this.portAt(mouseX, mouseY) == port;
-        int fill = hovered ? PORT_HOVER_COLOR : PORT_FILL_COLOR;
-        graphics.fill(px - PORT_RADIUS, py - PORT_RADIUS, px + PORT_RADIUS + 1, py + PORT_RADIUS + 1, fill);
-        graphics.outline(px - PORT_RADIUS, py - PORT_RADIUS, 2 * PORT_RADIUS + 1, 2 * PORT_RADIUS + 1, PORT_OUTLINE_COLOR);
+        int fill = hovered ? PORT_HOVER_COLOR : port.color();
+
+        // Outline first, fill on top — the outline diamond is one pixel larger
+        // on every side, so the fill leaves a 1px dark border that reads cleanly
+        // against the panel background regardless of port color.
+        fillDiamond(graphics, px, py, PORT_RADIUS + 1, PORT_OUTLINE_COLOR);
+        fillDiamond(graphics, px, py, PORT_RADIUS, ARGB.multiply(fill, ARGB.white(this.getAlpha())));
 
         Component title = port.title();
         if (title == null || title.getString().isEmpty()) {
@@ -255,6 +262,18 @@ public class NodeWidget extends AbstractWidget {
         switch (port.side()) {
             case LEFT -> graphics.text(font, title, px + PORT_RADIUS + 1 + PORT_LABEL_GAP, textY, labelColor, false);
             case RIGHT -> graphics.text(font, title, px - PORT_RADIUS - PORT_LABEL_GAP - textWidth, textY, labelColor, false);
+        }
+    }
+
+    /**
+     * Draws a filled diamond inscribed in the (2r+1)×(2r+1) square centered
+     * at ({@code cx}, {@code cy}). Each scanline from the center outward is
+     * one pixel narrower per row, producing a 4-corner rhombus.
+     */
+    private static void fillDiamond(GuiGraphicsExtractor graphics, int cx, int cy, int r, int color) {
+        for (int dy = -r; dy <= r; dy++) {
+            int half = r - Math.abs(dy);
+            graphics.fill(cx - half, cy + dy, cx + half + 1, cy + dy + 1, color);
         }
     }
 

@@ -9,20 +9,26 @@ import net.minecraft.resources.ResourceKey;
 import java.util.Collections;
 import java.util.List;
 
-public record NodeDefinition(List<PropertyType<?>> properties, List<String> inputs, List<String> outputs) {
-    public static final ResourceKey<Registry<NodeDefinition>> REGISTRY_KEY = ResourceKey.createRegistryKey(ScreenLib.id("nodes"));
+/**
+ * Datapack-defined description of a node type — what configurable
+ * properties it exposes and the typed input/output ports it presents.
+ *
+ * <p>Inputs and outputs reference a {@link PropertyType} by id, which
+ * is what gives each port its color when the canvas renders the node.
+ */
+public record NodeDefinition(List<PortDefinition> inputs,
+                             List<PortDefinition> outputs) {
 
-    public static Codec<NodeDefinition> CODEC = Codec.lazyInitialized(() -> RecordCodecBuilder.create(i -> i.group(
-            PropertyType.CODEC.listOf()
-                    .fieldOf("properties")
-                    .forGetter(def -> Collections.unmodifiableList(def.properties)),
+    public static final ResourceKey<Registry<NodeDefinition>> REGISTRY_KEY =
+            ResourceKey.createRegistryKey(ScreenLib.id("nodes"));
 
-            Codec.STRING.listOf()
-                    .fieldOf("inputs")
-                    .forGetter(nodeDefinition -> Collections.unmodifiableList(nodeDefinition.inputs())),
+    public static final Codec<NodeDefinition> CODEC = Codec.lazyInitialized(() -> RecordCodecBuilder.create(i -> i.group(
+            PortDefinition.CODEC.listOf()
+                    .optionalFieldOf("inputs", List.of())
+                    .forGetter(def -> Collections.unmodifiableList(def.inputs())),
 
-            Codec.STRING.listOf()
-                    .fieldOf("outputs")
-                    .forGetter(nodeDefinition -> Collections.unmodifiableList(nodeDefinition.outputs()))
+            PortDefinition.CODEC.listOf()
+                    .optionalFieldOf("outputs", List.of())
+                    .forGetter(def -> Collections.unmodifiableList(def.outputs()))
     ).apply(i, NodeDefinition::new)));
 }
