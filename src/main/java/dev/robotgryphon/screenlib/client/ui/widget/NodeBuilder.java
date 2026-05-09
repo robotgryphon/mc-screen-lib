@@ -43,16 +43,16 @@ public class NodeBuilder {
         return this;
     }
 
-    public Node build() {
-        final Function<Node, Set<Port>> portMaker = node -> ports.stream()
+    public NodeWidget build() {
+        final Function<NodeWidget, Set<Port>> portMaker = node -> ports.stream()
                 .map(p -> p.toPort(node))
                 .collect(Collectors.toUnmodifiableSet());
 
-        return new Node(x, y, width, height, title, portMaker);
+        return new NodeWidget(x, y, width, height, title, portMaker);
     }
 
     private record PendingPort(PortSide side, Component title) {
-        public Port toPort(Node n) {
+        public Port toPort(NodeWidget n) {
             return new Port(n, side, title);
         }
     }

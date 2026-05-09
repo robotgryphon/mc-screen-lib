@@ -10,7 +10,6 @@ import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.ARGB;
-import org.jetbrains.annotations.UnknownNullability;
 import org.joml.Vector2f;
 import org.joml.Vector2fc;
 import org.jspecify.annotations.Nullable;
@@ -27,7 +26,7 @@ import java.util.function.Function;
  * <p>Multiple ports on the same side are distributed evenly along that side's
  * body extent (the area below the title bar).
  */
-public class Node extends AbstractWidget {
+public class NodeWidget extends AbstractWidget {
 
     private static final int BACKGROUND_COLOR = 0xCC1F1F23;
     private static final int BACKGROUND_HOVER_COLOR = 0xCC2A2A33;
@@ -52,7 +51,7 @@ public class Node extends AbstractWidget {
     private double grabOffsetX;
     private double grabOffsetY;
 
-    public Node(int x, int y, int width, int height, Component title, Function<Node, Set<Port>> ports) {
+    public NodeWidget(int x, int y, int width, int height, Component title, Function<NodeWidget, Set<Port>> ports) {
         super(x, y, width, height, title);
         this.ports = ports.apply(this);
         this.portsBySide = groupBySide(this.ports);

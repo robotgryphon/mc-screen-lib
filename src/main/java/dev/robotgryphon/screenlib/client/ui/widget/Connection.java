@@ -6,8 +6,8 @@ import dev.robotgryphon.screenlib.graph.Port;
 /**
  * A finalized connection between two ports.
  */
-public record Connection(Node source, Port sourcePort,
-                         Node target, Port targetPort,
+public record Connection(NodeWidget source, Port sourcePort,
+                         NodeWidget target, Port targetPort,
                          int color) {
     public NodeConnection toNodeConnection() {
         return NodeConnection.rightToLeft(

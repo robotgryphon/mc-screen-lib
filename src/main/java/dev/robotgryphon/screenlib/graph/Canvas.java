@@ -1,7 +1,7 @@
 package dev.robotgryphon.screenlib.graph;
 
 import dev.robotgryphon.screenlib.client.ui.widget.Connection;
-import dev.robotgryphon.screenlib.client.ui.widget.Node;
+import dev.robotgryphon.screenlib.client.ui.widget.NodeWidget;
 import net.minecraft.util.CommonColors;
 import org.joml.Matrix3x2fStack;
 import org.joml.Vector2d;
@@ -30,7 +30,7 @@ public class Canvas {
      */
     public static final float ZOOM_STEP = 1.1f;
 
-    private final List<Node> nodes = new ArrayList<>();
+    private final List<NodeWidget> nodes = new ArrayList<>();
     private final List<Connection> connections = new ArrayList<>();
 
     /**
@@ -46,12 +46,12 @@ public class Canvas {
     /**
      * Add a node to the canvas. Returns the node for chaining.
      */
-    public Node addNode(Node node) {
+    public NodeWidget addNode(NodeWidget node) {
         this.nodes.add(node);
         return node;
     }
 
-    public List<Node> nodes() {
+    public List<NodeWidget> nodes() {
         return Collections.unmodifiableList(this.nodes);
     }
 
@@ -134,7 +134,7 @@ public class Canvas {
     public Stream<Port> findPortsNear(Vector2dc point) {
         var s = Stream.<Port>builder();
         for (int i = this.nodes.size() - 1; i >= 0; i--) {
-            Node node = this.nodes.get(i);
+            NodeWidget node = this.nodes.get(i);
             Port port = node.portAt(point.x(), point.y());
             if (port != null)
                 s.add(port);
@@ -143,10 +143,10 @@ public class Canvas {
         return s.build();
     }
 
-    public Stream<Node> findNodesNear(Vector2dc point) {
-        var s = Stream.<Node>builder();
+    public Stream<NodeWidget> findNodesNear(Vector2dc point) {
+        var s = Stream.<NodeWidget>builder();
         for (int i = this.nodes.size() - 1; i >= 0; i--) {
-            Node node = this.nodes.get(i);
+            NodeWidget node = this.nodes.get(i);
             if (node.isMouseOver(point.x(), point.y())) {
                 final var maybePort = node.portAt(point.x(), point.y());
                 if(maybePort == null)

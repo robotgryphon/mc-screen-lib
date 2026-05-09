@@ -1,6 +1,6 @@
 package dev.robotgryphon.screenlib.math;
 
-import dev.robotgryphon.screenlib.client.ui.widget.Node;
+import dev.robotgryphon.screenlib.client.ui.widget.NodeWidget;
 import dev.robotgryphon.screenlib.graph.NodeConnection;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import org.joml.Matrix3x2fc;
@@ -26,7 +26,7 @@ public class BezierCurveCalculator {
      * thickness in canvas coordinates as the user zooms in or out.
      *
      * <p>The port-attachment offset uses this value too (see
-     * {@link Node#portAttachment}),
+     * {@link NodeWidget#portAttachment}),
      * so that the line edge always meets the port edge cleanly at any zoom.
      */
     public static final float LINE_HALFWIDTH = 0.5f;

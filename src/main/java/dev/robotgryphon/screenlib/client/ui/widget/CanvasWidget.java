@@ -27,7 +27,7 @@ public class CanvasWidget extends AbstractWidget {
     /**
      * The node currently capturing body-drag events.
      */
-    private @Nullable Node focusedNode;
+    private @Nullable NodeWidget focusedNode;
 
     /**
      * True while the user is left-dragging on empty canvas to pan.
@@ -133,7 +133,7 @@ public class CanvasWidget extends AbstractWidget {
         }
 
         if (this.focusedNode != null) {
-            Node f = this.focusedNode;
+            NodeWidget f = this.focusedNode;
             this.focusedNode = null;
             return f.mouseReleased(asCanvasEvent);
         }
@@ -167,7 +167,7 @@ public class CanvasWidget extends AbstractWidget {
 
         // GO up a level so nodes will always render above connections
         graphics.nextStratum();
-        for (Node node : canvas.nodes()) {
+        for (NodeWidget node : canvas.nodes()) {
             node.extractRenderState(graphics, (int) canvasMouse.x(), (int) canvasMouse.y(), partialTick);
         }
 

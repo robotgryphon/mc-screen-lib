@@ -7,6 +7,7 @@ import dev.robotgryphon.screenlib.client.ui.render.pip.BezierCurvePiPRenderer;
 import dev.robotgryphon.screenlib.client.ui.render.pip.BezierCurveRenderState;
 import dev.robotgryphon.screenlib.client.ui.render.uniforms.RenderPipelineUniformsStorage;
 import dev.robotgryphon.screenlib.client.ui.ClientScreenHelper;
+import dev.robotgryphon.screenlib.types.NodeDefinition;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -21,6 +22,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 
+import static dev.robotgryphon.screenlib.ScreenLib.LOGGER;
 import static dev.robotgryphon.screenlib.ScreenLib.MOD_ID;
 
 @Mod(value = ScreenLib.MOD_ID, dist = Dist.CLIENT)
