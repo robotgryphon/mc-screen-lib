@@ -1,7 +1,7 @@
 package dev.robotgryphon.screenlib.client.ui.widget;
 
+import dev.robotgryphon.screenlib.graph.Node;
 import dev.robotgryphon.screenlib.graph.Port;
-import dev.robotgryphon.screenlib.graph.PortSide;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -10,21 +10,24 @@ import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.ARGB;
-import org.joml.Vector2f;
 import org.joml.Vector2fc;
 import org.jspecify.annotations.Nullable;
 
-import java.util.*;
-import java.util.function.Function;
-
 /**
- * A panel-style widget that the user can either grab and drag, or use as a
- * connection node. Each widget exposes a list of {@link Port}s; clicking on
- * the body itself drags the widget, while clicking on a port is meant to be
- * intercepted by the parent screen to start a connection between two widgets.
+ * Thin view layer over a {@link Node}. The widget owns no graph state of
+ * its own — all geometry, ports, and hit-testing live on the {@code Node}.
+ * The widget's responsibilities are limited to:
  *
- * <p>Multiple ports on the same side are distributed evenly along that side's
- * body extent (the area below the title bar).
+ * <ul>
+ *   <li>Plugging the node into Minecraft's {@code AbstractWidget} input loop
+ *       (clicks, drags, narration)</li>
+ *   <li>Forwarding draws to the GUI graphics pipeline</li>
+ *   <li>Mirroring the node's position into {@link AbstractWidget}'s internal
+ *       fields so its hit tests stay consistent with what the user sees</li>
+ * </ul>
+ *
+ * <p>Mirrors the {@code Canvas} / {@code CanvasWidget} split: the data is
+ * the node, the widget is the "thing on screen" that you point a mouse at.
  */
 public class NodeWidget extends AbstractWidget {
 
@@ -33,134 +36,33 @@ public class NodeWidget extends AbstractWidget {
     private static final int BORDER_COLOR = 0xFF7F7F8C;
     private static final int BORDER_DRAG_COLOR = 0xFFFFD24A;
     private static final int TITLE_BAR_COLOR = 0xFF3A3A45;
-    private static final int TITLE_BAR_HEIGHT = 12;
 
-    private static final int PORT_RADIUS = 3;
-    private static final int PORT_HIT_RADIUS = 5;
-    private static final int PORT_LABEL_GAP = 4;
     private static final int PORT_HOVER_COLOR = 0xFFFFD24A;
     private static final int PORT_OUTLINE_COLOR = 0xFF101012;
 
-    private final List<Port> ports;
-    /** Ports grouped by side, in declaration order — used to compute layout positions. */
-    private final Map<PortSide, List<Port>> portsBySide;
+    private final Node node;
 
     private boolean dragging;
     /** Offset from the widget's top-left to the mouse when the body drag started. */
     private double grabOffsetX;
     private double grabOffsetY;
 
-    public NodeWidget(int x, int y, int width, int height, Component title, Function<NodeWidget, List<Port>> ports) {
-        super(x, y, width, height, title);
-        // List preserves declaration order; groupBySide walks it linearly so
-        // the first port added on a side ends up at index 0 of that side's
-        // list, which portCenter() turns into the topmost slot.
-        this.ports = ports.apply(this);
-        this.portsBySide = groupBySide(this.ports);
+    public NodeWidget(Node node) {
+        super(node.x(), node.y(), node.width(), node.height(), node.title());
+        this.node = node;
     }
 
-    private static Map<PortSide, List<Port>> groupBySide(List<Port> ports) {
-        Map<PortSide, List<Port>> map = new EnumMap<>(PortSide.class);
-        for (Port p : ports) {
-            map.computeIfAbsent(p.side(), k -> new ArrayList<>()).add(p);
-        }
-        return map;
+    public Node node() {
+        return this.node;
     }
 
     public boolean isDragging() {
         return this.dragging;
     }
 
-    /**
-     * The on-screen center of the given port. Ports on the same side share the
-     * body extent equally: with N ports on a side, the i-th port (0-indexed)
-     * sits at (i+1)/(N+1) along the body.
-     *
-     * <p>The returned point is the <em>visual center</em> of the port's center
-     * pixel — i.e., the layout position is rounded to an integer pixel anchor
-     * and offset by {@code +0.5} on both axes. This keeps every port aligned
-     * to whole-pixel rendering while ensuring the curved connector passes
-     * through the actual middle of the port box (not the pixel boundary above
-     * it), which would otherwise show a visible vertical offset at high zoom.
-     */
-    public Vector2fc portCenter(Port port) {
-        List<Port> sidePorts = this.portsBySide.get(port.side());
-        if (sidePorts == null) {
-            throw new IllegalArgumentException("Port not on this widget: " + port);
-        }
-        // Reference equality so duplicate-equals records don't collide.
-        int index = -1;
-        for (int i = 0; i < sidePorts.size(); i++) {
-            if (sidePorts.get(i) == port) {
-                index = i;
-                break;
-            }
-        }
-        if (index < 0) {
-            throw new IllegalArgumentException("Port not on this widget: " + port);
-        }
-        int count = sidePorts.size();
-        float t = (index + 1f) / (count + 1f);
-
-        // Reserve the title-bar slice; ports lay out within the body region.
-        int bodyTop = this.getY() + TITLE_BAR_HEIGHT;
-        int bodyHeight = this.getHeight() - TITLE_BAR_HEIGHT;
-        int left = this.getX();
-        int width = this.getWidth();
-
-        // Snap layout to integer pixels so multi-port distribution doesn't
-        // leave one port's line a fraction of a pixel above center and the
-        // next port's line a fraction below.
-        int yAnchor = bodyTop + Math.round(bodyHeight * t);
-        int xAnchor = switch (port.side()) {
-            case LEFT -> left;
-            case RIGHT -> left + width;
-            default -> throw new IllegalStateException("Unknown side: " + port.side());
-        };
-
-        // +0.5 on each axis so portCenter is the visual middle of the port's
-        // center pixel. Combined with portAttachment's +PORT_HALF_EXTENT
-        // offset, the connector's butt cap lands exactly on the port box's
-        // outer pixel boundary — no gap, no overlap.
-        return new Vector2f(xAnchor + 0.5f, yAnchor + 0.5f);
-    }
-
-    /**
-     * The point a connection line should attach to. The shader uses butt caps
-     * (perpendicular cuts at the curve endpoints), so the attachment should
-     * land at the diamond's outer tip — putting the cap flush with the port
-     * at any zoom. The diamond's horizontal half-extent from the visual
-     * center is {@code PORT_RADIUS + 0.5}.
-     */
-    public Vector2fc portAttachment(Port port) {
-        Vector2fc center = this.portCenter(port);
-        float offset = PORT_RADIUS + 0.5f;
-        switch (port.side()) {
-            case LEFT -> {
-                return new Vector2f(center.x() - offset, center.y());
-            }
-            case RIGHT -> {
-                return new Vector2f(center.x() + offset, center.y());
-            }
-            default -> throw new IllegalStateException("Unknown side: " + port.side());
-        }
-    }
-
-    /**
-     * If ({@code mouseX}, {@code mouseY}) lands on one of this widget's ports,
-     * return that port; otherwise {@code null}. The hit radius is a few pixels
-     * larger than the visible port so it's easy to grab.
-     */
+    /** Delegates to {@link Node#portAt} — kept here so callers iterating widgets still find ports. */
     public @Nullable Port portAt(double mouseX, double mouseY) {
-        for (Port p : this.ports) {
-            Vector2fc center = this.portCenter(p);
-            double dx = center.x() - mouseX;
-            double dy = center.y() - mouseY;
-            if (dx * dx + dy * dy <= PORT_HIT_RADIUS * PORT_HIT_RADIUS) {
-                return p;
-            }
-        }
-        return null;
+        return this.node.portAt(mouseX, mouseY);
     }
 
     @Override
@@ -190,9 +92,10 @@ public class NodeWidget extends AbstractWidget {
         }
         int newX = (int) Math.round(event.x() - this.grabOffsetX);
         int newY = (int) Math.round(event.y() - this.grabOffsetY);
-        // No clamp: nodes live in their parent canvas's coordinate space, which
-        // is conceptually unbounded for a graph editor. The host (e.g., Canvas)
-        // is responsible for any pan/zoom or boundary policy it wants to apply.
+        // Node is the source of truth; AbstractWidget's internal x/y get
+        // mirrored so its built-in hit-testing matches what we render.
+        this.node.setX(newX);
+        this.node.setY(newY);
         this.setX(newX);
         this.setY(newY);
     }
@@ -205,10 +108,12 @@ public class NodeWidget extends AbstractWidget {
 
     @Override
     protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
-        int left = this.getX();
-        int top = this.getY();
-        int right = left + this.getWidth();
-        int bottom = top + this.getHeight();
+        // Pull straight from the model so anything that mutates the node
+        // (e.g., future programmatic moves) shows up immediately.
+        int left = this.node.x();
+        int top = this.node.y();
+        int right = left + this.node.width();
+        int bottom = top + this.node.height();
 
         int background = (this.isHovered() || this.dragging) ? BACKGROUND_HOVER_COLOR : BACKGROUND_COLOR;
         int border = this.dragging ? BORDER_DRAG_COLOR : BORDER_COLOR;
@@ -220,25 +125,26 @@ public class NodeWidget extends AbstractWidget {
         graphics.fill(left, top, right, bottom, ARGB.multiply(background, ARGB.white(this.getAlpha())));
 
         // Title bar.
-        graphics.fill(left, top, right, top + TITLE_BAR_HEIGHT, ARGB.multiply(TITLE_BAR_COLOR, ARGB.white(this.getAlpha())));
+        graphics.fill(left, top, right, top + Node.TITLE_BAR_HEIGHT,
+                ARGB.multiply(TITLE_BAR_COLOR, ARGB.white(this.getAlpha())));
 
         // Outline + title-bar separator.
-        graphics.outline(left, top, this.getWidth(), this.getHeight(), border);
-        graphics.horizontalLine(left, right - 1, top + TITLE_BAR_HEIGHT - 1, border);
+        graphics.outline(left, top, this.node.width(), this.node.height(), border);
+        graphics.horizontalLine(left, right - 1, top + Node.TITLE_BAR_HEIGHT - 1, border);
 
         // Title text — centered in the title bar.
         Font font = Minecraft.getInstance().font;
         int titleColor = ARGB.color((int) (255 * this.getAlpha()), 0xFF, 0xFF, 0xFF);
-        graphics.centeredText(font, this.getMessage(), left + this.getWidth() / 2, top + 2, titleColor);
+        graphics.centeredText(font, this.node.title(), left + this.node.width() / 2, top + 2, titleColor);
 
         // Connection ports — diamond + per-port label inside the body.
-        for (Port port : this.ports) {
+        for (Port port : this.node.ports()) {
             this.renderPort(graphics, font, port, mouseX, mouseY);
         }
     }
 
     private void renderPort(GuiGraphicsExtractor graphics, Font font, Port port, int mouseX, int mouseY) {
-        Vector2fc center = this.portCenter(port);
+        Vector2fc center = this.node.portCenter(port);
         // Truncate to the integer pixel anchor used by the diamond geometry;
         // the +0.5 in portCenter() is for the bezier endpoint, not for raster.
         int px = (int) center.x();
@@ -249,8 +155,8 @@ public class NodeWidget extends AbstractWidget {
         // Outline first, fill on top — the outline diamond is one pixel larger
         // on every side, so the fill leaves a 1px dark border that reads cleanly
         // against the panel background regardless of port color.
-        fillDiamond(graphics, px, py, PORT_RADIUS + 1, PORT_OUTLINE_COLOR);
-        fillDiamond(graphics, px, py, PORT_RADIUS, ARGB.multiply(fill, ARGB.white(this.getAlpha())));
+        fillDiamond(graphics, px, py, Node.PORT_RADIUS + 1, PORT_OUTLINE_COLOR);
+        fillDiamond(graphics, px, py, Node.PORT_RADIUS, ARGB.multiply(fill, ARGB.white(this.getAlpha())));
 
         Component title = port.title();
         if (title == null || title.getString().isEmpty()) {
@@ -260,8 +166,8 @@ public class NodeWidget extends AbstractWidget {
         int textWidth = font.width(title);
         int textY = py - font.lineHeight / 2 + 1;
         switch (port.side()) {
-            case LEFT -> graphics.text(font, title, px + PORT_RADIUS + 1 + PORT_LABEL_GAP, textY, labelColor, false);
-            case RIGHT -> graphics.text(font, title, px - PORT_RADIUS - PORT_LABEL_GAP - textWidth, textY, labelColor, false);
+            case LEFT -> graphics.text(font, title, px + Node.PORT_RADIUS + 1 + Node.PORT_LABEL_GAP, textY, labelColor, false);
+            case RIGHT -> graphics.text(font, title, px - Node.PORT_RADIUS - Node.PORT_LABEL_GAP - textWidth, textY, labelColor, false);
         }
     }
 

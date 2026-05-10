@@ -1,19 +1,12 @@
 package dev.robotgryphon.screenlib.client.ui;
 
-import dev.robotgryphon.screenlib.ScreenLib;
 import dev.robotgryphon.screenlib.client.ui.widget.CanvasWidget;
-import dev.robotgryphon.screenlib.client.ui.widget.NodeBuilder;
+import dev.robotgryphon.screenlib.client.ui.widget.NodeWidget;
 import dev.robotgryphon.screenlib.graph.Canvas;
-import dev.robotgryphon.screenlib.graph.PortSide;
+import dev.robotgryphon.screenlib.graph.Node;
 import dev.robotgryphon.screenlib.types.NodeDefinition;
-import dev.robotgryphon.screenlib.types.PortDefinition;
-import dev.robotgryphon.screenlib.types.PropertyType;
-import net.minecraft.core.Holder;
-import net.minecraft.core.HolderLookup;
-import net.minecraft.network.chat.Component;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.resources.Identifier;
-import net.minecraft.resources.ResourceKey;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 
 public class TestScreen extends Screen {
@@ -27,48 +20,33 @@ public class TestScreen extends Screen {
     }
 
     private void initCanvas() {
-        int widgetWidth = 110;
-        int widgetHeight = 70;
         int gap = 20;
 
         // Move canvas to be in the center of the screen
         canvas.pan((float) -this.width / 2, 0);
 
         // Loop through all node definitions and add one to the canvas
-        final var nodes = minecraft.level.registryAccess()
+        final var defs = minecraft.level.registryAccess()
                 .lookupOrThrow(NodeDefinition.REGISTRY_KEY)
                 .listElements()
                 .toList();
 
-        int x = (this.width - widgetWidth) / 2;
         int y = 20;
+        for (final var defRef : defs) {
+            final var title = Component.translatable(defRef.key().identifier().toLanguageKey("node"));
 
-        for (final var nodeRef : nodes) {
-            final var title = Component.translatable(nodeRef.key().identifier().toLanguageKey("node"));
-            final var node = new NodeBuilder(x, y)
-                    .setWidth(widgetWidth)
-                    .setHeight(widgetHeight)
-                    .setTitle(title);
+            // Two-step assembly mirrors the Canvas / CanvasWidget split: the
+            // Node owns the graph state (definition + layout + materialized
+            // ports), and the NodeWidget is purely the on-screen view of it.
+            // The Node sizes itself from its title and ports, so we construct
+            // it at the origin, then read node.width() to center it horizontally
+            // and node.height() to advance the stacking cursor below.
+            Node node = new Node(defRef.value(), title, 0, y);
+            node.setX((this.width - node.width()) / 2);
+            canvas.addNode(new NodeWidget(node));
 
-            final var def = nodeRef.value();
-
-            for (PortDefinition input : def.inputs()) {
-                node.addPort(PortSide.LEFT, input);
-            }
-
-            for (PortDefinition output : def.outputs()) {
-                node.addPort(PortSide.RIGHT, output);
-            }
-
-            canvas.addNode(node.build());
-            y += widgetHeight + gap;
+            y += node.height() + gap;
         }
-    }
-
-    private static Holder<PropertyType<?>> lookup(HolderLookup.RegistryLookup<PropertyType<?>> registry,
-                                                  String namespace, String path) {
-        return registry.getOrThrow(ResourceKey.create(
-                PropertyType.REGISTRY_KEY, Identifier.fromNamespaceAndPath(namespace, path)));
     }
 
     @Override

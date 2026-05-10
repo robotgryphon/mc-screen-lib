@@ -1,8 +1,8 @@
 package dev.robotgryphon.screenlib.datagen;
 
 import dev.robotgryphon.screenlib.ScreenLib;
+import dev.robotgryphon.screenlib.types.NodeBuilder;
 import dev.robotgryphon.screenlib.types.NodeDefinition;
-import dev.robotgryphon.screenlib.types.PortDefinition;
 import dev.robotgryphon.screenlib.types.PropertyType;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderGetter;
@@ -14,7 +14,6 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.neoforged.neoforge.common.data.DatapackBuiltinEntriesProvider;
 
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
@@ -49,51 +48,38 @@ public class NodeGenerator extends DatapackBuiltinEntriesProvider {
         Holder<PropertyType<?>> itemHandler  = propertyType(types, ScreenLib.MOD_ID, "item_handler");
 
         // Block Position — a pure source: the position holder plus its scalar parts.
-        ctx.register(nodeType("block_position"), new NodeDefinition(
-                List.of(),
-                List.of(
-                        new PortDefinition("Position", blockPos),
-                        new PortDefinition("x", intType),
-                        new PortDefinition("y", intType),
-                        new PortDefinition("z", intType)
-                )
-        ));
+        ctx.register(nodeType("block_position"), new NodeBuilder()
+                .addOutput("Position", blockPos)
+                .addOutput("x", intType)
+                .addOutput("y", intType)
+                .addOutput("z", intType)
+                .build());
 
         // Direction — exposes each axis-aligned direction (and a wildcard) as a
         // separate output, the way the mockup lays out a "constants" node.
-        ctx.register(nodeType("direction"), new NodeDefinition(
-                List.of(),
-                List.of(
-                        new PortDefinition("Any", direction),
-                        new PortDefinition("Up", direction),
-                        new PortDefinition("Down", direction),
-                        new PortDefinition("North", direction),
-                        new PortDefinition("South", direction),
-                        new PortDefinition("West", direction),
-                        new PortDefinition("East", direction)
-                )
-        ));
+        ctx.register(nodeType("direction"), new NodeBuilder()
+                .addOutput("Any", direction)
+                .addOutput("Up", direction)
+                .addOutput("Down", direction)
+                .addOutput("North", direction)
+                .addOutput("South", direction)
+                .addOutput("West", direction)
+                .addOutput("East", direction)
+                .build());
 
         // Resource Access (Items) — given a block position and a side, hand back
         // the item-handler exposed by that face of the block.
-        ctx.register(nodeType("resource_access_items"), new NodeDefinition(
-                List.of(
-                        new PortDefinition("Position", blockPos),
-                        new PortDefinition("Side", direction)
-                ),
-                List.of(
-                        new PortDefinition("Storage", itemHandler)
-                )
-        ));
+        ctx.register(nodeType("resource_access_items"), new NodeBuilder()
+                .addInput("Position", blockPos)
+                .addInput("Side", direction)
+                .addOutput("Storage", itemHandler)
+                .build());
 
         // Tree Cutter Upgrade — a sink-style node: it consumes two item handles
         // (where to pull tools from, where to push drops to) and produces nothing.
-        ctx.register(nodeType("tree_cutter_upgrade"), new NodeDefinition(
-                List.of(
-                        new PortDefinition("Tools", itemHandler),
-                        new PortDefinition("Drops", itemHandler)
-                ),
-                List.of()
-        ));
+        ctx.register(nodeType("tree_cutter_upgrade"), new NodeBuilder()
+                .addInput("Tools", itemHandler)
+                .addInput("Drops", itemHandler)
+                .build());
     }
 }
