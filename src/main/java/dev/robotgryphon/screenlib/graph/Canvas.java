@@ -157,7 +157,31 @@ public class Canvas {
         return s.build();
     }
 
-    public void connect(Port from, Port to, int color) {
+    /**
+     * Add a connection between two ports. Returns {@code true} if the
+     * connection was added; {@code false} if it was rejected because:
+     * the sides aren't a valid output→input pair, the port types differ,
+     * or a connection between this exact pair already exists.
+     */
+    public boolean connect(Port from, Port to, int color) {
+        if (from.side() != PortSide.RIGHT || to.side() != PortSide.LEFT) {
+            return false;
+        }
+        // PropertyType instances are registered singletons, so identity on the
+        // resolved value is the right notion of "same type" here.
+        if (from.type().value() != to.type().value()) {
+            return false;
+        }
+        for (Connection c : this.connections) {
+            if (c.sourcePort().equals(from) && c.targetPort().equals(to)) {
+                return false;
+            }
+        }
         this.connections.add(new Connection(from.node(), from, to.node(), to, color));
+        return true;
+    }
+
+    public void removeConnection(Connection connection) {
+        this.connections.remove(connection);
     }
 }

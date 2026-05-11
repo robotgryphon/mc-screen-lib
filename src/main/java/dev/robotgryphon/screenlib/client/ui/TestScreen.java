@@ -5,9 +5,11 @@ import dev.robotgryphon.screenlib.client.ui.widget.NodeWidget;
 import dev.robotgryphon.screenlib.graph.Canvas;
 import dev.robotgryphon.screenlib.graph.Node;
 import dev.robotgryphon.screenlib.types.NodeDefinition;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
+import org.joml.Vector2dc;
 
 public class TestScreen extends Screen {
     private final Player player;
@@ -52,6 +54,30 @@ public class TestScreen extends Screen {
     @Override
     protected void init() {
         super.init();
-        this.addRenderableWidget(new CanvasWidget(this.canvas, 0, 0, this.width, this.height));
+        this.addRenderableWidget(new CanvasWidget(this.canvas, 0, 0, this.width, this.height,
+                this::openAddNodeDialog));
+    }
+
+    /**
+     * Invoked when the user picks "Add Node" from the canvas context menu.
+     * Opens the dialog as a separate Screen — we hand it back this instance
+     * as its parent so the canvas state survives the round-trip.
+     */
+    private void openAddNodeDialog(Vector2dc canvasPos) {
+        final var defs = minecraft.level.registryAccess()
+                .lookupOrThrow(NodeDefinition.REGISTRY_KEY)
+                .listElements()
+                .toList();
+        if (defs.isEmpty()) {
+            return;
+        }
+        Minecraft.getInstance().setScreen(new AddNodeDialog(this, defs, ref -> {
+            // Submit handler: spawn a fresh Node + NodeWidget at the original
+            // right-click location and add the pair to the canvas. Title is
+            // resolved from the registry key the same way initCanvas does.
+            Component title = Component.translatable(ref.key().identifier().toLanguageKey("node"));
+            Node node = new Node(ref.value(), title, (int) canvasPos.x(), (int) canvasPos.y());
+            this.canvas.addNode(new NodeWidget(node));
+        }));
     }
 }
