@@ -65,12 +65,20 @@ public class BezierCurvePiPRenderer
 
         // Indicator vec4: rel-center xy in [0, 1] bbox coords, radius and
         // feather in scaled pixels. A zero radius tells the shader "no
-        // indicator" — used for every non-hovered connection.
+        // indicator" — used for every non-hovered connection. We piggyback
+        // the hovered flag on the *sign* of the scaled radius: negative
+        // radius means "cursor is over this close circle"; the shader reads
+        // abs(radius) for the SDF and the sign for the hover branch. This
+        // keeps the uniform layout unchanged while still letting the shader
+        // react to cursor proximity.
         final Vector4fc indicatorParams;
         final var indicator = state.curve().indicator();
         if (indicator != null) {
             Vector2fc relCenter = state.curve().toRelativeIndicatorCenter();
             float radiusScaled = indicator.radius() * zoomFactor * scale;
+            if (indicator.hovered()) {
+                radiusScaled = -radiusScaled;
+            }
             indicatorParams = new Vector4f(relCenter.x(), relCenter.y(), radiusScaled, featherScaled);
         } else {
             indicatorParams = new Vector4f(0f, 0f, 0f, 0f);

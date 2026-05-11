@@ -5,8 +5,6 @@ import dev.robotgryphon.screenlib.geometry.BezierCurve;
 import dev.robotgryphon.screenlib.geometry.CurveIndicator;
 import dev.robotgryphon.screenlib.graph.Canvas;
 import dev.robotgryphon.screenlib.graph.PortSide;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
@@ -28,8 +26,6 @@ public class CanvasWidget extends AbstractWidget {
     private static final double CONNECTION_HIT_RADIUS = 4.0;
     /** Radius (canvas pixels) of the close-indicator circle at a hovered connection's midpoint. */
     private static final float DELETE_BUTTON_RADIUS = 5f;
-    /** Color of the "x" glyph drawn on top of the indicator circle. */
-    private static final int DELETE_BUTTON_GLYPH_COLOR = 0xFFFFFFFF;
 
     public final Canvas canvas;
 
@@ -229,9 +225,9 @@ public class CanvasWidget extends AbstractWidget {
         final var canvasMouse = canvas.screenToCanvas(mouseX, mouseY);
 
         // Resolve the hovered connection once: the curve render attaches a
-        // close-indicator to its bezier (so the indicator rides inside the
-        // shader pass), and the screen-space "x" glyph drawn later sits on
-        // top of the nodes so the affordance stays visible.
+        // close-indicator to its bezier so both the indicator circle and the
+        // X glyph inside it ride in the shader pass — no separate Java-side
+        // render needed for the glyph.
         final Connection hovered = this.pending == null
                 ? findConnectionUnderCursor(canvasMouse)
                 : null;
@@ -242,15 +238,6 @@ public class CanvasWidget extends AbstractWidget {
         graphics.nextStratum();
         for (NodeWidget node : canvas.nodes()) {
             node.extractRenderState(graphics, (int) canvasMouse.x(), (int) canvasMouse.y(), partialTick);
-        }
-
-        // The shader-rendered indicator circle is part of the connection PiP
-        // and thus sits behind the nodes. Draw just the "x" glyph above the
-        // nodes so it stays visible and the affordance remains discoverable
-        // even when a connection's midpoint passes under a node's edge.
-        if (hovered != null) {
-            graphics.nextStratum();
-            renderDeleteGlyph(graphics, hovered);
         }
 
         graphics.pose().popMatrix();
@@ -271,8 +258,13 @@ public class CanvasWidget extends AbstractWidget {
             Vector2fc end = c.target().portAttachment(c.targetPort());
             // Only the hovered connection gets a close indicator. Every other
             // connection passes null and the shader renders just the curve.
+            // The indicator's hovered flag is set when the cursor is also
+            // within the close-button hit area — same test used for click —
+            // so the shader can react to cursor proximity, not just the
+            // broader "this curve is under the mouse" condition.
             CurveIndicator indicator = (c == hovered)
-                    ? new CurveIndicator(midpoint(start, end), DELETE_BUTTON_RADIUS)
+                    ? new CurveIndicator(midpoint(start, end), DELETE_BUTTON_RADIUS,
+                            isInDeleteButton(c, mouseCanvas))
                     : null;
             curves.add(BezierCurve.from(graphics, start, end, c.color(), indicator));
         }
@@ -360,29 +352,6 @@ public class CanvasWidget extends AbstractWidget {
         double dx = canvasMouse.x() - mid.x();
         double dy = canvasMouse.y() - mid.y();
         return dx * dx + dy * dy <= DELETE_BUTTON_RADIUS * DELETE_BUTTON_RADIUS;
-    }
-
-    /**
-     * Renders just the "x" affordance on top of the curve's
-     * shader-rendered indicator circle. The circle itself is now drawn by
-     * the bezier fragment shader (see {@link CurveIndicator} and the
-     * {@code indicator} uniform on {@code BezierCurveUniform}), so this
-     * method's only job is the text glyph.
-     */
-    private static void renderDeleteGlyph(GuiGraphicsExtractor graphics, Connection c) {
-        Vector2f mid = connectionMidpoint(c);
-        int cx = Math.round(mid.x());
-        int cy = Math.round(mid.y());
-
-        // "x" centered. Lowercase: visually denser at this size and avoids
-        // falling through to the multiplication-sign glyph in the font.
-        Font font = Minecraft.getInstance().font;
-        Component glyph = Component.literal("x");
-        int gw = font.width(glyph);
-        graphics.text(font, glyph,
-                cx - gw / 2 + 1,
-                cy - font.lineHeight / 2 + 1,
-                DELETE_BUTTON_GLYPH_COLOR, false);
     }
 
     @Override
