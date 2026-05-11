@@ -13,6 +13,10 @@ layout(std140) uniform BezierCurve {
     // Java side computes these as canvasUnits * zoom * guiScale so the line
     // stays a consistent thickness in canvas coordinates regardless of zoom.
     vec2 lineParams;
+    // Optional indicator (close-button) circle drawn alongside the curve.
+    // xy = center relative to size (each in [0, 1]), z = radius in scaled px,
+    // w = AA feather in scaled px. radius <= 0 disables the indicator.
+    vec4 indicator;
 };
 
 layout(std140) uniform Projection {
@@ -70,6 +74,7 @@ void main() {
     // put y=0 at the top. Flip y here to bring them into the same space.
     vec2 fragPosPx = vec2(gl_FragCoord.x, size.y - gl_FragCoord.y);
 
+    // --- Curve (cubic bezier with butt-capped half-width thickness) ----------
     float fSq = udBezierPx(point1, point2, point3, point4, fragPosPx, size);
 
     float halfWidth = lineParams.x;
@@ -77,7 +82,22 @@ void main() {
     float fInner = halfWidth * halfWidth;
     float fOuter = (halfWidth + feather) * (halfWidth + feather);
 
-    float alpha = 1.0 - smoothstep(fInner, fOuter, fSq);
+    float curveAlpha = 1.0 - smoothstep(fInner, fOuter, fSq);
+
+    // --- Indicator circle ----------------------------------------------------
+    // Drawn in the same pass as the curve so it inherits vertexColor and gets
+    // proper SDF anti-aliasing at any GUI scale or canvas zoom. Skipping it
+    // when radius <= 0 keeps the cost negligible for non-hovered connections.
+    float alpha = curveAlpha;
+    if (indicator.z > 0.0) {
+        vec2 indCenterPx = indicator.xy * size;
+        float indDist = length(fragPosPx - indCenterPx);
+        float indInner = indicator.z;
+        float indOuter = indicator.z + indicator.w;
+        float indicatorAlpha = 1.0 - smoothstep(indInner, indOuter, indDist);
+        alpha = max(alpha, indicatorAlpha);
+    }
+
     if (alpha < 0.0002) {
         discard;
     }

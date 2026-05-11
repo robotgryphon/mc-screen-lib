@@ -5,6 +5,7 @@ import com.mojang.blaze3d.buffers.Std140SizeCalculator;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.renderer.DynamicUniformStorage;
 import org.joml.Vector2fc;
+import org.joml.Vector4fc;
 
 import java.nio.ByteBuffer;
 import java.util.function.Supplier;
@@ -22,10 +23,16 @@ import java.util.function.Supplier;
  *       {@code BezierCurveCalculator.LINE_HALFWIDTH * zoom * guiScale} (and
  *       similarly for feather), so the line scales with canvas zoom rather
  *       than staying a fixed device-pixel width.</li>
+ *   <li>{@code indicator} — optional close-button circle. {@code xy} is the
+ *       center in the same {@code [0, 1]} bbox-relative space as the control
+ *       points, {@code z} is the radius in scaled pixels, {@code w} is the
+ *       AA feather in scaled pixels. Setting the radius (z) to {@code 0}
+ *       disables the indicator; the shader skips it entirely.</li>
  * </ul>
  */
 public record BezierCurveUniform(Vector2fc[] controlPoints, ScreenRectangle area,
-                                 float halfWidth, float feather) implements RenderPipelineUniforms {
+                                 float halfWidth, float feather,
+                                 Vector4fc indicator) implements RenderPipelineUniforms {
     public static final String NAME = "BezierCurve";
 
     public static final Supplier<DynamicUniformStorage<BezierCurveUniform>> STORAGE = RenderPipelineUniformsStorage.register(
@@ -38,6 +45,7 @@ public record BezierCurveUniform(Vector2fc[] controlPoints, ScreenRectangle area
                     .putVec2()  // point4
                     .putVec2()  // size
                     .putVec2()  // lineParams (halfWidth, feather)
+                    .putVec4()  // indicator (relCenterX, relCenterY, radiusPx, featherPx)
     );
 
 
@@ -55,6 +63,7 @@ public record BezierCurveUniform(Vector2fc[] controlPoints, ScreenRectangle area
                 .putVec2(controlPoints[3])
                 .putVec2(area.width(), area.height())
                 .putVec2(halfWidth, feather)
+                .putVec4(indicator)
                 .get();
     }
 }

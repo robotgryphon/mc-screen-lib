@@ -6,13 +6,23 @@ import net.minecraft.client.gui.navigation.ScreenRectangle;
 import org.joml.Matrix3x2f;
 import org.joml.Vector2f;
 import org.joml.Vector2fc;
+import org.jspecify.annotations.Nullable;
 
-public record BezierCurve(Vector2fc start, Vector2fc end, ScreenRectangle bounds, int color) {
+public record BezierCurve(Vector2fc start, Vector2fc end, ScreenRectangle bounds, int color,
+                          @Nullable CurveIndicator indicator) {
 
     public static BezierCurve from(GuiGraphicsExtractor graphics,
                                    Vector2fc start,
                                    Vector2fc end,
                                    int color) {
+        return from(graphics, start, end, color, null);
+    }
+
+    public static BezierCurve from(GuiGraphicsExtractor graphics,
+                                   Vector2fc start,
+                                   Vector2fc end,
+                                   int color,
+                                   @Nullable CurveIndicator indicator) {
         Matrix3x2f matrix = new Matrix3x2f(graphics.pose());
 
         // Bounds are computed by applying the caller's pose to the model-space
@@ -26,7 +36,7 @@ public record BezierCurve(Vector2fc start, Vector2fc end, ScreenRectangle bounds
         final var controlPoints = BezierCurveCalculator.calculateRightToLeft(start, end);
         var bounds = BezierCurveCalculator.getBounds(controlPoints, matrix);
 
-        return new BezierCurve(start, end, bounds, color);
+        return new BezierCurve(start, end, bounds, color, indicator);
     }
 
     /**
@@ -46,16 +56,40 @@ public record BezierCurve(Vector2fc start, Vector2fc end, ScreenRectangle bounds
      */
     public Vector2fc[] toRelativeControlPoints() {
         var real = BezierCurveCalculator.calculateRightToLeft(start, end);
-        // Identity pose — we want the *canvas-space* (pre-pose) bbox so
-        // dividing canvas-space points by it yields proportions in [0, 1].
-        ScreenRectangle canvasBounds = BezierCurveCalculator.getBounds(real, new Matrix3x2f());
+        ScreenRectangle canvasBounds = canvasBounds();
         Vector2fc[] transformed = new Vector2fc[4];
         for (int i = 0; i < real.length; i++) {
-            float x = (real[i].x() - canvasBounds.left()) / (float) canvasBounds.width();
-            float y = (real[i].y() - canvasBounds.top()) / (float) canvasBounds.height();
-            transformed[i] = new Vector2f(x, y);
+            transformed[i] = relativeToBounds(real[i], canvasBounds);
         }
-
         return transformed;
+    }
+
+    /**
+     * The {@link #indicator}'s center expressed in the same {@code [0, 1]}
+     * canvas-space bbox-relative coords as {@link #toRelativeControlPoints()}.
+     * Returns {@code null} when no indicator is attached.
+     *
+     * <p>Keeping the relative space consistent across both feeds means the
+     * shader can multiply by {@code size} once for either and the two land in
+     * the same pixel coordinate system.
+     */
+    public @Nullable Vector2fc toRelativeIndicatorCenter() {
+        if (this.indicator == null) {
+            return null;
+        }
+        return relativeToBounds(this.indicator.center(), canvasBounds());
+    }
+
+    private ScreenRectangle canvasBounds() {
+        // Identity pose — we want the *canvas-space* (pre-pose) bbox so
+        // dividing canvas-space points by it yields proportions in [0, 1].
+        var real = BezierCurveCalculator.calculateRightToLeft(start, end);
+        return BezierCurveCalculator.getBounds(real, new Matrix3x2f());
+    }
+
+    private static Vector2fc relativeToBounds(Vector2fc point, ScreenRectangle bounds) {
+        float x = (point.x() - bounds.left()) / (float) bounds.width();
+        float y = (point.y() - bounds.top()) / (float) bounds.height();
+        return new Vector2f(x, y);
     }
 }

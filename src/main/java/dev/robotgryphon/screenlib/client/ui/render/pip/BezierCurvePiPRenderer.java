@@ -11,6 +11,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.renderer.MultiBufferSource;
 import org.jetbrains.annotations.NotNull;
+import org.joml.Vector2fc;
+import org.joml.Vector4f;
+import org.joml.Vector4fc;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Objects;
@@ -60,7 +63,21 @@ public class BezierCurvePiPRenderer
         // garbage relative coords that the shader couldn't draw.
         final var relativeControlPoints = state.curve().toRelativeControlPoints();
 
-        final var uniform = new BezierCurveUniform(relativeControlPoints, scaledBounds, halfWidthScaled, featherScaled);
+        // Indicator vec4: rel-center xy in [0, 1] bbox coords, radius and
+        // feather in scaled pixels. A zero radius tells the shader "no
+        // indicator" — used for every non-hovered connection.
+        final Vector4fc indicatorParams;
+        final var indicator = state.curve().indicator();
+        if (indicator != null) {
+            Vector2fc relCenter = state.curve().toRelativeIndicatorCenter();
+            float radiusScaled = indicator.radius() * zoomFactor * scale;
+            indicatorParams = new Vector4f(relCenter.x(), relCenter.y(), radiusScaled, featherScaled);
+        } else {
+            indicatorParams = new Vector4f(0f, 0f, 0f, 0f);
+        }
+
+        final var uniform = new BezierCurveUniform(relativeControlPoints, scaledBounds,
+                halfWidthScaled, featherScaled, indicatorParams);
 
         GpuDevice device = RenderSystem.getDevice();
         var target = Minecraft.getInstance().getMainRenderTarget();
