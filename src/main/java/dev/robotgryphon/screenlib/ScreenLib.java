@@ -3,15 +3,25 @@ package dev.robotgryphon.screenlib;
 import com.mojang.logging.LogUtils;
 import com.mojang.serialization.Codec;
 import dev.robotgryphon.screenlib.graph.CanvasState;
+import dev.robotgryphon.screenlib.menu.TestScreenMenu;
+import dev.robotgryphon.screenlib.menu.TestScreenMenuProvider;
+import dev.robotgryphon.screenlib.network.NetworkRegistration;
 import dev.robotgryphon.screenlib.types.NodeDefinition;
 import dev.robotgryphon.screenlib.types.PropertyType;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.inventory.MenuType;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.attachment.AttachmentType;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;
+import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.registries.DataPackRegistryEvent;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -62,6 +72,22 @@ public class ScreenLib {
                     .serialize(CanvasState.MAP_CODEC)
                     .build());
 
+    /**
+     * Menu registry — required for {@link net.minecraft.world.inventory.AbstractContainerMenu}
+     * subclasses to round-trip through the vanilla open-container protocol.
+     */
+    public static final DeferredRegister<MenuType<?>> MENU_TYPES =
+            DeferredRegister.create(Registries.MENU, MOD_ID);
+
+    /**
+     * MenuType for the demo {@link dev.robotgryphon.screenlib.client.ui.TestScreen}.
+     * Built via {@link IMenuTypeExtension#create(net.neoforged.neoforge.network.IContainerFactory)}
+     * so the client-side factory can read the extra-data buffer that the
+     * server's {@link TestScreenMenuProvider#writeClientSideData} wrote.
+     */
+    public static final DeferredHolder<MenuType<?>, MenuType<TestScreenMenu>> TEST_SCREEN_MENU =
+            MENU_TYPES.register("test_screen", () -> IMenuTypeExtension.create(TestScreenMenu::new));
+
     static {
         // The registry itself must exist before either DeferredRegister can
         // populate it. Only one DeferredRegister can own the makeRegistry call —
@@ -99,10 +125,35 @@ public class ScreenLib {
 
     public ScreenLib(IEventBus modBus) {
         modBus.addListener(ScreenLib::datapackRegistries);
+        modBus.addListener(NetworkRegistration::register);
+
+        NeoForge.EVENT_BUS.addListener(ScreenLib::commands);
 
         CORE_PROPERTY_TYPES.register(modBus);
         PROPERTY_TYPES.register(modBus);
         ATTACHMENT_TYPES.register(modBus);
+        MENU_TYPES.register(modBus);
+    }
+
+    private static void commands(RegisterCommandsEvent cmd) {
+        final var dispatcher = cmd.getDispatcher();
+        final var root = Commands.literal(MOD_ID);
+
+        final var test = Commands.literal("test")
+                .requires(CommandSourceStack::isPlayer)
+                .executes(ctx -> {
+                    final var player = ctx.getSource().getPlayerOrException();
+                    // Routing through openMenu (instead of a one-shot packet) means
+                    // the server keeps an authoritative TestScreenMenu instance for
+                    // the duration of the edit session — the client's state updates
+                    // land on it via UpdateCanvasStatePayload and are persisted onto
+                    // the level attachment from there.
+                    player.openMenu(new TestScreenMenuProvider(player.level()));
+                    return 0;
+                });
+
+        root.then(test);
+        dispatcher.register(root);
     }
 
     public static Identifier id(String path) {
