@@ -2,6 +2,7 @@ package dev.robotgryphon.screenlib;
 
 import com.mojang.logging.LogUtils;
 import com.mojang.serialization.Codec;
+import dev.robotgryphon.screenlib.graph.CanvasState;
 import dev.robotgryphon.screenlib.types.NodeDefinition;
 import dev.robotgryphon.screenlib.types.PropertyType;
 import net.minecraft.core.BlockPos;
@@ -10,8 +11,11 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.registries.DataPackRegistryEvent;
+import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
+import net.neoforged.neoforge.registries.NeoForgeRegistries;
 import org.slf4j.Logger;
 
 @Mod(ScreenLib.MOD_ID)
@@ -37,6 +41,26 @@ public class ScreenLib {
     /** Mod-specific property types live here; datapacks can also extend the registry. */
     public static final DeferredRegister<PropertyType<?>> PROPERTY_TYPES =
             DeferredRegister.create(PropertyType.REGISTRY_KEY, MOD_ID);
+
+    /**
+     * NeoForge attachment registry — anything attached to an
+     * {@link net.neoforged.neoforge.attachment.IAttachmentHolder}
+     * (Level, Entity, ItemStack, etc.) must be registered here first.
+     */
+    public static final DeferredRegister<AttachmentType<?>> ATTACHMENT_TYPES =
+            DeferredRegister.create(NeoForgeRegistries.Keys.ATTACHMENT_TYPES, MOD_ID);
+
+    /**
+     * Attachment for the demo {@link dev.robotgryphon.screenlib.client.ui.TestScreen}'s
+     * canvas state. Lives on the {@link net.minecraft.world.level.Level} so the
+     * placed nodes and connections survive closing and re-opening the screen
+     * within a session. Serialization rides {@link CanvasState#MAP_CODEC}.
+     */
+    public static final DeferredHolder<AttachmentType<?>, AttachmentType<CanvasState>> TEST_SCREEN_ATTACHMENT =
+            ATTACHMENT_TYPES.register("test_screen", () -> AttachmentType
+                    .builder(() -> CanvasState.EMPTY)
+                    .serialize(CanvasState.MAP_CODEC)
+                    .build());
 
     static {
         // The registry itself must exist before either DeferredRegister can
@@ -78,6 +102,7 @@ public class ScreenLib {
 
         CORE_PROPERTY_TYPES.register(modBus);
         PROPERTY_TYPES.register(modBus);
+        ATTACHMENT_TYPES.register(modBus);
     }
 
     public static Identifier id(String path) {

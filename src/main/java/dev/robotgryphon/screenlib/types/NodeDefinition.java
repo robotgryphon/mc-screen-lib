@@ -3,7 +3,9 @@ package dev.robotgryphon.screenlib.types;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.robotgryphon.screenlib.ScreenLib;
+import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
+import net.minecraft.resources.RegistryFixedCodec;
 import net.minecraft.resources.ResourceKey;
 
 import java.util.Collections;
@@ -31,4 +33,13 @@ public record NodeDefinition(List<PortDefinition> inputs,
                     .optionalFieldOf("outputs", List.of())
                     .forGetter(def -> Collections.unmodifiableList(def.outputs()))
     ).apply(i, NodeDefinition::new)));
+
+    /**
+     * Codec that serializes a {@link Holder} reference to a node definition
+     * by its registered id (e.g. {@code "screenlib:block_position"}).
+     * Resolved through the codec's {@code RegistryOps} at use time, so it
+     * round-trips whether the registry was set up via data generation or at
+     * runtime via the datapack.
+     */
+    public static final Codec<Holder<NodeDefinition>> HOLDER_CODEC = RegistryFixedCodec.create(REGISTRY_KEY);
 }

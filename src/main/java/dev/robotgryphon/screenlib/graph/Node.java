@@ -4,6 +4,7 @@ import dev.robotgryphon.screenlib.types.NodeDefinition;
 import dev.robotgryphon.screenlib.types.PortDefinition;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
+import net.minecraft.core.Holder;
 import net.minecraft.network.chat.Component;
 import org.joml.Vector2f;
 import org.joml.Vector2fc;
@@ -57,6 +58,13 @@ public class Node {
     /** Floor on width so empty-titled / portless nodes don't shrink to a sliver. */
     private static final int MIN_WIDTH = 60;
 
+    /**
+     * Registry holder for the node's schema. Kept alongside the resolved
+     * {@link NodeDefinition} so callers can both read the schema directly
+     * (the hot path — port lists, etc.) and serialize a stable reference
+     * to it via {@link NodeDefinition#HOLDER_CODEC}.
+     */
+    private final Holder<NodeDefinition> definitionHolder;
     private final NodeDefinition definition;
     private final Component title;
     private final List<Port> ports;
@@ -68,19 +76,20 @@ public class Node {
     private int width;
     private int height;
 
-    public Node(NodeDefinition definition, Component title, int x, int y) {
-        this.definition = definition;
+    public Node(Holder<NodeDefinition> definition, Component title, int x, int y) {
+        this.definitionHolder = definition;
+        this.definition = definition.value();
         this.title = title;
         this.x = x;
         this.y = y;
-        this.ports = buildPorts(definition);
+        this.ports = buildPorts(this.definition);
         this.portsBySide = groupBySide(this.ports);
 
         // Auto-size from content. Done last so it has access to the populated
         // ports map (and indirectly, port titles) for label-width measurement.
         Font font = Minecraft.getInstance().font;
-        this.width = computeWidth(font, title, definition);
-        this.height = computeHeight(font, definition);
+        this.width = computeWidth(font, title, this.definition);
+        this.height = computeHeight(font, this.definition);
     }
 
     private List<Port> buildPorts(NodeDefinition def) {
@@ -147,6 +156,15 @@ public class Node {
 
     public NodeDefinition definition() {
         return this.definition;
+    }
+
+    /**
+     * The registry holder backing {@link #definition()}. Use this when you
+     * need a stable, serializable reference to the schema — e.g., for
+     * {@code CanvasState.toState()}.
+     */
+    public Holder<NodeDefinition> definitionHolder() {
+        return this.definitionHolder;
     }
 
     public Component title() {

@@ -165,7 +165,7 @@ public class AddNodeDialog extends Screen {
         this.templates.clear();
         for (Holder.Reference<NodeDefinition> ref : this.options) {
             Component name = Component.translatable(ref.key().identifier().toLanguageKey("node"));
-            Node node = new Node(ref.value(), name, 0, 0);
+            Node node = new Node(ref, name, 0, 0);
             this.templates.add(new PreviewTemplate(ref, node, new NodeWidget(node), name));
         }
     }
