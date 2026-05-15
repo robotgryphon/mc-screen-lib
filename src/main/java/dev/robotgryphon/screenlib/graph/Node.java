@@ -51,6 +51,15 @@ public class Node {
 
     /** Vertical pixels reserved per property row inside the node body. */
     public static final int PROPERTY_PITCH = 14;
+    /**
+     * Vertical pixels of empty space between consecutive property rows.
+     * Used by the widget layer's {@code EqualSpacingLayout} as the
+     * inter-child gap, and mirrored in {@link #propertyRegionHeight} and
+     * {@link #propertyRowTop} so the data model agrees with the layout
+     * the widget produces. Two pixels reads as a clear strip between
+     * pills without bloating the node's height.
+     */
+    public static final int PROPERTY_ROW_GAP = 2;
     /** Pixels of horizontal padding on each side of a property row. */
     public static final int PROPERTY_PADDING_X = 6;
     /** Minimum width reserved for a property's value area regardless of current content. */
@@ -127,7 +136,16 @@ public class Node {
         this.ports = buildPorts(this.definition);
         this.portsBySide = groupBySide(this.ports);
 
-        this.propertyRegionHeight = this.definition.properties().size() * PROPERTY_PITCH;
+        // Stacked rows plus a small empty gap between each consecutive
+        // pair. Matches the geometry an {@code EqualSpacingLayout} with
+        // {@code PROPERTY_PITCH}-tall children and a
+        // {@link #PROPERTY_ROW_GAP} inter-child gap produces — the
+        // widget layer relies on this agreement so property ports anchor
+        // exactly on the row's edge.
+        int propRowCount = this.definition.properties().size();
+        this.propertyRegionHeight = propRowCount == 0
+                ? 0
+                : propRowCount * PROPERTY_PITCH + (propRowCount - 1) * PROPERTY_ROW_GAP;
 
         // Seed property values from the schema's declared defaults so a
         // freshly-spawned node renders the same numbers the datapack
@@ -349,9 +367,15 @@ public class Node {
         return this.y + TITLE_BAR_HEIGHT;
     }
 
-    /** Top edge of the i-th property row, in screen pixels. */
+    /**
+     * Top edge of the i-th property row, in screen pixels. Each row
+     * occupies {@link #PROPERTY_PITCH} pixels followed by a
+     * {@link #PROPERTY_ROW_GAP}-pixel strip of empty space before the
+     * next row begins — matching the geometry the widget's
+     * {@code EqualSpacingLayout} produces.
+     */
     public int propertyRowTop(int index) {
-        return this.propertyRegionTop() + index * PROPERTY_PITCH;
+        return this.propertyRegionTop() + index * (PROPERTY_PITCH + PROPERTY_ROW_GAP);
     }
 
     // -- Port geometry -----------------------------------------------------

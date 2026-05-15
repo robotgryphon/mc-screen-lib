@@ -55,66 +55,6 @@ public final class RoundedShapes {
     }
 
     /**
-     * Like {@link #fillRoundedRect} but only the top two corners are
-     * rounded; the bottom edge stays flat. Used by the title bar so it
-     * butts up cleanly against a separator line / body below.
-     */
-    public static void fillTopRoundedRect(GuiGraphicsExtractor g,
-                                          int x1, int y1, int x2, int y2,
-                                          int radius, int color) {
-        int w = x2 - x1;
-        int h = y2 - y1;
-        radius = clampRadius(radius, w, h);
-        if (radius == 0) {
-            g.fill(x1, y1, x2, y2, color);
-            return;
-        }
-
-        // Bottom band (down to y2) is full-width; only the very top
-        // corners get the rounded treatment.
-        g.fill(x1, y1 + radius, x2, y2, color);
-        g.fill(x1 + radius, y1, x2 - radius, y1 + radius, color);
-
-        fillCorner(g, x1,          y1, radius, color, +1, +1);
-        fillCorner(g, x2 - radius, y1, radius, color, -1, +1);
-    }
-
-    /**
-     * 1-pixel rounded outline running ({@code x1}, {@code y1}) inclusive
-     * to ({@code x2}, {@code y2}) exclusive. Straight edges between the
-     * corners, quarter-circle arcs at the corners.
-     */
-    public static void outlineRoundedRect(GuiGraphicsExtractor g,
-                                          int x1, int y1, int x2, int y2,
-                                          int radius, int color) {
-        int w = x2 - x1;
-        int h = y2 - y1;
-        radius = clampRadius(radius, w, h);
-        if (radius == 0) {
-            // Standard square outline — emulate via four 1-pixel strips
-            // because the surrounding helpers don't all share the same
-            // exclusive/inclusive convention.
-            g.fill(x1, y1, x2, y1 + 1, color);
-            g.fill(x1, y2 - 1, x2, y2, color);
-            g.fill(x1, y1, x1 + 1, y2, color);
-            g.fill(x2 - 1, y1, x2, y2, color);
-            return;
-        }
-
-        // Straight edges between the corner arcs.
-        g.fill(x1 + radius, y1,         x2 - radius, y1 + 1,     color); // top
-        g.fill(x1 + radius, y2 - 1,     x2 - radius, y2,         color); // bottom
-        g.fill(x1,          y1 + radius, x1 + 1,     y2 - radius, color); // left
-        g.fill(x2 - 1,      y1 + radius, x2,         y2 - radius, color); // right
-
-        // Corner arcs.
-        outlineCorner(g, x1,          y1,          radius, color, +1, +1);
-        outlineCorner(g, x2 - radius, y1,          radius, color, -1, +1);
-        outlineCorner(g, x1,          y2 - radius, radius, color, +1, -1);
-        outlineCorner(g, x2 - radius, y2 - radius, radius, color, -1, -1);
-    }
-
-    /**
      * Fills the quarter-circle corner block whose outer corner sits at
      * ({@code x}, {@code y}). {@code signX} / {@code signY} say which way
      * the corner curves in (+1 toward higher coords, -1 toward lower).
@@ -137,41 +77,6 @@ public final class RoundedShapes {
                 int py = y + (signY > 0 ? v : (radius - 1 - v));
                 g.fill(px, py, px + 1, py + 1, color);
             }
-        }
-    }
-
-    /**
-     * 1-pixel outline of the corner arc. Drawn as the leftmost-inside
-     * pixel per row plus the topmost-inside pixel per column; the union
-     * keeps the perimeter connected without a sweep direction biasing it.
-     */
-    private static void outlineCorner(GuiGraphicsExtractor g,
-                                      int x, int y, int radius, int color,
-                                      int signX, int signY) {
-        double rr = (double) radius * radius;
-
-        // Per-row: smallest u such that (radius-u-0.5)² + (radius-v-0.5)² <= rr.
-        for (int v = 0; v < radius; v++) {
-            double dy = radius - v - 0.5;
-            double maxDx = Math.sqrt(rr - dy * dy);
-            int uMin = (int) Math.ceil(radius - 0.5 - maxDx);
-            uMin = Math.max(0, Math.min(uMin, radius - 1));
-            int px = x + (signX > 0 ? uMin : (radius - 1 - uMin));
-            int py = y + (signY > 0 ? v : (radius - 1 - v));
-            g.fill(px, py, px + 1, py + 1, color);
-        }
-        // Per-column: smallest v that's inside. Catches the rows where
-        // the per-row sweep already chose a non-zero u — without this,
-        // the topmost slice (one or two pixels along the y axis) would
-        // be missing.
-        for (int u = 0; u < radius; u++) {
-            double dx = radius - u - 0.5;
-            double maxDy = Math.sqrt(rr - dx * dx);
-            int vMin = (int) Math.ceil(radius - 0.5 - maxDy);
-            vMin = Math.max(0, Math.min(vMin, radius - 1));
-            int px = x + (signX > 0 ? u : (radius - 1 - u));
-            int py = y + (signY > 0 ? vMin : (radius - 1 - vMin));
-            g.fill(px, py, px + 1, py + 1, color);
         }
     }
 

@@ -1,27 +1,32 @@
 package dev.robotgryphon.screenlib.client.ui.widget;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.ARGB;
 
 /**
- * Stateless inline editor for a numeric property value. Renders a small
- * rounded pill with a minus glyph on the left, the current value in the
- * middle, and a plus glyph on the right — the same shape the KSampler-
- * style reference UI uses for its numeric fields. Designed to live
- * inside the value area of a {@code NodeWidget}'s property row.
+ * Inline editor for a numeric property value. Renders a small rounded
+ * pill with a minus glyph on the left, the current value in the middle,
+ * and a plus glyph on the right — the same shape the KSampler-style
+ * reference UI uses for its numeric fields. Designed to live inside the
+ * value area of a {@code NodeWidget}'s property row or anywhere a
+ * Minecraft layout container will accept a {@link PropertyEditor}.
  *
- * <p>Inherits the pill background, hit test, and text-centering math
- * from {@link PropertyEditor}; the per-type click step methods and the
- * minus/plus glyph layout live here.
+ * <p>Inherits its bounds, the pill background, the hit test, and the
+ * text-centering math from {@link PropertyEditor}. The instance variant
+ * carries the current value so a layout host can park the editor
+ * somewhere and just call {@code setValue} as the model changes, while
+ * the static {@link #render} entry point lets a caller draw a one-shot
+ * editor directly from explicit bounds.
  *
  * <p>Rendering is shared across {@code int}, {@code float}, and
- * {@code double} via a {@link Number}-accepting entry point — the only
+ * {@code double} via a {@link Number}-typed value field — the only
  * thing the three numeric types disagree on is the step size and the
  * post-step rounding to keep float drift from making "1.1 + 0.1" read as
  * {@code 1.2000001}. Each type therefore gets its own {@code apply*Click}
- * method.
+ * method (both as a static and as an instance flavor).
  */
 public final class NumericPropertyEditor extends PropertyEditor {
 
@@ -43,7 +48,82 @@ public final class NumericPropertyEditor extends PropertyEditor {
     private static final Component MINUS_GLYPH = Component.literal("−");
     private static final Component PLUS_GLYPH = Component.literal("+");
 
-    private NumericPropertyEditor() {}
+    /**
+     * Current value displayed in the editor. Boxed because the same
+     * editor instance can be repointed at a different numeric type as
+     * long as the host knows which {@code apply*Click} variant to call;
+     * type-specific rounding still happens through the static helpers.
+     */
+    private Number value;
+
+    /**
+     * Opacity multiplier baked into every color the editor draws — used
+     * by {@code NodeWidget} for drag-time dimming when the active drag
+     * type doesn't match the property's type. Defaults to fully opaque
+     * so a layout-only host without a drag concept gets the obvious
+     * behavior for free.
+     */
+    private float alpha = 1f;
+
+    public NumericPropertyEditor(int x, int y, int width, int height, Number value) {
+        super(x, y, width, height);
+        this.value = value;
+    }
+
+    public Number getValue() {
+        return this.value;
+    }
+
+    /**
+     * Update the displayed value. Hosts call this after the underlying
+     * property changes (e.g., the user clicked one of the buttons and
+     * the {@code Node}'s property map was written), so the next render
+     * shows the new number without rebuilding the editor.
+     */
+    public void setValue(Number value) {
+        this.value = value;
+    }
+
+    public float getAlpha() {
+        return this.alpha;
+    }
+
+    public void setAlpha(float alpha) {
+        this.alpha = alpha;
+    }
+
+    @Override
+    public void extractRenderState(GuiGraphicsExtractor graphics,
+                                   int mouseX, int mouseY, float partialTick) {
+        // Instance render path — defer to the existing static so the
+        // pixel-perfect layout logic stays in one place.
+        render(graphics, Minecraft.getInstance().font,
+                this.x, this.y, this.width, this.height,
+                mouseX, mouseY, this.value, this.alpha);
+    }
+
+    // -- Instance click helpers --------------------------------------------
+
+    /**
+     * Apply a click using this editor's stored bounds, treating the
+     * value as an int. Returns the post-click value the caller should
+     * write back through to the model.
+     */
+    public int applyIntClick(double mouseX) {
+        return applyIntClick(mouseX, this.x, this.width, this.value.intValue());
+    }
+
+    /** Apply a click using this editor's stored bounds, treating the value as a float. */
+    public float applyFloatClick(double mouseX) {
+        return applyFloatClick(mouseX, this.x, this.width, this.value.floatValue());
+    }
+
+    /** Apply a click using this editor's stored bounds, treating the value as a double. */
+    public double applyDoubleClick(double mouseX) {
+        return applyDoubleClick(mouseX, this.x, this.width, this.value.doubleValue());
+    }
+
+    // -- Static API --------------------------------------------------------
 
     /**
      * Integer step variant — exactly 1 per click, no rounding concerns.

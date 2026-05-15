@@ -1,13 +1,18 @@
 package dev.robotgryphon.screenlib.client.ui.widget;
 
 import dev.robotgryphon.screenlib.client.ui.render.pip.BezierCurveRenderState;
+import dev.robotgryphon.screenlib.client.ui.render.pip.NodeBackgroundRenderState;
+import dev.robotgryphon.screenlib.client.ui.render.uniforms.NodeBackgroundUniform;
 import dev.robotgryphon.screenlib.geometry.BezierCurve;
 import dev.robotgryphon.screenlib.geometry.CurveIndicator;
 import dev.robotgryphon.screenlib.graph.Canvas;
 import dev.robotgryphon.screenlib.graph.CanvasViewport;
+import dev.robotgryphon.screenlib.graph.Node;
 import dev.robotgryphon.screenlib.graph.PortSide;
 import dev.robotgryphon.screenlib.types.PropertyDefinition;
+import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.core.Holder;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
@@ -60,6 +65,27 @@ public class CanvasWidget extends AbstractWidget {
      * True while the user is left-dragging on empty canvas to pan.
      */
     private boolean panning;
+
+    /**
+     * Maps each static node to its current layer index — the lowest
+     * non-negative integer such that, walking the canvas's nodes list
+     * in z-order, no earlier node already on that layer overlaps with
+     * this one in canvas space.
+     *
+     * <p>Nodes on the same layer are guaranteed not to overlap, so the
+     * node-background shader's "last writer wins" behavior gives correct
+     * pixels within a single batch. Nodes on <em>different</em> layers
+     * are submitted as separate PiP batches, each in its own stratum,
+     * so normal blending composites them with the already-painted layer
+     * underneath (instead of letting the AA edge of the top node bleed
+     * the canvas background through where the underlying node should
+     * have been visible).
+     *
+     * <p>The map is reused across frames — {@link #computeStaticLayerIndices}
+     * clears and refills it. fastutil avoids the per-frame boxing /
+     * allocation cost of a plain {@code Map<NodeWidget, Integer>}.
+     */
+    private final Object2IntOpenHashMap<NodeWidget> layerIndices = new Object2IntOpenHashMap<>();
 
     /** Active right-click context menu, if any. Drawn in screen space above the canvas. */
     private @Nullable ContextMenu activeMenu;
@@ -316,10 +342,59 @@ public class CanvasWidget extends AbstractWidget {
 
         extractConnections(graphics, canvasMouse, hovered);
 
-        // GO up a level so nodes will always render above connections
-        graphics.nextStratum();
-        for (NodeWidget node : canvas.nodes()) {
-            node.extractRenderState(graphics, (int) canvasMouse.x(), (int) canvasMouse.y(), partialTick);
+        // Partition nodes into "static" (everything anchored to the
+        // canvas) and "dragged" (whatever the user is currently moving).
+        // Each set gets its own stratum so a dragged node's content
+        // can't end up underneath a static node's background — the bug
+        // when both backgrounds shared one PiP texture and both contents
+        // shared one CPU stratum.
+        var allNodes = canvas.nodes();
+        List<NodeWidget> staticNodes = new ArrayList<>(allNodes.size());
+        List<NodeWidget> draggedNodes = new ArrayList<>();
+        for (NodeWidget node : allNodes) {
+            if (node.isDragging()) {
+                draggedNodes.add(node);
+            } else {
+                staticNodes.add(node);
+            }
+        }
+
+        // Static nodes — grouped by layer index so overlapping nodes end
+        // up in separate batches. Each layer gets its own stratum;
+        // within a layer, nodes are guaranteed non-overlapping (by
+        // construction of the layer assignment), so a single batched
+        // PiP submission with shader-level last-writer-wins composites
+        // them correctly. Between layers, normal blending takes over —
+        // a later layer's nodes sit on top of the framebuffer pixels
+        // already painted by earlier layers.
+        int staticMaxLayer = computeStaticLayerIndices(staticNodes);
+        List<List<NodeWidget>> staticByLayer = new ArrayList<>(staticMaxLayer + 1);
+        for (int i = 0; i <= staticMaxLayer; i++) {
+            staticByLayer.add(new ArrayList<>());
+        }
+        for (NodeWidget node : staticNodes) {
+            staticByLayer.get(this.layerIndices.getInt(node)).add(node);
+        }
+        for (List<NodeWidget> layer : staticByLayer) {
+            if (layer.isEmpty()) continue;
+            graphics.nextStratum();
+            extractNodeBackgrounds(graphics, layer, false);
+            for (NodeWidget node : layer) {
+                node.extractRenderState(graphics, (int) canvasMouse.x(), (int) canvasMouse.y(), partialTick);
+            }
+        }
+
+        // Dragged nodes, if any. Same shape (background then content)
+        // but on its own stratum above every static layer so the whole
+        // "node being moved" composite floats cleanly above the static
+        // graph. Drop shadow is enabled for this batch as the drag-time
+        // visual cue.
+        if (!draggedNodes.isEmpty()) {
+            graphics.nextStratum();
+            extractNodeBackgrounds(graphics, draggedNodes, true);
+            for (NodeWidget node : draggedNodes) {
+                node.extractRenderState(graphics, (int) canvasMouse.x(), (int) canvasMouse.y(), partialTick);
+            }
         }
 
         graphics.pose().popMatrix();
@@ -403,8 +478,157 @@ public class CanvasWidget extends AbstractWidget {
         }
     }
 
+    /**
+     * Builds and submits a single batched PiP state covering the given
+     * node widgets. Texture bounds are the screen-space union of every
+     * node's rectangle under the current viewport; per-entry bounds are
+     * recorded relative to the texture origin in scaled (window) pixels
+     * so the fragment shader can use {@code gl_FragCoord} directly.
+     *
+     * <p>Skipped when the list is empty — a zero-area PiP would be
+     * pointless and the framework treats it as a degenerate texture.
+     *
+     * <p>Callers split nodes into "static" and "dragged" subsets and
+     * submit them in separate strata so a dragged node's content doesn't
+     * end up sandwiched between another node's background and content.
+     * The {@code dropShadow} parameter forwards the same flag onto each
+     * entry — used to draw a soft offset shadow underneath the dragged
+     * batch so the moving node visually lifts off the static layer.
+     */
+    private void extractNodeBackgrounds(GuiGraphicsExtractor graphics,
+                                        List<NodeWidget> nodes,
+                                        boolean dropShadow) {
+        if (nodes.isEmpty()) {
+            return;
+        }
+
+        // First pass: union the screen-space rects so we know the
+        // texture dimensions and origin. The texture must cover every
+        // node entirely so the shader has room to paint at the right
+        // pixel position; anything outside the bounds gets discarded
+        // by the framework.
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+        int maxX = Integer.MIN_VALUE;
+        int maxY = Integer.MIN_VALUE;
+        for (NodeWidget widget : nodes) {
+            ScreenRectangle b = widget.screenBounds(this.viewport);
+            minX = Math.min(minX, b.left());
+            minY = Math.min(minY, b.top());
+            maxX = Math.max(maxX, b.right());
+            maxY = Math.max(maxY, b.bottom());
+        }
+        // Pad by 1 screen pixel on each side so the shader's AA falloff
+        // band isn't clipped at the texture edge. When the batch carries
+        // a drop shadow, extend the padding by roughly the shadow's
+        // extent so the shadow has room to fade out beyond each node
+        // (offset down-and-right, blur on all sides).
+        int basePad = 1;
+        int shadowPad = dropShadow
+                ? Math.max(2, Math.round(NodeWidget.NODE_CORNER_RADIUS * this.viewport.zoom() * 2f))
+                : 0;
+        int leftPad = basePad + shadowPad;
+        int topPad = basePad + shadowPad;
+        int rightPad = basePad + shadowPad;
+        int bottomPad = basePad + shadowPad;
+        minX -= leftPad; minY -= topPad;
+        maxX += rightPad; maxY += bottomPad;
+        ScreenRectangle textureBounds = new ScreenRectangle(minX, minY, maxX - minX, maxY - minY);
+
+        // Shared shader parameters in scaled-pixel space. The corner
+        // radius is the same canvas-pixel constant the CPU path used to
+        // use, here lifted through the viewport's zoom so the on-screen
+        // radius scales with the rest of the node.
+        float guiScale = (float) net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScale();
+        float cornerRadiusScaled = NodeWidget.NODE_CORNER_RADIUS * this.viewport.zoom() * guiScale;
+        // 1 scaled pixel of AA falloff — enough to soften the edge
+        // without bleeding into neighboring rows.
+        float featherScaled = 1f;
+        // 1 canvas pixel of border thickness, then through the same
+        // zoom * guiScale conversion as the radius.
+        float borderThicknessScaled = 1f * this.viewport.zoom() * guiScale;
+
+        // Second pass: build per-node entries relative to the texture origin.
+        List<NodeBackgroundUniform.Entry> entries = new ArrayList<>(nodes.size());
+        for (NodeWidget widget : nodes) {
+            entries.add(widget.buildBackgroundEntry(this.viewport, minX, minY, guiScale, dropShadow));
+        }
+
+        var state = new NodeBackgroundRenderState(textureBounds, entries,
+                cornerRadiusScaled, featherScaled, borderThicknessScaled);
+        graphics.submitPictureInPictureRenderState(state);
+    }
+
     private static Vector2f midpoint(Vector2fc a, Vector2fc b) {
         return new Vector2f((a.x() + b.x()) / 2f, (a.y() + b.y()) / 2f);
+    }
+
+    // -- Layer assignment ---------------------------------------------------
+
+    /**
+     * Walks {@code staticNodes} in z-order (the order they appear in
+     * {@link Canvas#nodes()}, where later = visually on top) and assigns
+     * each node the lowest layer index such that no earlier-in-z node
+     * already on that layer overlaps with it in canvas space.
+     *
+     * <p>Result is written into {@link #layerIndices}; returned value is
+     * the highest layer index actually used so the caller knows how many
+     * sub-strata to allocate. The map is cleared first so stale entries
+     * from a previous frame (e.g., a node that's since been removed)
+     * don't leak through.
+     *
+     * <p>Greedy and O(N²) in worst case, fine for typical canvas sizes
+     * (the shader cap is 64 nodes per batch and that's already generous
+     * for an edit session). When no nodes overlap — the common case —
+     * the inner conflict loop short-circuits on the first iteration and
+     * the cost stays close to O(N).
+     *
+     * <p>Recomputed every frame rather than lazily-invalidated because
+     * any operation that could change the answer (drop, add, remove,
+     * canvas reload) already triggers a render pass; doing the work
+     * here keeps the bookkeeping in one place and avoids a class of
+     * "forgot to invalidate" bugs.
+     */
+    private int computeStaticLayerIndices(List<NodeWidget> staticNodes) {
+        this.layerIndices.clear();
+        int maxLayer = 0;
+        for (NodeWidget node : staticNodes) {
+            int layer = 0;
+            // Walk upward through layer indices until we find one with
+            // no overlap conflict among the already-assigned earlier
+            // nodes. The break-on-self pattern means we only ever
+            // consult nodes that have been placed in `layerIndices`,
+            // so getInt() returns a meaningful value (not the default).
+            search:
+            while (true) {
+                for (NodeWidget other : staticNodes) {
+                    if (other == node) break;
+                    if (this.layerIndices.getInt(other) == layer && overlaps(node, other)) {
+                        layer++;
+                        continue search;
+                    }
+                }
+                break;
+            }
+            this.layerIndices.put(node, layer);
+            if (layer > maxLayer) maxLayer = layer;
+        }
+        return maxLayer;
+    }
+
+    /**
+     * AABB overlap test in canvas-space pixels. Half-open intervals so
+     * two nodes that share only an edge (e.g., one's right edge meeting
+     * another's left edge) don't count as overlapping — they'd render
+     * fine in the same batch.
+     */
+    private static boolean overlaps(NodeWidget a, NodeWidget b) {
+        Node na = a.node();
+        Node nb = b.node();
+        return na.x() < nb.x() + nb.width()
+                && nb.x() < na.x() + na.width()
+                && na.y() < nb.y() + nb.height()
+                && nb.y() < na.y() + na.height();
     }
 
     // -- Connection hit-testing + delete button -----------------------------

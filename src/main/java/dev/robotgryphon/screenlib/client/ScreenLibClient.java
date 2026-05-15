@@ -5,6 +5,8 @@ import dev.robotgryphon.screenlib.client.ui.TestScreen;
 import dev.robotgryphon.screenlib.client.ui.render.ExRenderPipelines;
 import dev.robotgryphon.screenlib.client.ui.render.pip.BezierCurvePiPRenderer;
 import dev.robotgryphon.screenlib.client.ui.render.pip.BezierCurveRenderState;
+import dev.robotgryphon.screenlib.client.ui.render.pip.NodeBackgroundPiPRenderer;
+import dev.robotgryphon.screenlib.client.ui.render.pip.NodeBackgroundRenderState;
 import dev.robotgryphon.screenlib.client.ui.render.uniforms.RenderPipelineUniformsStorage;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
@@ -29,10 +31,12 @@ public class ScreenLibClient {
 
     private static void registerPips(RegisterPictureInPictureRenderersEvent pips) {
         pips.register(BezierCurveRenderState.class, BezierCurvePiPRenderer::new);
+        pips.register(NodeBackgroundRenderState.class, NodeBackgroundPiPRenderer::new);
     }
 
     private static void registerRenderPipelines(RegisterRenderPipelinesEvent pipelines) {
         pipelines.registerPipeline(ExRenderPipelines.BEZIER_CURVED_LINES);
+        pipelines.registerPipeline(ExRenderPipelines.NODE_BACKGROUND);
     }
 
     /**

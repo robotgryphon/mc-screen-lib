@@ -1,6 +1,7 @@
 package dev.robotgryphon.screenlib.client.ui.widget;
 
 import com.mojang.serialization.Codec;
+import dev.robotgryphon.screenlib.client.ui.render.uniforms.NodeBackgroundUniform;
 import dev.robotgryphon.screenlib.graph.Canvas;
 import dev.robotgryphon.screenlib.graph.CanvasViewport;
 import dev.robotgryphon.screenlib.graph.Node;
@@ -8,7 +9,14 @@ import dev.robotgryphon.screenlib.graph.Port;
 import dev.robotgryphon.screenlib.graph.PortSide;
 import dev.robotgryphon.screenlib.types.PortDefinition;
 import dev.robotgryphon.screenlib.types.PropertyDefinition;
+import net.minecraft.client.gui.layouts.EqualSpacingLayout;
+import net.minecraft.client.gui.layouts.LayoutElement;
+import net.minecraft.client.gui.components.Renderable;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.core.Holder;
+import org.joml.Vector2dc;
+import org.joml.Vector4f;
+import org.joml.Vector4fc;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -21,7 +29,9 @@ import org.joml.Vector2dc;
 import org.joml.Vector2fc;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Thin view layer over a {@link Node}. The widget owns no graph state of
@@ -58,7 +68,7 @@ public class NodeWidget extends AbstractWidget {
      * match the ComfyUI reference's pronounced rounding while staying
      * legible at the Minecraft GUI's effective pixel scale.
      */
-    private static final int NODE_CORNER_RADIUS = 4;
+    static final int NODE_CORNER_RADIUS = 4;
 
     /** Pill background for property rows, slightly lighter than the body. */
     private static final int PROPERTY_ROW_COLOR = 0xCC2F303A;
@@ -108,9 +118,59 @@ public class NodeWidget extends AbstractWidget {
     private double grabOffsetX;
     private double grabOffsetY;
 
+    /**
+     * Vertical layout frame that owns the property region's rows. Each
+     * child is a {@link PropertyRow} sized to one row pitch tall, and
+     * the layout's height matches {@link Node#propertyRegionHeight()}
+     * exactly — so the equal-spacing distribution produces gaps of
+     * precisely {@link Node#PROPERTY_ROW_GAP} pixels between consecutive
+     * rows. The layout is the source of truth for where each row sits
+     * during rendering and hit testing; the data-model math in
+     * {@link Node#propertyRowTop(int)} mirrors it so port anchoring
+     * stays consistent.
+     *
+     * <p>Null when the node has no properties — there's nothing to lay
+     * out, and skipping the allocation keeps preview / portless nodes
+     * lightweight.
+     */
+    private final @Nullable EqualSpacingLayout propertiesLayout;
+
+    /**
+     * Flat list of the {@code PropertyRow}s contained in
+     * {@link #propertiesLayout}, kept in declaration order so callers
+     * can map a property index to its row without round-tripping
+     * through the layout's iteration API. Same lifetime as the layout —
+     * built once in the constructor since the node's definition (and
+     * therefore its property list) doesn't change at runtime.
+     */
+    private final List<PropertyRow> propertyRows;
+
     public NodeWidget(Node node) {
         super(node.x(), node.y(), node.width(), node.height(), node.title());
         this.node = node;
+
+        // Build the property-row layout once. The layout's content
+        // dimensions match Node's declared property region; arrange-time
+        // positioning later (each render frame) places the rows at the
+        // node's current screen-space coordinates so the layout follows
+        // the node as it pans / zooms / drags.
+        List<PortDefinition> properties = node.definition().properties();
+        if (properties.isEmpty()) {
+            this.propertiesLayout = null;
+            this.propertyRows = List.of();
+        } else {
+            EqualSpacingLayout layout = new EqualSpacingLayout(
+                    node.width(), node.propertyRegionHeight(),
+                    EqualSpacingLayout.Orientation.VERTICAL);
+            List<PropertyRow> rows = new ArrayList<>(properties.size());
+            for (int i = 0; i < properties.size(); i++) {
+                PropertyRow row = new PropertyRow(i);
+                rows.add(row);
+                layout.addChild(row);
+            }
+            this.propertiesLayout = layout;
+            this.propertyRows = List.copyOf(rows);
+        }
     }
 
     public Node node() {
@@ -128,6 +188,78 @@ public class NodeWidget extends AbstractWidget {
 
     public boolean isDragging() {
         return this.dragging;
+    }
+
+    /**
+     * Screen-space bounds for this node under {@code viewport}'s current
+     * pan / zoom. Used by {@code CanvasWidget} when computing the
+     * bounding box for the batched node-background PiP texture.
+     */
+    public ScreenRectangle screenBounds(CanvasViewport viewport) {
+        Vector2dc tl = viewport.canvasToScreen(this.node.x(), this.node.y());
+        Vector2dc br = viewport.canvasToScreen(
+                this.node.x() + this.node.width(),
+                this.node.y() + this.node.height());
+        int sx0 = (int) Math.floor(tl.x());
+        int sy0 = (int) Math.floor(tl.y());
+        int sx1 = (int) Math.ceil(br.x());
+        int sy1 = (int) Math.ceil(br.y());
+        return new ScreenRectangle(sx0, sy0, sx1 - sx0, sy1 - sy0);
+    }
+
+    /**
+     * Builds the per-node uniform entry for the batched background PiP.
+     * Bounds are expressed in scaled (window) pixels relative to the
+     * texture's top-left ({@code textureOriginX} / {@code textureOriginY},
+     * in screen pixels) so the shader can use {@code gl_FragCoord}
+     * directly. The title-height parameter is the strip from the top of
+     * the node that should be painted in the title color, also in scaled
+     * pixels.
+     *
+     * <p>{@code dropShadow} is forwarded to the shader as the
+     * "render a soft offset shadow underneath this node" flag. Callers
+     * (typically {@link dev.robotgryphon.screenlib.client.ui.widget.CanvasWidget})
+     * pass {@code true} for the dragged batch so the node visually
+     * lifts off the static layer, and {@code false} for the static
+     * batch where every node sits flat on the canvas.
+     */
+    public NodeBackgroundUniform.Entry buildBackgroundEntry(CanvasViewport viewport,
+                                                            double textureOriginX,
+                                                            double textureOriginY,
+                                                            float guiScale,
+                                                            boolean dropShadow) {
+        Vector2dc tl = viewport.canvasToScreen(this.node.x(), this.node.y());
+        Vector2dc br = viewport.canvasToScreen(
+                this.node.x() + this.node.width(),
+                this.node.y() + this.node.height());
+
+        float relX = (float) ((tl.x() - textureOriginX) * guiScale);
+        float relY = (float) ((tl.y() - textureOriginY) * guiScale);
+        float w = (float) ((br.x() - tl.x()) * guiScale);
+        float h = (float) ((br.y() - tl.y()) * guiScale);
+
+        boolean hovered = this.isHovered() || this.dragging;
+        int bodyArgb = hovered ? BACKGROUND_HOVER_COLOR : BACKGROUND_COLOR;
+        int borderArgb = this.dragging ? BORDER_DRAG_COLOR : BORDER_COLOR;
+
+        float titleHeight = Node.TITLE_BAR_HEIGHT * viewport.zoom() * guiScale;
+
+        return new NodeBackgroundUniform.Entry(
+                new Vector4f(relX, relY, w, h),
+                argbToVec(bodyArgb),
+                argbToVec(TITLE_BAR_COLOR),
+                argbToVec(borderArgb),
+                titleHeight,
+                dropShadow);
+    }
+
+    /** Decompose an ARGB int into normalized 0..1 RGBA for the shader uniforms. */
+    private static Vector4fc argbToVec(int argb) {
+        return new Vector4f(
+                ARGB.redFloat(argb),
+                ARGB.greenFloat(argb),
+                ARGB.blueFloat(argb),
+                ARGB.alphaFloat(argb));
     }
 
     /** Delegates to {@link Node#portAt} — kept here so callers iterating widgets still find ports. */
@@ -453,33 +585,11 @@ public class NodeWidget extends AbstractWidget {
         // (e.g., future programmatic moves) shows up immediately.
         int left = this.node.x();
         int top = this.node.y();
-        int right = left + this.node.width();
-        int bottom = top + this.node.height();
 
-        int background = (this.isHovered() || this.dragging) ? BACKGROUND_HOVER_COLOR : BACKGROUND_COLOR;
-        int border = this.dragging ? BORDER_DRAG_COLOR : BORDER_COLOR;
-
-        // Body fill — fully rounded silhouette for the whole node.
-        RoundedShapes.fillRoundedRect(graphics, left, top, right, bottom,
-                NODE_CORNER_RADIUS,
-                ARGB.multiply(background, ARGB.white(this.getAlpha())));
-
-        // Title bar — only the top corners are rounded so its bottom
-        // edge sits flush against the separator below. Painting after
-        // the body means its color wins inside the top strip; the body's
-        // own (rounded) top corners are entirely covered by it.
-        RoundedShapes.fillTopRoundedRect(graphics, left, top, right, top + Node.TITLE_BAR_HEIGHT,
-                NODE_CORNER_RADIUS,
-                ARGB.multiply(TITLE_BAR_COLOR, ARGB.white(this.getAlpha())));
-
-        // Outline + title-bar separator. The outline follows the rounded
-        // silhouette; the separator is a regular horizontal line — it
-        // runs only between the rounded corners (offset by the radius)
-        // so it doesn't poke into the corner arc.
-        RoundedShapes.outlineRoundedRect(graphics, left, top, right, bottom,
-                NODE_CORNER_RADIUS, border);
-        graphics.horizontalLine(left + NODE_CORNER_RADIUS, right - NODE_CORNER_RADIUS - 1,
-                top + Node.TITLE_BAR_HEIGHT - 1, border);
+        // Body / title bar / outline are painted by the canvas-level
+        // batched PiP shader (see CanvasWidget.extractNodeBackgrounds).
+        // Only the on-top decorations — title text, property rows, ports —
+        // are rendered CPU-side here.
 
         // Title text — centered in the title bar.
         Font font = Minecraft.getInstance().font;
@@ -508,115 +618,205 @@ public class NodeWidget extends AbstractWidget {
         this.renderPropertyPorts(graphics, mouseX, mouseY);
     }
 
+    /**
+     * Renders the property region by arranging and drawing the
+     * {@link #propertiesLayout}. The layout's position is updated each
+     * frame so it tracks the node's current screen-space top-left;
+     * {@code arrangeElements} then distributes the {@link PropertyRow}s
+     * with their declared {@link Node#PROPERTY_ROW_GAP} between them,
+     * and a final pass renders each row in turn.
+     *
+     * <p>Mouse coordinates are forwarded into each row so the embedded
+     * editors can show their hover states (the numeric pill's button
+     * highlights, the dropdown's elevated background, etc.).
+     */
     private void renderProperties(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
-        List<PortDefinition> properties = this.node.definition().properties();
-        if (properties.isEmpty()) {
+        if (this.propertiesLayout == null) {
             return;
         }
-        int left = this.node.x();
-        int width = this.node.width();
+        this.propertiesLayout.setX(this.node.x());
+        this.propertiesLayout.setY(this.node.propertyRegionTop());
+        this.propertiesLayout.arrangeElements();
+        for (PropertyRow row : this.propertyRows) {
+            row.extractRenderState(graphics, mouseX, mouseY, 0f);
+        }
+    }
 
-        for (int i = 0; i < properties.size(); i++) {
-            PortDefinition prop = properties.get(i);
-            int rowTop = this.node.propertyRowTop(i);
-            int rowBottom = rowTop + Node.PROPERTY_PITCH;
+    /**
+     * Draws a single property row at its current layout-assigned bounds.
+     * The full row-mode resolution (driven / undriven / locally editable)
+     * lives here so {@link PropertyRow} can stay a thin
+     * {@link LayoutElement} wrapper — the row's behavior is too tied to
+     * {@link NodeWidget}'s connection / canvas state to live in its own
+     * top-level class.
+     */
+    private void renderPropertyRow(GuiGraphicsExtractor graphics, Font font,
+                                   int rowIndex, int rowLeft, int rowTop,
+                                   int rowWidth, int rowHeight,
+                                   int mouseX, int mouseY) {
+        PortDefinition prop = this.node.definition().properties().get(rowIndex);
+        int rowBottom = rowTop + rowHeight;
 
-            // Resolve the row's render mode. A row is "driven" when its
-            // input port has at least one incoming connection; once driven,
-            // the property's local value is no longer authoritative and the
-            // upstream value is shown instead. Driven-but-empty (the wire
-            // exists but the upstream has nothing to give) is the error
-            // case — visible as a red label so the user knows the wire
-            // isn't actually delivering anything yet.
-            Connection inputConn = this.findInputConnection(prop.name());
-            boolean driven = inputConn != null;
-            Object upstreamValue = driven ? this.resolveUpstreamValue(inputConn) : null;
-            boolean undriven = driven && upstreamValue == null;
+        // Resolve the row's render mode. A row is "driven" when its
+        // input port has at least one incoming connection; once driven,
+        // the property's local value is no longer authoritative and the
+        // upstream value is shown instead. Driven-but-empty (the wire
+        // exists but the upstream has nothing to give) is the error
+        // case — visible as a red label so the user knows the wire
+        // isn't actually delivering anything yet.
+        Connection inputConn = this.findInputConnection(prop.name());
+        boolean driven = inputConn != null;
+        Object upstreamValue = driven ? this.resolveUpstreamValue(inputConn) : null;
+        boolean undriven = driven && upstreamValue == null;
 
-            int pillColor = driven ? PROPERTY_ROW_DRIVEN_COLOR : PROPERTY_ROW_COLOR;
-            int labelColor = undriven
-                    ? PROPERTY_LABEL_UNDRIVEN_COLOR
-                    : (driven ? PROPERTY_LABEL_DRIVEN_COLOR : PROPERTY_LABEL_COLOR);
-            int valueColor = driven ? PROPERTY_VALUE_DRIVEN_COLOR : PROPERTY_VALUE_COLOR;
+        int pillColor = driven ? PROPERTY_ROW_DRIVEN_COLOR : PROPERTY_ROW_COLOR;
+        int labelColor = undriven
+                ? PROPERTY_LABEL_UNDRIVEN_COLOR
+                : (driven ? PROPERTY_LABEL_DRIVEN_COLOR : PROPERTY_LABEL_COLOR);
+        int valueColor = driven ? PROPERTY_VALUE_DRIVEN_COLOR : PROPERTY_VALUE_COLOR;
 
-            // The entire row reads as a single typed unit — pill, label,
-            // and value all dim together when the user is mid-drag from a
-            // port of a different type, so a property can't accidentally
-            // look like a valid drop target.
-            float alpha = this.effectiveAlpha(prop.type());
+        // The entire row reads as a single typed unit — pill, label,
+        // and value all dim together when the user is mid-drag from a
+        // port of a different type, so a property can't accidentally
+        // look like a valid drop target.
+        float alpha = this.effectiveAlpha(prop.type());
 
-            // Row pill — full-width darker fill so the property region reads
-            // as distinct strips, like the screenshot's KSampler-style node.
-            // A 1px gap above each row keeps neighboring strips visually
-            // separated even without a hard border.
-            graphics.fill(left + 1, rowTop + 1, left + width - 1, rowBottom,
-                    ARGB.multiply(pillColor, ARGB.white(alpha)));
+        // Row pill — full-width darker fill so the property region reads
+        // as distinct strips, like the screenshot's KSampler-style node.
+        // The vertical strip between rows is owned by the surrounding
+        // {@code EqualSpacingLayout}, so the pill fills its full
+        // assigned height here without an inset.
+        graphics.fill(rowLeft + 1, rowTop, rowLeft + rowWidth - 1, rowBottom,
+                ARGB.multiply(pillColor, ARGB.white(alpha)));
 
-            // Label (left), value (right). Vertically centered using the
-            // font line height — the +1 nudges the text optical center down
-            // to the pill's geometric center on the 14px row.
-            int textY = rowTop + (Node.PROPERTY_PITCH - font.lineHeight) / 2 + 1;
+        // Label (left), value (right). Vertically centered using the
+        // font line height — the +1 nudges the text optical center down
+        // to the pill's geometric center on the 14px row.
+        int textY = rowTop + (rowHeight - font.lineHeight) / 2 + 1;
 
-            Component label = Node.propertyLabel(prop);
-            graphics.text(font, label,
-                    left + Node.PROPERTY_PADDING_X,
-                    textY,
-                    ARGB.multiply(labelColor, ARGB.white(alpha)),
-                    false);
+        Component label = Node.propertyLabel(prop);
+        graphics.text(font, label,
+                rowLeft + Node.PROPERTY_PADDING_X,
+                textY,
+                ARGB.multiply(labelColor, ARGB.white(alpha)),
+                false);
 
-            // Value area on the right edge of the row. Used either by the
-            // typed inline editor (for editable, non-driven properties whose
-            // codec we know how to render a control for) or as a plain
-            // read-only text slot otherwise.
-            int editorX = left + width - Node.PROPERTY_PADDING_X - Node.PROPERTY_VALUE_MIN_WIDTH;
-            int editorY = rowTop;
-            int editorWidth = Node.PROPERTY_VALUE_MIN_WIDTH;
-            int editorHeight = Node.PROPERTY_PITCH;
+        // Value area on the right edge of the row. Used either by the
+        // typed inline editor (for editable, non-driven properties whose
+        // codec we know how to render a control for) or as a plain
+        // read-only text slot otherwise.
+        int editorX = rowLeft + rowWidth - Node.PROPERTY_PADDING_X - Node.PROPERTY_VALUE_MIN_WIDTH;
+        int editorY = rowTop;
+        int editorWidth = Node.PROPERTY_VALUE_MIN_WIDTH;
+        int editorHeight = rowHeight;
 
-            if (!driven && isNumericCodec(prop.type().value().codec())) {
-                // Numeric editor — handles int, float, and double via the
-                // same +/- pill. The value falls back to a zero of the
-                // matching type when nothing is set yet so the buttons
-                // still operate from a sane starting point rather than
-                // reading null.
-                Number current = currentNumericValue(prop);
-                NumericPropertyEditor.render(graphics, font,
-                        editorX, editorY, editorWidth, editorHeight,
-                        mouseX, mouseY,
-                        current, alpha);
-            } else if (!driven && isDropdownProperty(prop)) {
-                // Dropdown editor — the property is a pick from a fixed
-                // value set, so the row trigger reads the current value
-                // with a chevron and the actual list opens as a popup
-                // when clicked.
-                Object current = this.node.propertyValue(prop.name());
-                String display = current instanceof String s ? s : "";
-                DropdownEditor.render(graphics, font,
-                        editorX, editorY, editorWidth, editorHeight,
-                        mouseX, mouseY,
-                        display, alpha);
+        if (!driven && isNumericCodec(prop.type().value().codec())) {
+            // Numeric editor — handles int, float, and double via the
+            // same +/- pill. The value falls back to a zero of the
+            // matching type when nothing is set yet so the buttons
+            // still operate from a sane starting point rather than
+            // reading null.
+            Number current = currentNumericValue(prop);
+            NumericPropertyEditor.render(graphics, font,
+                    editorX, editorY, editorWidth, editorHeight,
+                    mouseX, mouseY,
+                    current, alpha);
+        } else if (!driven && isDropdownProperty(prop)) {
+            // Dropdown editor — the property is a pick from a fixed
+            // value set, so the row trigger reads the current value
+            // with a chevron and the actual list opens as a popup
+            // when clicked.
+            Object current = this.node.propertyValue(prop.name());
+            String display = current instanceof String s ? s : "";
+            DropdownEditor.render(graphics, font,
+                    editorX, editorY, editorWidth, editorHeight,
+                    mouseX, mouseY,
+                    display, alpha);
+        } else {
+            // Plain text path — driven rows (showing upstream value or
+            // the red "undriven" blank), and any non-int property type
+            // until those get their own editors.
+            String valueText;
+            if (undriven) {
+                valueText = "";
+            } else if (driven) {
+                valueText = formatPropertyValue(upstreamValue);
             } else {
-                // Plain text path — driven rows (showing upstream value or
-                // the red "undriven" blank), and any non-int property type
-                // until those get their own editors.
-                String valueText;
-                if (undriven) {
-                    valueText = "";
-                } else if (driven) {
-                    valueText = formatPropertyValue(upstreamValue);
-                } else {
-                    valueText = formatPropertyValue(this.node.propertyValue(prop.name()));
-                }
-
-                if (!valueText.isEmpty()) {
-                    int valueWidth = font.width(valueText);
-                    graphics.text(font, Component.literal(valueText),
-                            left + width - Node.PROPERTY_PADDING_X - valueWidth,
-                            textY,
-                            ARGB.multiply(valueColor, ARGB.white(alpha)),
-                            false);
-                }
+                valueText = formatPropertyValue(this.node.propertyValue(prop.name()));
             }
+
+            if (!valueText.isEmpty()) {
+                int valueWidth = font.width(valueText);
+                graphics.text(font, Component.literal(valueText),
+                        rowLeft + rowWidth - Node.PROPERTY_PADDING_X - valueWidth,
+                        textY,
+                        ARGB.multiply(valueColor, ARGB.white(alpha)),
+                        false);
+            }
+        }
+    }
+
+    /**
+     * A single property row living inside {@link #propertiesLayout}.
+     * Holds nothing but the row's index in the node's property list and
+     * the bounds the layout assigned during {@code arrangeElements};
+     * the actual drawing is delegated back to
+     * {@link NodeWidget#renderPropertyRow} so the row's mode-resolution
+     * logic (driven / undriven / editable / dropdown) stays alongside
+     * the rest of {@code NodeWidget}'s state-aware rendering.
+     *
+     * <p>Constant-sized: every row is exactly one property-pitch tall
+     * and as wide as the node. The width matches the node's content
+     * width snapshot taken at construction time, which is also the
+     * width baked into the parent {@link EqualSpacingLayout}; nodes
+     * don't resize at runtime so this is safe.
+     *
+     * <p>Implements {@link LayoutElement} so the layout can position
+     * it, and {@link Renderable} so the render path can call
+     * {@code extractRenderState} symmetrically with any other Mojang
+     * widget. {@link #visitWidgets} is empty — the row contains no
+     * {@link AbstractWidget} children of its own.
+     */
+    private final class PropertyRow implements LayoutElement, Renderable {
+
+        private final int rowIndex;
+        private int x;
+        private int y;
+        private int width;
+        private int height;
+
+        PropertyRow(int rowIndex) {
+            this.rowIndex = rowIndex;
+            this.x = 0;
+            this.y = 0;
+            // Each row is exactly one property pitch tall and as wide as
+            // the host node. The layout reads these on add and uses them
+            // when distributing children.
+            this.width = NodeWidget.this.node.width();
+            this.height = Node.PROPERTY_PITCH;
+        }
+
+        @Override public int getX() { return this.x; }
+        @Override public int getY() { return this.y; }
+        @Override public int getWidth() { return this.width; }
+        @Override public int getHeight() { return this.height; }
+
+        @Override public void setX(int x) { this.x = x; }
+        @Override public void setY(int y) { this.y = y; }
+
+        @Override
+        public void visitWidgets(Consumer<AbstractWidget> visitor) {
+            // No inner AbstractWidget children — the row draws itself
+            // directly using {@code GuiGraphicsExtractor} primitives.
+        }
+
+        @Override
+        public void extractRenderState(GuiGraphicsExtractor graphics,
+                                       int mouseX, int mouseY, float partialTick) {
+            Font font = Minecraft.getInstance().font;
+            NodeWidget.this.renderPropertyRow(graphics, font,
+                    this.rowIndex, this.x, this.y, this.width, this.height,
+                    mouseX, mouseY);
         }
     }
 
