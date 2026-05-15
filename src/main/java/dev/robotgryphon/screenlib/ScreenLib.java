@@ -7,7 +7,7 @@ import dev.robotgryphon.screenlib.menu.TestScreenMenu;
 import dev.robotgryphon.screenlib.menu.TestScreenMenuProvider;
 import dev.robotgryphon.screenlib.network.NetworkRegistration;
 import dev.robotgryphon.screenlib.types.NodeDefinition;
-import dev.robotgryphon.screenlib.types.PropertyType;
+import dev.robotgryphon.screenlib.types.PropertyDefinition;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
@@ -28,6 +28,9 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
 import org.slf4j.Logger;
 
+import java.util.List;
+import java.util.Optional;
+
 @Mod(ScreenLib.MOD_ID)
 public class ScreenLib {
 
@@ -44,13 +47,17 @@ public class ScreenLib {
     private static final int COLOR_DIRECTION  = 0xFF7AA8FF;
     private static final int COLOR_RESOURCE   = 0xFFE07ADC;
 
-    // Vanilla-namespaced "core" types so they read like built-ins to datapacks.
-    private static final DeferredRegister<PropertyType<?>> CORE_PROPERTY_TYPES =
-            DeferredRegister.create(PropertyType.REGISTRY_KEY, "minecraft");
+    // Vanilla-namespaced "core" definitions so they read like built-ins to datapacks.
+    private static final DeferredRegister<PropertyDefinition<?>> CORE_PROPERTY_DEFINITIONS =
+            DeferredRegister.create(PropertyDefinition.REGISTRY_KEY, "minecraft");
 
-    /** Mod-specific property types live here; datapacks can also extend the registry. */
-    public static final DeferredRegister<PropertyType<?>> PROPERTY_TYPES =
-            DeferredRegister.create(PropertyType.REGISTRY_KEY, MOD_ID);
+    /**
+     * Mod-specific property definitions live here; datapacks can also extend
+     * the registry. Includes both the generic types used by ports and the
+     * sampler-specific definitions whose defaults seed the demo node's rows.
+     */
+    public static final DeferredRegister<PropertyDefinition<?>> PROPERTY_DEFINITIONS =
+            DeferredRegister.create(PropertyDefinition.REGISTRY_KEY, MOD_ID);
 
     /**
      * NeoForge attachment registry — anything attached to an
@@ -95,32 +102,101 @@ public class ScreenLib {
         // Without this, RegistryFixedCodec fails with "Can't access registry"
         // because the registry never makes it into the HolderLookup.Provider
         // that data gen and the runtime registry-loader hand to codec ops.
-        PROPERTY_TYPES.makeRegistry(builder -> builder.sync(false));
+        PROPERTY_DEFINITIONS.makeRegistry(builder -> builder.sync(false));
 
-        // Spatial.
-        CORE_PROPERTY_TYPES.register("block_pos", () -> new PropertyType<>(
-                BlockPos.CODEC, COLOR_POSITION, Component.translatable("property_type.minecraft.block_pos")));
+        // -- Generic types — no default, intended for wire (port) typing -----
 
-        CORE_PROPERTY_TYPES.register("direction", () -> new PropertyType<>(
-                Direction.CODEC, COLOR_DIRECTION, Component.translatable("property_type.minecraft.direction")));
+        CORE_PROPERTY_DEFINITIONS.register("block_pos", () -> new PropertyDefinition<>(
+                BlockPos.CODEC, COLOR_POSITION,
+                Component.translatable("property_type.minecraft.block_pos"),
+                Optional.empty()));
 
-        // Scalars.
-        CORE_PROPERTY_TYPES.register("int", () -> new PropertyType<>(
-                Codec.INT, COLOR_NUMBER, Component.translatable("property_type.minecraft.int")));
-        CORE_PROPERTY_TYPES.register("float", () -> new PropertyType<>(
-                Codec.FLOAT, COLOR_NUMBER, Component.translatable("property_type.minecraft.float")));
-        CORE_PROPERTY_TYPES.register("double", () -> new PropertyType<>(
-                Codec.DOUBLE, COLOR_NUMBER, Component.translatable("property_type.minecraft.double")));
-        CORE_PROPERTY_TYPES.register("string", () -> new PropertyType<>(
-                Codec.STRING, COLOR_STRING, Component.translatable("property_type.minecraft.string")));
-        CORE_PROPERTY_TYPES.register("bool", () -> new PropertyType<>(
-                Codec.BOOL, COLOR_BOOLEAN, Component.translatable("property_type.minecraft.bool")));
+        CORE_PROPERTY_DEFINITIONS.register("direction", () -> new PropertyDefinition<>(
+                Direction.CODEC, COLOR_DIRECTION,
+                Component.translatable("property_type.minecraft.direction"),
+                Optional.empty()));
+
+        CORE_PROPERTY_DEFINITIONS.register("int", () -> new PropertyDefinition<>(
+                Codec.INT, COLOR_NUMBER,
+                Component.translatable("property_type.minecraft.int"),
+                Optional.empty()));
+        CORE_PROPERTY_DEFINITIONS.register("float", () -> new PropertyDefinition<>(
+                Codec.FLOAT, COLOR_NUMBER,
+                Component.translatable("property_type.minecraft.float"),
+                Optional.empty()));
+        CORE_PROPERTY_DEFINITIONS.register("double", () -> new PropertyDefinition<>(
+                Codec.DOUBLE, COLOR_NUMBER,
+                Component.translatable("property_type.minecraft.double"),
+                Optional.empty()));
+        CORE_PROPERTY_DEFINITIONS.register("string", () -> new PropertyDefinition<>(
+                Codec.STRING, COLOR_STRING,
+                Component.translatable("property_type.minecraft.string"),
+                Optional.empty()));
+        CORE_PROPERTY_DEFINITIONS.register("bool", () -> new PropertyDefinition<>(
+                Codec.BOOL, COLOR_BOOLEAN,
+                Component.translatable("property_type.minecraft.bool"),
+                Optional.empty()));
 
         // Mod-specific. "item_handler" is a placeholder — its codec will be
         // refined once the resource-access wiring is in place; the position
         // codec is enough to thread the visual through the editor for now.
-        PROPERTY_TYPES.register("item_handler", () -> new PropertyType<>(
-                BlockPos.CODEC, COLOR_RESOURCE, Component.translatable("property_type.screenlib.item_handler")));
+        PROPERTY_DEFINITIONS.register("item_handler", () -> new PropertyDefinition<>(
+                BlockPos.CODEC, COLOR_RESOURCE,
+                Component.translatable("property_type.screenlib.item_handler"),
+                Optional.empty()));
+
+        // -- Sampler-specific definitions — defaults baked in ---------------
+        // Each property of the sampler node references one of these. The
+        // defaults match the reference screenshot so a freshly-spawned
+        // sampler reads as the canonical KSampler starting state.
+        //
+        // These could equally well live alongside the NodeDefinition data,
+        // but because there's no datapack-loaded codec for PropertyDefinition
+        // (codecs can't be serialized to JSON without a dispatch scheme),
+        // they're registered through code like the generic types are.
+
+        // Typed defaults — PropertyDefinition's T parameter tracks the
+        // codec's value type so the Optional<T> lands as the typed object
+        // directly, no Dynamic round-trip needed at registration time.
+        // Persistence still goes through the codec (CanvasStateManager.encode/applyPropertyValues),
+        // so the codec-typed Optional and the persistence path stay in sync.
+        PROPERTY_DEFINITIONS.register("sampler/seed", () -> new PropertyDefinition<>(
+                Codec.INT, COLOR_NUMBER,
+                Component.translatable("property_type.minecraft.int"),
+                Optional.of(156680208)));
+        PROPERTY_DEFINITIONS.register("sampler/steps", () -> new PropertyDefinition<>(
+                Codec.INT, COLOR_NUMBER,
+                Component.translatable("property_type.minecraft.int"),
+                Optional.of(20)));
+        PROPERTY_DEFINITIONS.register("sampler/cfg", () -> new PropertyDefinition<>(
+                Codec.FLOAT, COLOR_NUMBER,
+                Component.translatable("property_type.minecraft.float"),
+                Optional.of(8.0f)));
+        // The two string properties on the sampler are picks from a fixed
+        // option set rather than free-form text. Registering the allowed
+        // values here is what lights up the dropdown editor in NodeWidget —
+        // a String PropertyDefinition with an empty allowedValues would
+        // still render as a plain text slot. Option order is preserved in
+        // the popup, so list them in the order the user will most often
+        // want to scan.
+        PROPERTY_DEFINITIONS.register("sampler/sampler_name", () -> new PropertyDefinition<>(
+                Codec.STRING, COLOR_STRING,
+                Component.translatable("property_type.minecraft.string"),
+                Optional.of("euler"),
+                Optional.of(List.of(
+                        "euler", "euler_ancestral", "heun", "dpm_2",
+                        "lms", "ddim", "ddpm", "uni_pc"))));
+        PROPERTY_DEFINITIONS.register("sampler/scheduler", () -> new PropertyDefinition<>(
+                Codec.STRING, COLOR_STRING,
+                Component.translatable("property_type.minecraft.string"),
+                Optional.of("normal"),
+                Optional.of(List.of(
+                        "normal", "karras", "exponential",
+                        "sgm_uniform", "simple"))));
+        PROPERTY_DEFINITIONS.register("sampler/denoise", () -> new PropertyDefinition<>(
+                Codec.FLOAT, COLOR_NUMBER,
+                Component.translatable("property_type.minecraft.float"),
+                Optional.of(1.0f)));
     }
 
     public ScreenLib(IEventBus modBus) {
@@ -129,8 +205,8 @@ public class ScreenLib {
 
         NeoForge.EVENT_BUS.addListener(ScreenLib::commands);
 
-        CORE_PROPERTY_TYPES.register(modBus);
-        PROPERTY_TYPES.register(modBus);
+        CORE_PROPERTY_DEFINITIONS.register(modBus);
+        PROPERTY_DEFINITIONS.register(modBus);
         ATTACHMENT_TYPES.register(modBus);
         MENU_TYPES.register(modBus);
     }

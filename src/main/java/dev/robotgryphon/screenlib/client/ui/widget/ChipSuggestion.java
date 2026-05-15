@@ -19,7 +19,7 @@ import org.jspecify.annotations.Nullable;
  * </ul>
  *
  * <p>{@link #value} is an opaque payload — the suggestions provider is free
- * to put whatever it needs there ({@code PropertyType<?>}, a registry
+ * to put whatever it needs there ({@code PropertyDefinition}, a registry
  * {@code Holder}, a raw {@code String}, etc.), and consumers casting back
  * out via {@code chipFilterInput.filters()} are responsible for the type
  * match.

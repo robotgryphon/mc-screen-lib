@@ -2,17 +2,15 @@ package dev.robotgryphon.screenlib.graph;
 
 import dev.robotgryphon.screenlib.client.ui.widget.Connection;
 import dev.robotgryphon.screenlib.client.ui.widget.NodeWidget;
+import dev.robotgryphon.screenlib.types.PropertyDefinition;
+import net.minecraft.core.Holder;
 import net.minecraft.util.CommonColors;
-import org.joml.Matrix3x2fStack;
-import org.joml.Vector2d;
 import org.joml.Vector2dc;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
 import java.util.stream.Stream;
 
 public class Canvas {
@@ -26,31 +24,32 @@ public class Canvas {
     };
     public static final int IN_FLIGHT_COLOR = 0xFFFFD24A;
 
-    public static final float MIN_ZOOM = 0.25f;
-    public static final float MAX_ZOOM = 4.0f;
-    /**
-     * Multiplicative factor per scroll tick.
-     */
-    public static final float ZOOM_STEP = 1.1f;
-
     private final List<NodeWidget> nodes = new ArrayList<>();
     private final List<Connection> connections = new ArrayList<>();
 
     /**
-     * Translation in screen pixels, applied before {@link #zoom}.
+     * Set while the user is mid-drag from a port. Carries the source
+     * port's type so any rendering pass can dim things of other types
+     * out of the way — making the legal drop targets visually pop. Null
+     * outside of a drag. Set/cleared by the canvas widget when the
+     * pending connection comes and goes.
+     *
+     * <p>Lives on the model rather than the widget because the widgets
+     * that consult it (the node widgets, drawing themselves) already
+     * have a back-reference to {@link Canvas} but not to the widget
+     * that owns the pending state.
      */
-    private float panX = 0f;
-    private float panY = 0f;
-    /**
-     * Uniform scale factor; 1.0 = no zoom.
-     */
-    private float zoom = 1f;
+    private @Nullable Holder<PropertyDefinition<?>> activeDragType;
 
     /**
-     * Add a node to the canvas. Returns the node for chaining.
+     * Add a node to the canvas. Returns the node for chaining. Also wires
+     * the widget's back-reference to {@code this} so the widget can look
+     * up its connected ports at render time (needed for property ports,
+     * which only become visible once something is wired to them).
      */
     public NodeWidget addNode(NodeWidget node) {
         this.nodes.add(node);
+        node.setCanvas(this);
         return node;
     }
 
@@ -69,69 +68,18 @@ public class Canvas {
         this.connections.clear();
     }
 
-    /**
-     * Reset the view so the canvas origin is at the canvas widget origin and zoom is 1.
-     */
-    public void resetView() {
-        this.panX = 0f;
-        this.panY = 0f;
-        this.zoom = 1f;
-    }
-
-    public void transformPose(Matrix3x2fStack pose) {
-        pose.translate(this.panX, this.panY);
-        pose.scale(this.zoom, this.zoom);
-    }
-
-    public void pan(float x, float y) {
-        this.panX += x;
-        this.panY += y;
-    }
-
-    public float zoom() {
-        return this.zoom;
-    }
-
-    public void zoom(float zoom) {
-        this.zoom += zoom;
+    /** The type currently being dragged from, or {@code null} when no drag is in flight. */
+    public @Nullable Holder<PropertyDefinition<?>> activeDragType() {
+        return this.activeDragType;
     }
 
     /**
-     * Set the zoom level to {@code newZoom} (clamped to the configured range)
-     * while keeping the canvas point currently under {@code (screenX, screenY)}
-     * stationary in screen space. Compensates {@link #panX}/{@link #panY} so a
-     * scroll-to-zoom over the cursor doesn't drift the view.
-     *
-     * <p>Derivation: the canvas point under the cursor before the zoom change
-     * is {@code (screenX - oldPan) / oldZoom}. We want the same canvas point
-     * to remain at {@code (screenX, screenY)} afterward, i.e.,
-     * {@code newPan = screenX - canvasPoint * newZoom = screenX - (screenX - oldPan) * (newZoom / oldZoom)}.
+     * Sets the active drag type. Pass the source port's type when a
+     * pending connection starts; pass {@code null} when it ends (release
+     * or cancellation). Idempotent — repeated identical sets are a no-op.
      */
-    public void zoomAround(float newZoom, double screenX, double screenY) {
-        newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom));
-        if (newZoom == this.zoom) {
-            return;
-        }
-        float ratio = newZoom / this.zoom;
-        this.panX = (float) (screenX - (screenX - this.panX) * ratio);
-        this.panY = (float) (screenY - (screenY - this.panY) * ratio);
-        this.zoom = newZoom;
-    }
-
-    // -- Coordinate conversion ----------------------------------------------
-
-    public Vector2dc screenToCanvas(double screenX, double screenY) {
-        return screenToCanvas(new Vector2d(screenX, screenY));
-    }
-
-    public Vector2dc screenToCanvas(Vector2dc screen) {
-        final var joml = new Vector2d(screen)
-                .sub(this.panX, this.panY)
-                .div(this.zoom);
-
-        final var inlined = new Vector2d((screen.x() - this.panX) / this.zoom, (screen.y() - this.panY) / this.zoom);
-
-        return inlined;
+    public void setActiveDragType(@Nullable Holder<PropertyDefinition<?>> type) {
+        this.activeDragType = type;
     }
 
     public Stream<Port> findPortsNear(Vector2dc point) {
@@ -170,8 +118,8 @@ public class Canvas {
         if (from.side() != PortSide.RIGHT || to.side() != PortSide.LEFT) {
             return false;
         }
-        // PropertyType instances are registered singletons, so identity on the
-        // resolved value is the right notion of "same type" here.
+        // PropertyDefinition instances are registered singletons, so identity
+        // on the resolved value is the right notion of "same type" here.
         if (from.type().value() != to.type().value()) {
             return false;
         }
@@ -188,89 +136,59 @@ public class Canvas {
         this.connections.remove(connection);
     }
 
-    // -- Persistence --------------------------------------------------------
-
     /**
-     * Captures a serializable snapshot of the canvas's current nodes and
-     * connections. The snapshot is a plain {@link CanvasState} record —
-     * encode it with {@link CanvasState#CODEC} against whatever storage
-     * format you want (JSON via {@code JsonOps}, NBT via {@code NbtOps},
-     * etc.).
+     * Remove a node from the canvas, along with every connection that
+     * referenced it. Also clears the widget's back-reference so a
+     * subsequently rendered detached widget (e.g., during animation) no
+     * longer reads connection state off this canvas.
      *
-     * <p>Pan / zoom and any other view-only state are intentionally
-     * excluded; only the document — nodes + wires — is captured.
+     * <p>No-op when the widget isn't on the canvas — callers don't have to
+     * pre-check membership.
      */
-    public CanvasState toState() {
-        List<NodeState> nodeStates = new ArrayList<>(this.nodes.size());
-        // IdentityHashMap so node ref-equality (not value-equality) drives
-        // the index lookup — two structurally identical nodes are still
-        // distinct entries on the canvas.
-        Map<Node, Integer> indexOf = new IdentityHashMap<>(this.nodes.size());
-        for (int i = 0; i < this.nodes.size(); i++) {
-            Node node = this.nodes.get(i).node();
-            indexOf.put(node, i);
-            nodeStates.add(new NodeState(node.definitionHolder(), node.x(), node.y()));
+    public void removeNode(NodeWidget widget) {
+        if (!this.nodes.remove(widget)) {
+            return;
         }
-
-        List<ConnectionState> connectionStates = new ArrayList<>(this.connections.size());
-        for (Connection c : this.connections) {
-            Integer srcIdx = indexOf.get(c.source());
-            Integer tgtIdx = indexOf.get(c.target());
-            if (srcIdx == null || tgtIdx == null) {
-                // Connection refers to a node not in our list — shouldn't
-                // happen with the normal API but skip rather than serialize
-                // a dangling reference.
-                continue;
-            }
-            int srcPortIdx = c.source().ports().indexOf(c.sourcePort());
-            int tgtPortIdx = c.target().ports().indexOf(c.targetPort());
-            if (srcPortIdx < 0 || tgtPortIdx < 0) {
-                continue;
-            }
-            connectionStates.add(new ConnectionState(
-                    srcIdx, srcPortIdx, tgtIdx, tgtPortIdx, c.color()));
-        }
-
-        return new CanvasState(nodeStates, connectionStates);
+        Node target = widget.node();
+        // Drop any wires that touched this node on either side. Using the
+        // model-level Node identity (not the widget) so this works for
+        // both source and target sides — Connection records hold Nodes,
+        // not NodeWidgets.
+        this.connections.removeIf(c -> c.source() == target || c.target() == target);
+        widget.setCanvas(null);
     }
 
+    // -- Persistence hooks --------------------------------------------------
+    // Save / load themselves live in CanvasStateManager. The canvas only
+    // exposes the minimum surface that manager needs to do its job:
+    // wipe the live state and append a pre-built connection without going
+    // through connect()'s validation (which would re-reject anything the
+    // saved data had legitimately produced).
+
     /**
-     * Restores a {@link CanvasState}. The current nodes and connections
-     * are dropped, then:
-     * <ol>
-     *   <li>Each {@link NodeState} is turned into a {@link NodeWidget} via
-     *       {@code nodeBuilder} (so the host can decide title text,
-     *       custom subclasses, etc.) and added in order — preserving the
-     *       indices that {@link ConnectionState} entries reference.</li>
-     *   <li>Each {@link ConnectionState} is resolved against the rebuilt
-     *       node list. References that fall outside the rebuilt graph (a
-     *       missing node, a port index that doesn't exist on the
-     *       definition anymore) are dropped silently rather than crashing
-     *       the load.</li>
-     * </ol>
+     * Empties the canvas — drops every node and every connection — and
+     * clears each node widget's canvas back-reference so a subsequently-
+     * rendered detached widget no longer reads connection state off
+     * {@code this}. Used by {@link CanvasStateManager#loadState} to wipe
+     * before rebuild.
      */
-    public void loadState(CanvasState state, Function<NodeState, NodeWidget> nodeBuilder) {
+    public void clear() {
+        for (NodeWidget widget : this.nodes) {
+            widget.setCanvas(null);
+        }
         this.nodes.clear();
         this.connections.clear();
-
-        for (NodeState ns : state.nodes()) {
-            this.nodes.add(nodeBuilder.apply(ns));
-        }
-
-        for (ConnectionState cs : state.connections()) {
-            if (!isValidIndex(cs.sourceNodeIndex(), this.nodes.size())) continue;
-            if (!isValidIndex(cs.targetNodeIndex(), this.nodes.size())) continue;
-            Node srcNode = this.nodes.get(cs.sourceNodeIndex()).node();
-            Node tgtNode = this.nodes.get(cs.targetNodeIndex()).node();
-            if (!isValidIndex(cs.sourcePortIndex(), srcNode.ports().size())) continue;
-            if (!isValidIndex(cs.targetPortIndex(), tgtNode.ports().size())) continue;
-            Port srcPort = srcNode.ports().get(cs.sourcePortIndex());
-            Port tgtPort = tgtNode.ports().get(cs.targetPortIndex());
-            this.connections.add(new Connection(srcNode, srcPort, tgtNode, tgtPort, cs.color()));
-        }
     }
 
-    private static boolean isValidIndex(int idx, int size) {
-        return idx >= 0 && idx < size;
+    /**
+     * Appends {@code connection} to the canvas without the validation
+     * {@link #connect} runs. Used when restoring a saved canvas — the
+     * persisted connection has already passed through {@code connect}
+     * once, so re-validating against the rebuilt graph (where the same
+     * ports may have shifted indices) would falsely reject legitimate
+     * wires.
+     */
+    public void addConnection(Connection connection) {
+        this.connections.add(connection);
     }
 }

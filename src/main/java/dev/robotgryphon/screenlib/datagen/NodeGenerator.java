@@ -3,7 +3,7 @@ package dev.robotgryphon.screenlib.datagen;
 import dev.robotgryphon.screenlib.ScreenLib;
 import dev.robotgryphon.screenlib.types.NodeBuilder;
 import dev.robotgryphon.screenlib.types.NodeDefinition;
-import dev.robotgryphon.screenlib.types.PropertyType;
+import dev.robotgryphon.screenlib.types.PropertyDefinition;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderGetter;
 import net.minecraft.core.HolderLookup;
@@ -31,21 +31,28 @@ public class NodeGenerator extends DatapackBuiltinEntriesProvider {
         return ResourceKey.create(NodeDefinition.REGISTRY_KEY, ScreenLib.id(name));
     }
 
-    /** Resolves a built-in property type by namespace+path so node defs read clearly. */
-    private static Holder<PropertyType<?>> propertyType(HolderGetter<PropertyType<?>> lookup,
-                                                        String namespace, String path) {
-        return lookup.getOrThrow(ResourceKey.create(
-                PropertyType.REGISTRY_KEY, Identifier.fromNamespaceAndPath(namespace, path)));
+    /**
+     * Resolves a built-in property definition by namespace+path so node
+     * defs read clearly. The combined {@link PropertyDefinition} registry
+     * now covers both the "what's the type" use (for ports) and the
+     * "what's the type and what's its default" use (for properties).
+     */
+    private static Holder<PropertyDefinition<?>> propertyDef(HolderGetter<PropertyDefinition<?>> lookup,
+                                                          String namespace, String path) {
+        var key = ResourceKey.create(
+                PropertyDefinition.REGISTRY_KEY, Identifier.fromNamespaceAndPath(namespace, path));
+        return lookup.getOrThrow(key);
     }
     //endregion
 
     private static void addCoreNodeTypes(BootstrapContext<NodeDefinition> ctx) {
-        HolderGetter<PropertyType<?>> types = ctx.lookup(PropertyType.REGISTRY_KEY);
+        var defs = ctx.lookup(PropertyDefinition.REGISTRY_KEY);
 
-        Holder<PropertyType<?>> blockPos     = propertyType(types, "minecraft", "block_pos");
-        Holder<PropertyType<?>> direction    = propertyType(types, "minecraft", "direction");
-        Holder<PropertyType<?>> intType      = propertyType(types, "minecraft", "int");
-        Holder<PropertyType<?>> itemHandler  = propertyType(types, ScreenLib.MOD_ID, "item_handler");
+        // Generic types — used for ports (no defaults needed).
+        var blockPos    = propertyDef(defs, "minecraft", "block_pos");
+        var direction   = propertyDef(defs, "minecraft", "direction");
+        var intType     = propertyDef(defs, "minecraft", "int");
+        var itemHandler = propertyDef(defs, ScreenLib.MOD_ID, "item_handler");
 
         // Block Position — a pure source: the position holder plus its scalar parts.
         ctx.register(nodeType("block_position"), new NodeBuilder()
@@ -80,6 +87,28 @@ public class NodeGenerator extends DatapackBuiltinEntriesProvider {
         ctx.register(nodeType("tree_cutter_upgrade"), new NodeBuilder()
                 .addInput("Tools", itemHandler)
                 .addInput("Drops", itemHandler)
+                .build());
+
+        // Sampler — exercises the property-row layout the way the KSampler
+        // mockup does. Each property references a distinct registered
+        // PropertyDefinition (registered in ScreenLib's static block) so its
+        // default lands without needing a per-use override path on
+        // NodeBuilder. The "type" registrations carry the codec/color/
+        // displayName/default; this node definition just names them.
+        var seedDef     = propertyDef(defs, ScreenLib.MOD_ID, "sampler/seed");
+        var stepsDef    = propertyDef(defs, ScreenLib.MOD_ID, "sampler/steps");
+        var cfgDef      = propertyDef(defs, ScreenLib.MOD_ID, "sampler/cfg");
+        var samplerDef  = propertyDef(defs, ScreenLib.MOD_ID, "sampler/sampler_name");
+        var schedDef    = propertyDef(defs, ScreenLib.MOD_ID, "sampler/scheduler");
+        var denoiseDef  = propertyDef(defs, ScreenLib.MOD_ID, "sampler/denoise");
+
+        ctx.register(nodeType("sampler"), new NodeBuilder()
+                .addProperty("seed", seedDef)
+                .addProperty("steps", stepsDef)
+                .addProperty("cfg", cfgDef)
+                .addProperty("sampler_name", samplerDef)
+                .addProperty("scheduler", schedDef)
+                .addProperty("denoise", denoiseDef)
                 .build());
     }
 }

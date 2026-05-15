@@ -3,6 +3,7 @@ package dev.robotgryphon.screenlib.client.ui;
 import dev.robotgryphon.screenlib.client.ui.widget.CanvasWidget;
 import dev.robotgryphon.screenlib.client.ui.widget.NodeWidget;
 import dev.robotgryphon.screenlib.graph.Canvas;
+import dev.robotgryphon.screenlib.graph.CanvasStateManager;
 import dev.robotgryphon.screenlib.graph.Node;
 import dev.robotgryphon.screenlib.graph.NodeState;
 import dev.robotgryphon.screenlib.menu.TestScreenMenu;
@@ -60,13 +61,14 @@ public class TestScreen extends Screen implements MenuAccess<TestScreenMenu> {
 
     /**
      * Pulls the canvas snapshot off the menu (server-shipped at open
-     * time) and rebuilds the editable canvas from it. Pan resets to a
-     * centered offset on every open since view state is intentionally
-     * out of the persisted snapshot.
+     * time) and rebuilds the editable canvas from it. View centering is
+     * a {@link CanvasWidget} concern now (viewport state lives on the
+     * widget, not the canvas), and {@code this.width} is still {@code 0}
+     * at constructor time — so the initial pan moves to {@link #init()}
+     * where both the widget and the screen dimensions exist.
      */
     private void initCanvas() {
-        canvas.pan((float) -this.width / 2, 0);
-        canvas.loadState(this.menu.state(), this::buildNodeWidget);
+        CanvasStateManager.loadState(canvas, this.menu.state(), this::buildNodeWidget);
     }
 
     /**
@@ -85,8 +87,15 @@ public class TestScreen extends Screen implements MenuAccess<TestScreenMenu> {
     @Override
     protected void init() {
         super.init();
-        this.addRenderableWidget(new CanvasWidget(this.canvas, 0, 0, this.width, this.height,
+        CanvasWidget canvasWidget = this.addRenderableWidget(new CanvasWidget(
+                this.canvas, 0, 0, this.width, this.height,
                 this::openAddNodeDialog));
+        // Initial view centering — the canvas widget owns its viewport, so
+        // the pan happens here (not in initCanvas, which fires before init
+        // and would see a still-zero width). Vertical offset is kept at
+        // zero so existing canvas snapshots keep landing where they did
+        // before the viewport move.
+        canvasWidget.viewport().pan((float) -this.width / 2, 0);
     }
 
     @Override
@@ -101,7 +110,7 @@ public class TestScreen extends Screen implements MenuAccess<TestScreenMenu> {
         // fires when the screen is *replaced* (e.g., opening the Add Node
         // dialog), which would spam the server with mid-edit state every
         // time the user navigates to a sub-screen.
-        ClientPacketDistributor.sendToServer(new UpdateCanvasStatePayload(canvas.toState()));
+        ClientPacketDistributor.sendToServer(new UpdateCanvasStatePayload(CanvasStateManager.toState(canvas)));
 
         // The vanilla pattern for a menu-backed screen is to route close
         // through the local player so the ServerboundContainerClosePacket

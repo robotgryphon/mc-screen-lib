@@ -4,8 +4,11 @@ import dev.robotgryphon.screenlib.client.ui.render.pip.BezierCurveRenderState;
 import dev.robotgryphon.screenlib.geometry.BezierCurve;
 import dev.robotgryphon.screenlib.geometry.CurveIndicator;
 import dev.robotgryphon.screenlib.graph.Canvas;
+import dev.robotgryphon.screenlib.graph.CanvasViewport;
 import dev.robotgryphon.screenlib.graph.PortSide;
+import dev.robotgryphon.screenlib.types.PropertyDefinition;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.core.Holder;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -27,7 +30,24 @@ public class CanvasWidget extends AbstractWidget {
     /** Radius (canvas pixels) of the close-indicator circle at a hovered connection's midpoint. */
     private static final float DELETE_BUTTON_RADIUS = 5f;
 
+    /**
+     * Alpha multiplier applied to anything whose type doesn't match the
+     * active drag's type. Low enough that the dimmed elements clearly
+     * read as "out of play" while still hinting at the underlying graph,
+     * so the user keeps their spatial orientation while dragging.
+     */
+    private static final float MISMATCHED_TYPE_ALPHA = 0.3f;
+
     public final Canvas canvas;
+
+    /**
+     * Per-widget viewport — the pan/zoom/coord-translation state for how
+     * <em>this widget</em> is currently showing the canvas. Owned by the
+     * widget (not the canvas) because it's a "how is this view configured"
+     * concern, not a "what's in the document" concern; if two widgets ever
+     * end up showing the same canvas, each gets its own viewport.
+     */
+    private final CanvasViewport viewport = new CanvasViewport();
 
     private @Nullable PendingConnection pending;
 
@@ -58,6 +78,14 @@ public class CanvasWidget extends AbstractWidget {
         this.onAddNodeRequested = onAddNodeRequested;
     }
 
+    /**
+     * The viewport this widget is currently viewing the canvas through.
+     * Pan / zoom / screen↔canvas conversions all hang off of it.
+     */
+    public CanvasViewport viewport() {
+        return this.viewport;
+    }
+
     /** Allow right-click (button 1) so it can open the context menu. */
     @Override
     public boolean isValidClickButton(MouseButtonInfo info) {
@@ -67,7 +95,7 @@ public class CanvasWidget extends AbstractWidget {
     // -- Mouse input --------------------------------------------------------
 
     private MouseButtonEvent convertMouseButtonEvent(MouseButtonEvent screen) {
-        final var canvas = this.canvas.screenToCanvas(screen.x(), screen.y());
+        final var canvas = this.viewport.screenToCanvas(screen.x(), screen.y());
         return new MouseButtonEvent(canvas.x(), canvas.y(), screen.buttonInfo());
     }
 
@@ -89,20 +117,66 @@ public class CanvasWidget extends AbstractWidget {
             return true;
         }
 
-        // Right-click on the canvas → open context menu in screen space at the
-        // cursor. The canvas-space position of the click is captured so the
-        // "Add Node" callback can place the new node where the user clicked.
-        if (event.button() == 1) {
-            final Vector2dc canvasPos = canvas.screenToCanvas(event.x(), event.y());
-            this.activeMenu = new ContextMenu(
-                    (int) event.x(), (int) event.y(),
-                    List.of(new ContextMenu.Item(
-                            Component.literal("Add Node"),
-                            () -> this.onAddNodeRequested.accept(canvasPos))));
+        // Same pattern for an open property popup — inside-click selects
+        // an option (the popup's onSelect clears the property's focus on
+        // the owning node); outside-click just dismisses. Popup state
+        // lives on the node, so we ask each node widget whether it has
+        // an open popup. There's at most one in practice (the modal-
+        // close branch below ensures opening one closes any others), but
+        // iterating is robust to that invariant slipping.
+        NodeWidget popupNode = this.findPopupNode();
+        if (popupNode != null) {
+            if (popupNode.handleFocusedPropertyPopupClick(this.viewport, event.x(), event.y())) {
+                // Option selected — the popup's onSelect already cleared
+                // the node's focused-property marker.
+                return true;
+            }
+            // Click missed the popup. Clear focus on the node that owned
+            // it and consume the event so the click doesn't fall through
+            // to start a node drag or pan.
+            popupNode.clearFocusedProperty();
             return true;
         }
 
-        final var clicked = canvas.screenToCanvas(event.x(), event.y());
+        // Right-click → open a context menu in screen space at the cursor.
+        // The menu's items depend on whether the click landed on a node:
+        //   - on a node body → node-scoped menu (Remove Node, …)
+        //   - elsewhere      → canvas-scoped menu (Add Node, …)
+        // findNodesNear already excludes hits that land on the node's
+        // ports, so right-clicking a port falls through to the canvas
+        // menu — matching the user's likely intent ("the wire-side, not
+        // the node-side").
+        if (event.button() == 1) {
+            final Vector2dc canvasPos = this.viewport.screenToCanvas(event.x(), event.y());
+            final NodeWidget hitNode = canvas.findNodesNear(canvasPos).findFirst().orElse(null);
+
+            List<ContextMenu.Item> items;
+            if (hitNode != null) {
+                items = List.of(new ContextMenu.Item(
+                        Component.literal("Remove Node"),
+                        () -> {
+                            canvas.removeNode(hitNode);
+                            // Defensive: if this node was somehow still
+                            // the drag target (shouldn't be, since the
+                            // right-click that opened the menu cleared
+                            // any in-progress drag), drop the reference
+                            // so the next frame doesn't try to forward
+                            // events to a removed widget.
+                            if (this.focusedNode == hitNode) {
+                                this.focusedNode = null;
+                            }
+                        }));
+            } else {
+                items = List.of(new ContextMenu.Item(
+                        Component.literal("Add Node"),
+                        () -> this.onAddNodeRequested.accept(canvasPos)));
+            }
+
+            this.activeMenu = new ContextMenu((int) event.x(), (int) event.y(), items);
+            return true;
+        }
+
+        final var clicked = this.viewport.screenToCanvas(event.x(), event.y());
         final var canvasEvent = convertMouseButtonEvent(event);
 
         // 0. Delete-button hit → remove the connection. Only the bezier-hovered
@@ -123,6 +197,9 @@ public class CanvasWidget extends AbstractWidget {
                 .orElse(null);
         if (port != null) {
             this.pending = new PendingConnection(port.node(), port);
+            // Tell the model what type is being dragged so renderers
+            // elsewhere on the canvas can dim mismatched targets.
+            this.canvas.setActiveDragType(port.type());
             this.focusedNode = null;
             this.panning = false;
             return true;
@@ -150,7 +227,7 @@ public class CanvasWidget extends AbstractWidget {
 
         if (this.panning) {
             // dx/dy come in screen-pixel space — pan is a screen-space translation.
-            canvas.pan((float) dx, (float) dy);
+            this.viewport.pan((float) dx, (float) dy);
             return true;
         }
         if (this.pending != null) {
@@ -160,14 +237,15 @@ public class CanvasWidget extends AbstractWidget {
         }
         if (this.focusedNode != null) {
             // Scale dx/dy into canvas units in case the node uses them.
-            return this.focusedNode.mouseDragged(asCanvasEvent, dx / canvas.zoom(), dy / canvas.zoom());
+            float zoom = this.viewport.zoom();
+            return this.focusedNode.mouseDragged(asCanvasEvent, dx / zoom, dy / zoom);
         }
         return false;
     }
 
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
-        final var canvasSpace = this.canvas.screenToCanvas(event.x(), event.y());
+        final var canvasSpace = this.viewport.screenToCanvas(event.x(), event.y());
         final var asCanvasEvent = convertMouseButtonEvent(event);
 
         if (this.panning) {
@@ -178,6 +256,10 @@ public class CanvasWidget extends AbstractWidget {
         if (this.pending != null) {
             PendingConnection p = this.pending;
             this.pending = null;
+            // Always clear the drag-type hint, regardless of whether the
+            // release lands on a valid target — leaving it set would dim
+            // the canvas indefinitely.
+            this.canvas.setActiveDragType(null);
             if (event.button() == 0) {
                 // Find ports that are not the starting one and not on the same node
                 final var port = canvas.findPortsNear(canvasSpace)
@@ -207,10 +289,10 @@ public class CanvasWidget extends AbstractWidget {
         if (scrollY == 0) {
             return false;
         }
-        float factor = scrollY > 0 ? Canvas.ZOOM_STEP : 1f / Canvas.ZOOM_STEP;
-        // Canvas owns the pan/zoom fields, so it also owns the math that keeps
-        // the cursor's canvas point stationary across a zoom change.
-        canvas.zoomAround(canvas.zoom() * factor, mouseX, mouseY);
+        float factor = scrollY > 0 ? CanvasViewport.ZOOM_STEP : 1f / CanvasViewport.ZOOM_STEP;
+        // Viewport owns the pan/zoom fields, so it also owns the math that
+        // keeps the cursor's canvas point stationary across a zoom change.
+        this.viewport.zoomAround(this.viewport.zoom() * factor, mouseX, mouseY);
         return true;
     }
 
@@ -219,10 +301,10 @@ public class CanvasWidget extends AbstractWidget {
     @Override
     protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         graphics.pose().pushMatrix();
-        canvas.transformPose(graphics.pose());
+        this.viewport.transformPose(graphics.pose());
 
         // Hover / port-detection inside nodes operates in canvas space.
-        final var canvasMouse = canvas.screenToCanvas(mouseX, mouseY);
+        final var canvasMouse = this.viewport.screenToCanvas(mouseX, mouseY);
 
         // Resolve the hovered connection once: the curve render attaches a
         // close-indicator to its bezier so both the indicator circle and the
@@ -248,11 +330,40 @@ public class CanvasWidget extends AbstractWidget {
             graphics.nextStratum();
             this.activeMenu.render(graphics, mouseX, mouseY);
         }
+
+        // Same screen-anchored stratum for an open property popup. Each
+        // nextStratum() call only ever raises the floor for subsequent
+        // submissions, so it's safe to call it again here — even if the
+        // context menu also bumped the stratum a moment ago. The popup's
+        // state lives on the node, so we ask the node widget to render
+        // its own popup if it has one.
+        NodeWidget popupNode = this.findPopupNode();
+        if (popupNode != null) {
+            graphics.nextStratum();
+            popupNode.renderFocusedPropertyPopup(graphics, this.viewport, mouseX, mouseY);
+        }
+    }
+
+    /**
+     * Linear scan to find the node widget (if any) whose underlying node
+     * has a focused property with an open popup. Returns the first hit;
+     * the click and render paths both expect at most one popup open at a
+     * time and the {@code mouseClicked} modal-close branch enforces
+     * that. O(N) in node count, fine for typical canvas sizes.
+     */
+    private @Nullable NodeWidget findPopupNode() {
+        for (NodeWidget node : canvas.nodes()) {
+            if (node.hasFocusedPropertyPopup()) {
+                return node;
+            }
+        }
+        return null;
     }
 
     private void extractConnections(GuiGraphicsExtractor graphics, Vector2dc mouseCanvas,
                                     @Nullable Connection hovered) {
         List<BezierCurve> curves = new ArrayList<>();
+        var dragType = this.canvas.activeDragType();
         for (Connection c : canvas.connections()) {
             Vector2fc start = c.source().portAttachment(c.sourcePort());
             Vector2fc end = c.target().portAttachment(c.targetPort());
@@ -266,7 +377,16 @@ public class CanvasWidget extends AbstractWidget {
                     ? new CurveIndicator(midpoint(start, end), DELETE_BUTTON_RADIUS,
                             isInDeleteButton(c, mouseCanvas))
                     : null;
-            curves.add(BezierCurve.from(graphics, start, end, c.color(), indicator));
+            // While a drag is in flight, dim connections that aren't the
+            // same type as what's being dragged. The shader uses
+            // vertexColor.a as a per-fragment scaler, so reducing the
+            // color's alpha here makes the whole curve render translucent
+            // without needing a shader-side change.
+            int wireColor = c.color();
+            if (dragType != null && c.sourcePort().type().value() != dragType.value()) {
+                wireColor = scaleAlpha(wireColor, MISMATCHED_TYPE_ALPHA);
+            }
+            curves.add(BezierCurve.from(graphics, start, end, wireColor, indicator));
         }
 
         if (this.pending != null) {
@@ -352,6 +472,17 @@ public class CanvasWidget extends AbstractWidget {
         double dx = canvasMouse.x() - mid.x();
         double dy = canvasMouse.y() - mid.y();
         return dx * dx + dy * dy <= DELETE_BUTTON_RADIUS * DELETE_BUTTON_RADIUS;
+    }
+
+    /**
+     * Multiply an ARGB color's alpha channel by {@code factor}, clamped
+     * to [0, 255]. RGB channels are left untouched so the color reads as
+     * "this is the same wire, just faded" rather than shifting hue.
+     */
+    private static int scaleAlpha(int argb, float factor) {
+        int a = (argb >>> 24) & 0xFF;
+        int scaled = Math.max(0, Math.min(255, Math.round(a * factor)));
+        return (scaled << 24) | (argb & 0x00FFFFFF);
     }
 
     @Override

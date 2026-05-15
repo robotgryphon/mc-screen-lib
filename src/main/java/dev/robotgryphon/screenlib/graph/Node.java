@@ -13,6 +13,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -21,18 +22,21 @@ import java.util.Map;
  *
  * <p>{@code Node} mirrors {@code Canvas}: a plain data holder with no
  * direct UI dependency. A node owns its definition (the typed schema), the
- * runtime {@link Port}s materialized from that schema, and its current
- * layout state (position, size, title). All port-positioning math lives
- * here so that anything reading the graph — connections, hit-testing — can
- * compute geometry without going through a widget.
+ * runtime {@link Port}s materialized from that schema, the current values
+ * of its declared properties, and its current layout state (position,
+ * size, title). All port-positioning math lives here so that anything
+ * reading the graph — connections, hit-testing — can compute geometry
+ * without going through a widget.
  *
- * <p>Size is computed at construction time from the title and port labels
- * using the active client font, so callers don't have to guess at the right
- * dimensions. The width is the larger of the title's width and the row of
- * port labels (left max + right max, plus padding); the height grows with
- * the number of ports on the busier side. {@code Node} therefore relies on
- * {@code Minecraft.getInstance().font} being available — fine in practice
- * because nodes are only ever instantiated on the client.
+ * <p>Size is computed at construction time from the title, the port
+ * labels, and the property labels using the active client font, so
+ * callers don't have to guess at the right dimensions. The width is the
+ * widest of the title, the port row (left+right with padding), and the
+ * property rows (label+value); the body height grows with both the
+ * number of property rows and the number of ports on the busier side.
+ * {@code Node} therefore relies on {@code Minecraft.getInstance().font}
+ * being available — fine in practice because nodes are only ever
+ * instantiated on the client.
  */
 public class Node {
 
@@ -45,6 +49,15 @@ public class Node {
     /** Pixels between the diamond's outer edge and the start of its label text. */
     public static final int PORT_LABEL_GAP = 4;
 
+    /** Vertical pixels reserved per property row inside the node body. */
+    public static final int PROPERTY_PITCH = 14;
+    /** Pixels of horizontal padding on each side of a property row. */
+    public static final int PROPERTY_PADDING_X = 6;
+    /** Minimum width reserved for a property's value area regardless of current content. */
+    public static final int PROPERTY_VALUE_MIN_WIDTH = 60;
+    /** Pixels between a property's label and its value column. */
+    public static final int PROPERTY_LABEL_VALUE_GAP = 8;
+
     /** Horizontal padding on each side of the title text inside the title bar. */
     private static final int TITLE_PADDING = 8;
     /** Pixels between a port's anchor on the node edge and the start of its label. */
@@ -53,8 +66,8 @@ public class Node {
     private static final int LABEL_BETWEEN_GAP = 8;
     /** Vertical pixels reserved per port row; needs to comfortably fit the font. */
     private static final int MIN_PORT_PITCH = 12;
-    /** Floor on the body region so a portless / single-port node still feels like a node. */
-    private static final int MIN_BODY_HEIGHT = 24;
+    /** Floor on the port-band region so a portless / single-port node still feels like a node. */
+    private static final int MIN_PORT_BAND_HEIGHT = 24;
     /** Floor on width so empty-titled / portless nodes don't shrink to a sliver. */
     private static final int MIN_WIDTH = 60;
 
@@ -71,6 +84,35 @@ public class Node {
     /** Ports grouped by side, in declaration order — used to compute layout positions. */
     private final Map<PortSide, List<Port>> portsBySide;
 
+    /**
+     * Current values of the declared properties, keyed by the
+     * {@link PortDefinition#name()} the property entry is listed under
+     * in {@link NodeDefinition#properties()}. Each entry's value is the
+     * typed object decoded through the property's registered
+     * {@link dev.robotgryphon.screenlib.types.PropertyDefinition} codec;
+     * absent keys mean "no value set yet" and render as a placeholder.
+     * The map is mutable so editor widgets can write through to it.
+     */
+    private final Map<String, Object> propertyValues = new HashMap<>();
+
+    /**
+     * Name of the property whose editor currently has focus on this node
+     * (e.g., the one whose dropdown popup is open). Null when no property
+     * editor is active. Owned by the node — not the canvas — because the
+     * focused element belongs to a specific property on a specific node;
+     * collecting it canvas-side would conflate "which node is being
+     * interacted with" with "which sub-control inside that node is open".
+     *
+     * <p>The widget layer reads this each frame to decide whether to
+     * render a floating popup, and writes it on click / dismissal. Set
+     * to {@code null} when the popup closes (option picked, outside
+     * click, etc.) so the next frame stops rendering the popup.
+     */
+    private @Nullable String focusedPropertyName;
+
+    /** Total height of the property region (all rows stacked), cached at construction. */
+    private final int propertyRegionHeight;
+
     private int x;
     private int y;
     private int width;
@@ -85,27 +127,70 @@ public class Node {
         this.ports = buildPorts(this.definition);
         this.portsBySide = groupBySide(this.ports);
 
+        this.propertyRegionHeight = this.definition.properties().size() * PROPERTY_PITCH;
+
+        // Seed property values from the schema's declared defaults so a
+        // freshly-spawned node renders the same numbers the datapack
+        // author chose. Stored as already-decoded typed objects so the
+        // renderer doesn't have to re-decode on every frame. Persistence
+        // (CanvasState load) overwrites these afterwards if the user has
+        // since modified a value.
+        seedDefaultPropertyValues();
+
         // Auto-size from content. Done last so it has access to the populated
         // ports map (and indirectly, port titles) for label-width measurement.
         Font font = Minecraft.getInstance().font;
         this.width = computeWidth(font, title, this.definition);
-        this.height = computeHeight(font, this.definition);
+        this.height = computeHeight(font, this.definition, this.propertyRegionHeight);
+    }
+
+    /**
+     * Seeds {@link #propertyValues} with the typed default declared by
+     * each property's registered {@link
+     * dev.robotgryphon.screenlib.types.PropertyDefinition}. The default
+     * is already the typed value (the registry's {@code Optional<T>}
+     * field), so no codec round-trip is needed at this point — that's
+     * reserved for persistence ({@link Canvas#toState}). Properties whose
+     * type carries no default are left unset.
+     */
+    private void seedDefaultPropertyValues() {
+        for (PortDefinition prop : this.definition.properties()) {
+            prop.type().value().defaultValueRaw()
+                    .ifPresent(def -> this.propertyValues.put(prop.name(), def));
+        }
     }
 
     private List<Port> buildPorts(NodeDefinition def) {
-        List<Port> result = new ArrayList<>(def.inputs().size() + def.outputs().size());
+        List<Port> result = new ArrayList<>(
+                def.inputs().size() + def.outputs().size() + 2 * def.properties().size());
         for (PortDefinition input : def.inputs()) {
             result.add(new Port(this, PortSide.LEFT, Component.literal(input.name()), input.type()));
         }
         for (PortDefinition output : def.outputs()) {
             result.add(new Port(this, PortSide.RIGHT, Component.literal(output.name()), output.type()));
         }
+        // Every property gets both an incoming and an outgoing port. They're
+        // not "active" in the visual sense until something connects to them
+        // (or the user hovers the row) — the renderer decides when to draw
+        // them — but they're real Ports as far as the graph is concerned.
+        for (PortDefinition prop : def.properties()) {
+            result.add(Port.property(this, PortSide.LEFT, prop.name(), prop.type()));
+            result.add(Port.property(this, PortSide.RIGHT, prop.name(), prop.type()));
+        }
         return List.copyOf(result);
     }
 
+    /**
+     * Groups <em>only the non-property ports</em> by side. Property ports
+     * anchor to their property's row inside the body, not to the side's
+     * port-band distribution, so they must be excluded here — otherwise
+     * adding a property would shift every regular port's vertical position
+     * (because the (i+1)/(N+1) distribution math counts them).
+     */
     private static Map<PortSide, List<Port>> groupBySide(List<Port> ports) {
         Map<PortSide, List<Port>> map = new EnumMap<>(PortSide.class);
         for (Port p : ports) {
+            if (p.isProperty()) continue;
             map.computeIfAbsent(p.side(), k -> new ArrayList<>()).add(p);
         }
         // Defensive copies so the per-side lists can't be mutated from outside.
@@ -124,27 +209,37 @@ public class Node {
         // Ports: left labels and right labels have to coexist on the same row
         // without overlapping; each label sits PORT_LABEL_INSET pixels in from
         // its node edge, so the inner span is just left + gap + right.
-        int maxLeft = maxLabelWidth(font, def.inputs());
-        int maxRight = maxLabelWidth(font, def.outputs());
+        int maxLeft = maxPortLabelWidth(font, def.inputs());
+        int maxRight = maxPortLabelWidth(font, def.outputs());
         int portsNeed = 0;
         if (maxLeft > 0 || maxRight > 0) {
             portsNeed = 2 * PORT_LABEL_INSET + maxLeft + maxRight + LABEL_BETWEEN_GAP;
         }
 
-        return Math.max(MIN_WIDTH, Math.max(titleNeed, portsNeed));
+        // Properties: label on the left, a fixed-minimum value column on the
+        // right. The row has uniform padding on both sides so the value column
+        // sits flush with the node's right edge minus the padding.
+        int propsNeed = 0;
+        for (PortDefinition prop : def.properties()) {
+            int labelWidth = font.width(propertyLabel(prop));
+            int rowWidth = 2 * PROPERTY_PADDING_X
+                    + labelWidth + PROPERTY_LABEL_VALUE_GAP + PROPERTY_VALUE_MIN_WIDTH;
+            propsNeed = Math.max(propsNeed, rowWidth);
+        }
+
+        return Math.max(MIN_WIDTH, Math.max(Math.max(titleNeed, portsNeed), propsNeed));
     }
 
-    private static int computeHeight(Font font, NodeDefinition def) {
+    private static int computeHeight(Font font, NodeDefinition def, int propertyRegionHeight) {
         int maxPortsPerSide = Math.max(def.inputs().size(), def.outputs().size());
-        // Ports are evenly distributed at (i+1)/(N+1) of the body; each "slot"
-        // is bodyHeight / (N+1), so the body needs (N+1) pitches to give every
-        // port a comfortable row.
+        // Ports distribute evenly at (i+1)/(N+1) of the port band; the band
+        // needs (N+1) pitches to give every port a comfortable row.
         int pitch = Math.max(MIN_PORT_PITCH, font.lineHeight + 3);
-        int bodyHeight = Math.max(MIN_BODY_HEIGHT, pitch * (maxPortsPerSide + 1));
-        return TITLE_BAR_HEIGHT + bodyHeight;
+        int portBandHeight = Math.max(MIN_PORT_BAND_HEIGHT, pitch * (maxPortsPerSide + 1));
+        return TITLE_BAR_HEIGHT + propertyRegionHeight + portBandHeight;
     }
 
-    private static int maxLabelWidth(Font font, List<PortDefinition> ports) {
+    private static int maxPortLabelWidth(Font font, List<PortDefinition> ports) {
         int max = 0;
         for (PortDefinition p : ports) {
             max = Math.max(max, font.width(Component.literal(p.name())));
@@ -161,7 +256,7 @@ public class Node {
     /**
      * The registry holder backing {@link #definition()}. Use this when you
      * need a stable, serializable reference to the schema — e.g., for
-     * {@code CanvasState.toState()}.
+     * {@link CanvasStateManager#toState}.
      */
     public Holder<NodeDefinition> definitionHolder() {
         return this.definitionHolder;
@@ -173,6 +268,60 @@ public class Node {
 
     public List<Port> ports() {
         return this.ports;
+    }
+
+    // -- Property values ---------------------------------------------------
+
+    /** Current value for the named property, or {@code null} if unset. */
+    public @Nullable Object propertyValue(String name) {
+        return this.propertyValues.get(name);
+    }
+
+    /**
+     * Writes through to the property map. Caller is responsible for the
+     * runtime type matching the property's declared
+     * {@link dev.robotgryphon.screenlib.types.PropertyDefinition} — the
+     * node itself stores values type-erased so it can host any property
+     * kind without generic gymnastics.
+     */
+    public void setPropertyValue(String name, @Nullable Object value) {
+        if (value == null) {
+            this.propertyValues.remove(name);
+        } else {
+            this.propertyValues.put(name, value);
+        }
+    }
+
+    /**
+     * Label rendered next to a property row. Currently uses the
+     * property's local name verbatim; once translatable labels land this
+     * becomes a {@link Component#translatable(String)} keyed off the
+     * property's owning node and the property name.
+     */
+    public static Component propertyLabel(PortDefinition prop) {
+        return Component.literal(prop.name());
+    }
+
+    /**
+     * Name of the property whose editor is currently focused — typically
+     * the one with an open dropdown popup. Null when no property editor
+     * has focus.
+     */
+    public @Nullable String focusedPropertyName() {
+        return this.focusedPropertyName;
+    }
+
+    /**
+     * Marks {@code name} as the focused property on this node, or
+     * {@code null} to clear focus. The widget layer calls this when the
+     * user opens a dropdown ({@code name}) and again when the popup
+     * closes via selection or an outside click ({@code null}). The model
+     * doesn't try to validate that {@code name} actually exists — that
+     * stays a widget-layer concern, since the widget is the side that
+     * knows how to find the property and render its editor.
+     */
+    public void setFocusedPropertyName(@Nullable String name) {
+        this.focusedPropertyName = name;
     }
 
     // -- Layout state ------------------------------------------------------
@@ -190,12 +339,29 @@ public class Node {
                 && mouseY >= this.y && mouseY < this.y + this.height;
     }
 
+    /** Total stacked height of the property region (zero when the node has no properties). */
+    public int propertyRegionHeight() {
+        return this.propertyRegionHeight;
+    }
+
+    /** Top edge (inclusive) of the property region, in screen pixels. */
+    public int propertyRegionTop() {
+        return this.y + TITLE_BAR_HEIGHT;
+    }
+
+    /** Top edge of the i-th property row, in screen pixels. */
+    public int propertyRowTop(int index) {
+        return this.propertyRegionTop() + index * PROPERTY_PITCH;
+    }
+
     // -- Port geometry -----------------------------------------------------
 
     /**
      * The on-screen center of the given port. Ports on the same side share
-     * the body extent equally: with N ports on a side, the i-th port
-     * (0-indexed) sits at {@code (i+1)/(N+1)} along the body.
+     * the port-band region equally: with N ports on a side, the i-th port
+     * (0-indexed) sits at {@code (i+1)/(N+1)} along the band. The port
+     * band starts <em>below</em> the property region so property rows
+     * never have a port stamped on top of them.
      *
      * <p>The returned point is the visual center of the port's center pixel:
      * the integer pixel anchor plus 0.5 on each axis. This keeps every port
@@ -204,6 +370,23 @@ public class Node {
      * boundary above it (which would show a vertical offset at high zoom).
      */
     public Vector2fc portCenter(Port port) {
+        // Property-bound port: anchor to the row that hosts its property,
+        // not to the side's port-band distribution. The x-anchor is the
+        // same edge logic as a regular port.
+        if (port.isProperty()) {
+            int rowIndex = propertyRowIndex(port.propertyName());
+            if (rowIndex < 0) {
+                throw new IllegalArgumentException("Property port references unknown property: " + port.propertyName());
+            }
+            int yAnchor = this.propertyRowTop(rowIndex) + PROPERTY_PITCH / 2;
+            int xAnchor = switch (port.side()) {
+                case LEFT -> this.x;
+                case RIGHT -> this.x + this.width - 1;
+                default -> throw new IllegalStateException("Unknown side: " + port.side());
+            };
+            return new Vector2f(xAnchor, yAnchor + 0.5f);
+        }
+
         List<Port> sidePorts = this.portsBySide.get(port.side());
         if (sidePorts == null) {
             throw new IllegalArgumentException("Port not on this node: " + port);
@@ -222,21 +405,36 @@ public class Node {
         int count = sidePorts.size();
         float t = (index + 1f) / (count + 1f);
 
-        // Reserve the title-bar slice; ports lay out within the body region.
-        int bodyTop = this.y + TITLE_BAR_HEIGHT;
-        int bodyHeight = this.height - TITLE_BAR_HEIGHT;
+        // Port band sits below both the title bar and the property region.
+        int bandTop = this.y + TITLE_BAR_HEIGHT + this.propertyRegionHeight;
+        int bandHeight = this.height - TITLE_BAR_HEIGHT - this.propertyRegionHeight;
 
         // Snap layout to integer pixels so multi-port distribution doesn't
         // leave one port's line a fraction of a pixel above center and the
         // next port's line a fraction below.
-        int yAnchor = bodyTop + Math.round(bodyHeight * t);
+        int yAnchor = bandTop + Math.round(bandHeight * t);
         int xAnchor = switch (port.side()) {
             case LEFT -> this.x;
-            case RIGHT -> this.x + this.width;
+            case RIGHT -> this.x + this.width - 1;
             default -> throw new IllegalStateException("Unknown side: " + port.side());
         };
 
         return new Vector2f(xAnchor + 0.5f, yAnchor + 0.5f);
+    }
+
+    /**
+     * Index of the property with the given name in the definition's property
+     * list, or {@code -1} if there's no such property. Lookup is O(N) since N
+     * is small (typically &lt; 10) and the call site is only in {@link #portCenter}.
+     */
+    private int propertyRowIndex(String name) {
+        List<PortDefinition> props = this.definition.properties();
+        for (int i = 0; i < props.size(); i++) {
+            if (props.get(i).name().equals(name)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /**

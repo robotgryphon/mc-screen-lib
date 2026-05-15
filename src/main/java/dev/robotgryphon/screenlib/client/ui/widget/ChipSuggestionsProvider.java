@@ -21,7 +21,7 @@ import java.util.List;
  * <pre>{@code
  * ChipSuggestionsProvider<FilterMode> provider = (mode, input) -> switch (mode) {
  *     case NAME  -> matchingNodeNames(input);
- *     case INPUT -> matchingInputTypes(input); // returns PropertyType-backed suggestions
+ *     case INPUT -> matchingInputTypes(input); // returns PropertyDefinition-backed suggestions
  * };
  * }</pre>
  *

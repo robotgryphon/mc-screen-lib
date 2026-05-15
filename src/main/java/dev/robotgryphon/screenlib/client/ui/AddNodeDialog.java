@@ -9,7 +9,7 @@ import dev.robotgryphon.screenlib.graph.Port;
 import dev.robotgryphon.screenlib.graph.PortSide;
 import dev.robotgryphon.screenlib.types.NodeDefinition;
 import dev.robotgryphon.screenlib.types.PortDefinition;
-import dev.robotgryphon.screenlib.types.PropertyType;
+import dev.robotgryphon.screenlib.types.PropertyDefinition;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -256,8 +256,8 @@ public class AddNodeDialog extends Screen {
      * preserves the order so two consecutive identical typings yield the
      * same suggestion list rather than a shuffled one.
      */
-    private Stream<Holder<PropertyType<?>>> distinctInputTypes() {
-        Set<Holder<PropertyType<?>>> seen = new LinkedHashSet<>();
+    private Stream<Holder<PropertyDefinition<?>>> distinctInputTypes() {
+        Set<Holder<PropertyDefinition<?>>> seen = new LinkedHashSet<>();
         for (PreviewTemplate t : this.templates) {
             for (PortDefinition input : t.node.definition().inputs()) {
                 seen.add(input.type());
@@ -480,7 +480,7 @@ public class AddNodeDialog extends Screen {
         },
         /**
          * Match any of the node's input port types. A node matches if at
-         * least one input's {@link dev.robotgryphon.screenlib.types.PropertyType}
+         * least one input's {@link dev.robotgryphon.screenlib.types.PropertyDefinition}
          * display name contains the needle. Mirrors the "Input: IMAGE" chips
          * in graph-style picker UIs.
          */
@@ -501,9 +501,17 @@ public class AddNodeDialog extends Screen {
                 // actually draws) rather than PortDefinitions, so the set we
                 // hand to the tile keys against the same Port instances it
                 // would highlight.
+                //
+                // Property-bound ports are intentionally excluded here: the
+                // preview's NodeWidget doesn't render them (they only become
+                // visible on a live canvas via row-hover or connection), so
+                // highlighting one would draw a halo with no port underneath.
                 Set<Port> hits = new HashSet<>();
                 for (Port port : t.node().ports()) {
                     if (port.side() != PortSide.LEFT) {
+                        continue;
+                    }
+                    if (port.isProperty()) {
                         continue;
                     }
                     if (typeNameMatches(port.type().value().displayName(), needle)) {

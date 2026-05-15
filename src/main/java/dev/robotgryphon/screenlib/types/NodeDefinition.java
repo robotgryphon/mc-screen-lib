@@ -12,14 +12,20 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Datapack-defined description of a node type — what configurable
- * properties it exposes and the typed input/output ports it presents.
+ * Datapack-defined description of a node type — the typed input/output
+ * ports it presents on its sides, and the configurable properties shown
+ * inside its body.
  *
- * <p>Inputs and outputs reference a {@link PropertyType} by id, which
- * is what gives each port its color when the canvas renders the node.
+ * <p>All three lists are {@link PortDefinition}s. They share an identical
+ * "name + typed holder" shape; the role (input, output, configurable
+ * property) is just which list the entry lives in. Each entry's
+ * {@link PortDefinition#type()} resolves to a registered
+ * {@link PropertyDefinition} which carries the codec/color/displayName
+ * for the value type, plus any default value for property entries.
  */
 public record NodeDefinition(List<PortDefinition> inputs,
-                             List<PortDefinition> outputs) {
+                             List<PortDefinition> outputs,
+                             List<PortDefinition> properties) {
 
     public static final ResourceKey<Registry<NodeDefinition>> REGISTRY_KEY =
             ResourceKey.createRegistryKey(ScreenLib.id("nodes"));
@@ -31,7 +37,16 @@ public record NodeDefinition(List<PortDefinition> inputs,
 
             PortDefinition.CODEC.listOf()
                     .optionalFieldOf("outputs", List.of())
-                    .forGetter(def -> Collections.unmodifiableList(def.outputs()))
+                    .forGetter(def -> Collections.unmodifiableList(def.outputs())),
+
+            // Properties share PortDefinition's schema: the "name" field
+            // is the per-property key on the node (used for storage and
+            // as the rendered label), and the "type" field resolves to
+            // a registered PropertyDefinition whose default value, if
+            // present, seeds the property when a fresh node is spawned.
+            PortDefinition.CODEC.listOf()
+                    .optionalFieldOf("properties", List.of())
+                    .forGetter(def -> Collections.unmodifiableList(def.properties()))
     ).apply(i, NodeDefinition::new)));
 
     /**
