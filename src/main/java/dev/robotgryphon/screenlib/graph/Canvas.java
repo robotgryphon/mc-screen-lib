@@ -110,9 +110,19 @@ public class Canvas {
 
     /**
      * Add a connection between two ports. Returns {@code true} if the
-     * connection was added; {@code false} if it was rejected because:
-     * the sides aren't a valid output→input pair, the port types differ,
-     * or a connection between this exact pair already exists.
+     * connection was added; {@code false} if it was rejected because
+     * the sides aren't a valid output→input pair or the port types
+     * differ.
+     *
+     * <p>Input ports accept exactly one inbound connection. If
+     * {@code to} already has a wire targeting it, that wire is
+     * dropped and the new one takes its place — the standard node
+     * graph UX where redirecting an input is a single drag, not a
+     * disconnect-then-reconnect dance. The replacement covers
+     * {@code (from, to)} exactly matching an existing connection too
+     * (that connection's removal and immediate re-add is a no-op
+     * net change but still reports {@code true} so the caller knows
+     * the wire is now live).
      */
     public boolean connect(Port from, Port to, int color) {
         if (from.side() != PortSide.RIGHT || to.side() != PortSide.LEFT) {
@@ -123,11 +133,9 @@ public class Canvas {
         if (from.type().value() != to.type().value()) {
             return false;
         }
-        for (Connection c : this.connections) {
-            if (c.sourcePort().equals(from) && c.targetPort().equals(to)) {
-                return false;
-            }
-        }
+        // Enforce single-inbound on the target input by dropping any
+        // existing wire that targets it before the new wire lands.
+        this.connections.removeIf(c -> c.targetPort().equals(to));
         this.connections.add(new Connection(from.node(), from, to.node(), to, color));
         return true;
     }

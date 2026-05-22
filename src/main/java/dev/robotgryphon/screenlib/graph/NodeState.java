@@ -7,6 +7,7 @@ import dev.robotgryphon.screenlib.types.NodeDefinition;
 import net.minecraft.core.Holder;
 
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Serializable snapshot of one node placed on a {@link Canvas}.
@@ -34,13 +35,23 @@ import java.util.Map;
  * @param y                canvas-space y of the node's top-left corner
  * @param propertyValues   per-property serialized current values, keyed by
  *                         property name; empty when nothing has been set
+ * @param tintColor        optional ARGB tint applied to the node body /
+ *                         title bar at render time; {@link Optional#empty()}
+ *                         when the node uses its default coloring
  */
 public record NodeState(Holder<NodeDefinition> definition, int x, int y,
-                        Map<String, Dynamic<?>> propertyValues) {
+                        Map<String, Dynamic<?>> propertyValues,
+                        Optional<Integer> tintColor) {
 
     /** Convenience for the no-properties case — keeps test-only call sites unchanged. */
     public NodeState(Holder<NodeDefinition> definition, int x, int y) {
-        this(definition, x, y, Map.of());
+        this(definition, x, y, Map.of(), Optional.empty());
+    }
+
+    /** Convenience for the properties-but-no-tint case — keeps existing callers source-compatible. */
+    public NodeState(Holder<NodeDefinition> definition, int x, int y,
+                     Map<String, Dynamic<?>> propertyValues) {
+        this(definition, x, y, propertyValues, Optional.empty());
     }
 
     public static final Codec<NodeState> CODEC = RecordCodecBuilder.create(i -> i.group(
@@ -54,6 +65,12 @@ public record NodeState(Holder<NodeDefinition> definition, int x, int y,
             // needing to know the property's value type at this layer.
             Codec.unboundedMap(Codec.STRING, Codec.PASSTHROUGH)
                     .optionalFieldOf("properties", Map.of())
-                    .forGetter(NodeState::propertyValues)
+                    .forGetter(NodeState::propertyValues),
+            // Tint color rides as a plain ARGB int. Optional so any
+            // pre-existing serialized canvas without a tint field
+            // round-trips unchanged — the absent case maps to
+            // {@link Optional#empty()} on the way in.
+            Codec.INT.optionalFieldOf("tint")
+                    .forGetter(NodeState::tintColor)
     ).apply(i, NodeState::new));
 }

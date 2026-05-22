@@ -43,6 +43,17 @@ public class NodeBuilder {
         return this.addInput(new PortDefinition(name, type));
     }
 
+    /**
+     * Add an input port flagged as optional — the node functions without it
+     * wired, and the widget layer renders the port as a hollow ring
+     * (just the type-colored outline) so the user can tell at a glance
+     * that the input has a fallback. Equivalent to
+     * {@link #addInput(String, Holder)} otherwise.
+     */
+    public NodeBuilder addInput(String name, Holder<PropertyDefinition<?>> type, boolean optional) {
+        return this.addInput(new PortDefinition(name, type, optional));
+    }
+
     public NodeBuilder addOutput(PortDefinition def) {
         this.outputs.add(def);
         return this;

@@ -42,13 +42,40 @@ public record NodeBackgroundUniform(int textureWidth, int textureHeight,
      * <p>{@code dropShadow} toggles the soft offset shadow under the
      * node. Used by the canvas widget to make a dragged node visually
      * lift off the static layer; static nodes pass {@code false}.
+     *
+     * <p>{@code cornerRadiusOverride} / {@code borderThicknessOverride}
+     * — when positive, replace the batch-shared values from
+     * {@link NodeBackgroundUniform#cornerRadius} /
+     * {@link NodeBackgroundUniform#borderThickness} for this one
+     * entry. {@code 0} (the default from the 6-arg convenience
+     * constructor) means "use the shared params," which is what node
+     * backgrounds and editor pills want. The port batch sets per-entry
+     * values so each hovered port can animate its size and halo
+     * thickness independently of the rest of the batch.
      */
     public record Entry(Vector4fc bounds,
                         Vector4fc bodyColor,
                         Vector4fc titleColor,
                         Vector4fc borderColor,
                         float titleHeight,
-                        boolean dropShadow) {}
+                        boolean dropShadow,
+                        float cornerRadiusOverride,
+                        float borderThicknessOverride) {
+
+        /**
+         * Six-arg convenience — keeps existing callers source-compatible.
+         * Defaults the per-entry overrides to {@code 0}, which the
+         * shader treats as "fall back to the batch-shared params."
+         */
+        public Entry(Vector4fc bounds,
+                     Vector4fc bodyColor,
+                     Vector4fc titleColor,
+                     Vector4fc borderColor,
+                     float titleHeight,
+                     boolean dropShadow) {
+            this(bounds, bodyColor, titleColor, borderColor, titleHeight, dropShadow, 0f, 0f);
+        }
+    }
 
     public static final String NAME = "NodeBatch";
 
@@ -120,11 +147,13 @@ public record NodeBackgroundUniform(int textureWidth, int textureHeight,
         // extras[]:
         //   x = title-bar height in scaled pixels
         //   y = drop-shadow flag (0 = off, 1 = on)
-        //   z, w = reserved for future per-node visual toggles
+        //   z = per-entry corner radius override; 0 = use params.x
+        //   w = per-entry border thickness override; 0 = use params.z
         for (int i = 0; i < MAX_NODES; i++) {
             if (i < n) {
                 Entry e = entries.get(i);
-                b.putVec4(e.titleHeight(), e.dropShadow() ? 1f : 0f, 0f, 0f);
+                b.putVec4(e.titleHeight(), e.dropShadow() ? 1f : 0f,
+                        e.cornerRadiusOverride(), e.borderThicknessOverride());
             } else {
                 b.putVec4(0f, 0f, 0f, 0f);
             }

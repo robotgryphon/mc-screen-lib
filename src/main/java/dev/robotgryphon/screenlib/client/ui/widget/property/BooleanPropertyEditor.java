@@ -121,16 +121,6 @@ public final class BooleanPropertyEditor extends PropertyEditor {
     // -- Static API --------------------------------------------------------
 
     /**
-     * Returns the post-click value the caller should write back through
-     * to the model. Kept as a static so the {@code apply*} family of
-     * helpers across editor types stays uniform; the instance click
-     * path uses the same flip semantics internally.
-     */
-    public static boolean applyClick(boolean currentValue) {
-        return !currentValue;
-    }
-
-    /**
      * Draws the switch:
      * <pre>
      * +-----------+        +-----------+

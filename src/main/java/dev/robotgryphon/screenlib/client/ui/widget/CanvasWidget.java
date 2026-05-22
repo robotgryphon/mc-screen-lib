@@ -447,6 +447,10 @@ public class CanvasWidget extends AbstractWidget {
             for (NodeWidget node : layer) {
                 node.extractRenderState(graphics, (int) canvasMouse.x(), (int) canvasMouse.y(), partialTick);
             }
+            // Port circles batch — submitted after the layer's CPU
+            // content so the smooth shader-rendered circles land on top
+            // of the node body but below any later layer's content.
+            extractPortCircles(graphics, layer, canvasMouse);
         }
 
         // Dragged nodes, if any. Same shape (background then content)
@@ -460,6 +464,7 @@ public class CanvasWidget extends AbstractWidget {
             for (NodeWidget node : draggedNodes) {
                 node.extractRenderState(graphics, (int) canvasMouse.x(), (int) canvasMouse.y(), partialTick);
             }
+            extractPortCircles(graphics, draggedNodes, canvasMouse);
         }
 
         graphics.pose().popMatrix();
@@ -622,6 +627,100 @@ public class CanvasWidget extends AbstractWidget {
         var state = new NodeBackgroundRenderState(textureBounds, entries,
                 cornerRadiusScaled, featherScaled, borderThicknessScaled);
         graphics.submitPictureInPictureRenderState(state);
+    }
+
+    /**
+     * Builds and submits one batched PiP state covering the visible
+     * ports of every widget in {@code nodes}. Each port becomes one
+     * shader entry rendered as a smooth SDF-AA circle (a square with
+     * corner radius = half side); optional inputs flip into a hollow
+     * ring via transparent body + lightened type-colored border.
+     * Hidden property ports — and ports on detached widgets — are
+     * filtered out by {@link NodeWidget#appendPortEntries} itself.
+     *
+     * <p>Each port entry carries its own corner radius and border
+     * thickness (packed into the shader's {@code extras.z} /
+     * {@code extras.w} overrides), so a hovered or mid-animation
+     * port can have a larger circle and thicker halo without forcing
+     * a separate batch. The state-level {@code cornerRadius} /
+     * {@code borderThickness} params here remain set to the at-rest
+     * values as a sensible fallback — the shader picks each port's
+     * true size off its own entry.
+     *
+     * <p>The texture rectangle is the union of all node screen-rects
+     * padded by the maximum on-screen port radius (the hover-scaled
+     * radius is the conservative upper bound), so even a port near a
+     * node edge has room for its AA feather to fade out cleanly when
+     * the user hovers it. Skipped entirely when no ports survive the
+     * visibility filter — submitting an empty batch wastes both a
+     * PiP texture and a stratum.
+     *
+     * <p>If the entry count would exceed
+     * {@link NodeBackgroundUniform#MAX_NODES} it splits into
+     * consecutive {@code MAX_NODES}-sized chunks; each rides its own
+     * PiP submission. In practice typical canvases stay well under
+     * that cap.
+     */
+    private void extractPortCircles(GuiGraphicsExtractor graphics,
+                                    List<NodeWidget> nodes,
+                                    Vector2dc canvasMouse) {
+        if (nodes.isEmpty()) return;
+
+        float guiScale = (float) net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScale();
+        float radiusScaled = Node.PORT_RADIUS * this.viewport.zoom() * guiScale;
+        float hoverRadiusScaled = radiusScaled * NodeWidget.PORT_HOVER_RADIUS_FACTOR;
+        // 1 scaled pixel of AA falloff on the SDF — keeps the circle
+        // edge crisp without bleeding into the surrounding pixels.
+        float featherScaled = 1f;
+        // Fallback border thickness for any entry that didn't supply
+        // its own override (shouldn't happen for ports — every entry
+        // sets one — but the params slot still needs a sane value).
+        float borderThicknessScaled = Math.max(1f, radiusScaled * 0.2f);
+
+        // First pass — texture rect: union of node screen bounds padded
+        // by the on-screen port radius so the AA feather has room. Use
+        // the hover-scaled radius as the conservative padding so a
+        // hovered (or mid-animation) port near a node edge doesn't
+        // get its halo clipped.
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+        int maxX = Integer.MIN_VALUE;
+        int maxY = Integer.MIN_VALUE;
+        for (NodeWidget widget : nodes) {
+            ScreenRectangle b = widget.screenBounds(this.viewport);
+            minX = Math.min(minX, b.left());
+            minY = Math.min(minY, b.top());
+            maxX = Math.max(maxX, b.right());
+            maxY = Math.max(maxY, b.bottom());
+        }
+        int pad = (int) Math.ceil(hoverRadiusScaled / guiScale) + 1;
+        minX -= pad; minY -= pad;
+        maxX += pad; maxY += pad;
+        ScreenRectangle textureBounds = new ScreenRectangle(minX, minY, maxX - minX, maxY - minY);
+
+        // Second pass — collect every visible port's shader entry into
+        // a single list. Each entry carries its own animated corner
+        // radius and border thickness via the per-entry overrides, so
+        // the shader can render the whole batch in one go with mixed
+        // port sizes.
+        List<NodeBackgroundUniform.Entry> entries = new ArrayList<>();
+        for (NodeWidget widget : nodes) {
+            widget.appendPortEntries(this.viewport, minX, minY, guiScale,
+                    canvasMouse.x(), canvasMouse.y(), entries);
+        }
+        if (entries.isEmpty()) return;
+
+        // Third pass — submit in MAX_NODES-sized chunks. Each chunk
+        // reuses the same texture rectangle and per-state params; the
+        // per-entry overrides do the heavy lifting for sizing.
+        int max = NodeBackgroundUniform.MAX_NODES;
+        for (int from = 0; from < entries.size(); from += max) {
+            int to = Math.min(from + max, entries.size());
+            List<NodeBackgroundUniform.Entry> chunk = entries.subList(from, to);
+            var state = new NodeBackgroundRenderState(textureBounds, List.copyOf(chunk),
+                    radiusScaled, featherScaled, borderThicknessScaled);
+            graphics.submitPictureInPictureRenderState(state);
+        }
     }
 
     private static Vector2f midpoint(Vector2fc a, Vector2fc b) {

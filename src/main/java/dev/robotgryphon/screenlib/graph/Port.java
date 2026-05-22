@@ -30,6 +30,12 @@ import org.jspecify.annotations.Nullable;
  * ports leave it null too — they are themselves the property's handle,
  * there's nothing further to link.
  *
+ * <p>{@code optional} marks an input port whose absence is tolerated by
+ * the receiving node — the widget renders it as a hollow ring (type
+ * color on the outline, no inner fill) so the user can tell at a glance
+ * which inputs the node needs and which it can do without. Always
+ * {@code false} for output ports and property ports.
+ *
  * @param node                  the node this port belongs to
  * @param side                  which edge of the node this port lives on
  * @param title                 small label rendered inside the node body next to the port
@@ -41,18 +47,28 @@ import org.jspecify.annotations.Nullable;
  *                              value, the name of that property; {@code null} on every
  *                              other port (inputs, property ports, and outputs that
  *                              don't shadow a property)
+ * @param optional              {@code true} for inputs that don't require a
+ *                              connection to function; always {@code false} on
+ *                              outputs and property ports
  */
 public record Port(Node node, PortSide side, Component title, Holder<PropertyDefinition<?>> type,
                    @Nullable String propertyName,
-                   @Nullable String linkedPropertyName) {
+                   @Nullable String linkedPropertyName,
+                   boolean optional) {
 
-    /** Regular-port constructor — no property binding, no link to a property. */
+    /** Regular-port constructor — no property binding, no link to a property, not optional. */
     public Port(Node node, PortSide side, Component title, Holder<PropertyDefinition<?>> type) {
-        this(node, side, title, type, null, null);
+        this(node, side, title, type, null, null, false);
+    }
+
+    /** Six-arg form kept for back-compat with property / linked-output factories. */
+    public Port(Node node, PortSide side, Component title, Holder<PropertyDefinition<?>> type,
+                @Nullable String propertyName, @Nullable String linkedPropertyName) {
+        this(node, side, title, type, propertyName, linkedPropertyName, false);
     }
 
     public static Port of(Node node, PortSide side, Component title, Holder<PropertyDefinition<?>> type) {
-        return new Port(node, side, title, type, null, null);
+        return new Port(node, side, title, type, null, null, false);
     }
 
     public static Port of(Node node, PortSide side, String title, Holder<PropertyDefinition<?>> type) {
@@ -68,7 +84,7 @@ public record Port(Node node, PortSide side, Component title, Holder<PropertyDef
      */
     public static Port property(Node node, PortSide side, String propertyName,
                                 Holder<PropertyDefinition<?>> type) {
-        return new Port(node, side, Component.literal(propertyName), type, propertyName, null);
+        return new Port(node, side, Component.literal(propertyName), type, propertyName, null, false);
     }
 
     /** {@code true} when this port is the input handle for a property. */

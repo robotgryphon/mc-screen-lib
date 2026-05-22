@@ -63,9 +63,7 @@ void main() {
     // y growing downward from the top. Flip y here so both agree.
     vec2 fragPos = vec2(gl_FragCoord.x, size.y - gl_FragCoord.y);
 
-    float radius = params.x;
     float feather = params.y;
-    float borderThickness = params.z;
     int nodeCount = int(params.w);
 
     // Output is in straight-alpha form (matches the pipeline's
@@ -82,6 +80,16 @@ void main() {
         vec2 nodeSize = bounds.zw;
         vec2 nodeCenter = nodeMin + nodeSize * 0.5;
         vec2 halfExtents = nodeSize * 0.5;
+
+        // Per-entry corner radius / border thickness — packed into
+        // {@code nodeExtras[i].z} / {@code .w}. A non-positive value
+        // means "use the batch-shared default from params", which
+        // keeps legacy call sites (node backgrounds, editor pills)
+        // working unchanged. Per-entry overrides are how the port
+        // batch animates each hovered port's size + halo width
+        // independently while keeping every port in one PiP submission.
+        float radius = (nodeExtras[i].z > 0.0) ? nodeExtras[i].z : params.x;
+        float borderThickness = (nodeExtras[i].w > 0.0) ? nodeExtras[i].w : params.z;
 
         // SDF for the full rounded outer rectangle of the node itself.
         float d = sdRoundedRect(fragPos - nodeCenter, halfExtents, radius);

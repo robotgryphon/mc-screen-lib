@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 
 /**
@@ -68,7 +69,8 @@ public final class CanvasStateManager {
             indexOf.put(node, i);
             nodeStates.add(new NodeState(
                     node.definitionHolder(), node.x(), node.y(),
-                    encodePropertyValues(node)));
+                    encodePropertyValues(node),
+                    Optional.ofNullable(node.tintColor())));
         }
 
         List<Connection> connections = canvas.connections();
@@ -123,6 +125,10 @@ public final class CanvasStateManager {
             // Node constructor already seeded — saved values win, missing
             // entries fall through to whatever the schema default is.
             applyPropertyValues(widget.node(), ns.propertyValues());
+            // Restore any persisted tint color. {@link Optional#empty()}
+            // leaves the node at the default coloring — the absent
+            // {@code tint} field on legacy data lands here unchanged.
+            ns.tintColor().ifPresent(c -> widget.node().setTintColor(c));
             // Go through addNode so the widget's canvas back-reference is
             // set the same way as for runtime-added nodes — otherwise
             // property ports on loaded nodes would never know they're

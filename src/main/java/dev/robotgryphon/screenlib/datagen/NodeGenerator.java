@@ -75,18 +75,23 @@ public class NodeGenerator extends DatapackBuiltinEntriesProvider {
                 .build());
 
         // Resource Access (Items) — given a block position and a side, hand back
-        // the item-handler exposed by that face of the block.
+        // the item-handler exposed by that face of the block. {@code Side} is
+        // optional so a node consumer can leave it unwired (falling back to
+        // a default face); the widget renders the unconnected side as a
+        // hollow type-colored ring.
         ctx.register(nodeType("resource_access_items"), new NodeBuilder()
                 .addInput("Position", blockPos)
-                .addInput("Side", direction)
+                .addInput("Side", direction, true)
                 .addOutput("Storage", itemHandler)
                 .build());
 
         // Tree Cutter Upgrade — a sink-style node: it consumes two item handles
         // (where to pull tools from, where to push drops to) and produces nothing.
+        // The drops-output sink is optional — leaving it unwired makes the
+        // cutter discard drops, which the node falls back to by default.
         ctx.register(nodeType("tree_cutter_upgrade"), new NodeBuilder()
                 .addInput("Tools", itemHandler)
-                .addInput("Drops", itemHandler)
+                .addInput("Drops", itemHandler, true)
                 .build());
 
         // Sampler — exercises the property-row layout the way the KSampler

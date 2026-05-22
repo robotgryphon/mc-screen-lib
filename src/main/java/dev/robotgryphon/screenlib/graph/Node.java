@@ -61,7 +61,7 @@ public class Node {
      */
     public static final int PROPERTY_ROW_GAP = 2;
     /** Pixels of horizontal padding on each side of a property row. */
-    public static final int PROPERTY_PADDING_X = 6;
+    public static final int PROPERTY_PADDING_X = 8;
     /**
      * Pixels of empty space above the first property row and below the
      * last one. Set equal to {@link #PROPERTY_PADDING_X} so the property
@@ -73,8 +73,15 @@ public class Node {
     public static final int PROPERTY_REGION_PADDING_Y = PROPERTY_PADDING_X;
     /** Minimum width reserved for a property's value area regardless of current content. */
     public static final int PROPERTY_VALUE_MIN_WIDTH = 60;
-    /** Pixels between a property's label and its value column. */
-    public static final int PROPERTY_LABEL_VALUE_GAP = 8;
+    /**
+     * Pixels between a property's label and the start of its value
+     * column. Sized to leave a clear, generous strip between the widest
+     * label and the editor pill — matches the ComfyUI reference's
+     * "the editor floats off to the right" feel. Folded into
+     * {@link #computeWidth} so a node always grows wide enough to keep
+     * the gap intact, even when a label runs long.
+     */
+    public static final int PROPERTY_LABEL_VALUE_GAP = 16;
 
     /** Horizontal padding on each side of the title text inside the title bar. */
     private static final int TITLE_PADDING = 8;
@@ -149,6 +156,23 @@ public class Node {
     private int width;
     private int height;
 
+    /**
+     * Optional ARGB tint applied to the node's body and title bar at
+     * render time. {@code null} means "use the default dark-gray
+     * scheme"; any other value gets blended into the base colors by
+     * the widget layer, so the node reads as still a node but a
+     * different family — handy when the user wants to visually group
+     * a cluster of nodes (e.g., tint every "image processing" node
+     * the same color).
+     *
+     * <p>Stored as a boxed {@code Integer} so the unset case is a
+     * single field check rather than a sentinel value collision (no
+     * legitimate tint can mean "default" because 0x00000000 is a
+     * valid translucent black). Mutable so the user can change the
+     * tint at runtime; persistence rounds through the canvas codec.
+     */
+    private @Nullable Integer tintColor;
+
     public Node(Holder<NodeDefinition> definition, Component title, int x, int y) {
         this.definitionHolder = definition;
         this.definition = definition.value();
@@ -209,15 +233,22 @@ public class Node {
         List<Port> result = new ArrayList<>(
                 def.inputs().size() + def.outputs().size() + def.properties().size());
         for (PortDefinition input : def.inputs()) {
-            result.add(new Port(this, PortSide.LEFT, Component.literal(input.name()), input.type()));
+            // Inputs thread the {@link PortDefinition#optional} flag into
+            // the runtime port so the widget layer can swap the solid
+            // diamond / circle for the hollow ring without having to
+            // re-consult the schema each frame.
+            result.add(new Port(this, PortSide.LEFT, Component.literal(input.name()),
+                    input.type(), null, null, input.optional()));
         }
         for (PortDefinition output : def.outputs()) {
             // Output ports thread the optional {@code linkedProperty} into the
             // runtime port so a wire from the output knows which property's
             // value to relay — that's the only way data leaves a node now
-            // that property right-side ports are gone.
+            // that property right-side ports are gone. {@code optional} is
+            // forced false on outputs — the ring style only applies to
+            // inputs the receiving node tolerates absent.
             result.add(new Port(this, PortSide.RIGHT, Component.literal(output.name()),
-                    output.type(), null, output.linkedProperty().orElse(null)));
+                    output.type(), null, output.linkedProperty().orElse(null), false));
         }
         // Properties get a LEFT (input) port only. A wire targeting it
         // overrides the property's local value with the upstream's. There's
@@ -399,6 +430,25 @@ public class Node {
     public void setX(int x) { this.x = x; }
     public void setY(int y) { this.y = y; }
 
+    /**
+     * Current tint color (ARGB int) or {@code null} when the node uses
+     * its default coloring. Read by the widget layer when building the
+     * batched background entry.
+     */
+    public @Nullable Integer tintColor() {
+        return this.tintColor;
+    }
+
+    /**
+     * Sets the tint color used to tinge this node's body / title bar
+     * at render time. {@code null} clears the tint and returns the
+     * node to its default dark-gray look. Persistence routes through
+     * the canvas codec on save / load.
+     */
+    public void setTintColor(@Nullable Integer color) {
+        this.tintColor = color;
+    }
+
     public boolean contains(double mouseX, double mouseY) {
         return mouseX >= this.x && mouseX < this.x + this.width
                 && mouseY >= this.y && mouseY < this.y + this.height;
@@ -520,23 +570,24 @@ public class Node {
     }
 
     /**
-     * The point a connection line should attach to. The shader uses butt
-     * caps (perpendicular cuts at the curve endpoints), so the attachment
-     * lands at the diamond's outer tip — putting the cap flush with the
-     * port at any zoom.
+     * The point a connection line should attach to — the node's outer
+     * edge at the port's vertical anchor, NOT the port circle's outer
+     * tip. Now that ports render as shader-rendered circles centered
+     * on the edge, the circle is drawn ON TOP of the connection line's
+     * endpoint, hiding any small gap between the line's butt cap and
+     * the visible port. Anchoring at the edge instead of past it makes
+     * the curves visually originate from the node body, which reads
+     * cleaner than a line that pokes a couple of pixels into thin air
+     * before reaching the port.
      */
     public Vector2fc portAttachment(Port port) {
         Vector2fc center = this.portCenter(port);
-        float offset = PORT_RADIUS + 0.5f;
-        switch (port.side()) {
-            case LEFT -> {
-                return new Vector2f(center.x() - offset, center.y());
-            }
-            case RIGHT -> {
-                return new Vector2f(center.x() + offset, center.y());
-            }
+        float edgeX = switch (port.side()) {
+            case LEFT -> this.x;
+            case RIGHT -> this.x + this.width;
             default -> throw new IllegalStateException("Unknown side: " + port.side());
-        }
+        };
+        return new Vector2f(edgeX, center.y());
     }
 
     /**

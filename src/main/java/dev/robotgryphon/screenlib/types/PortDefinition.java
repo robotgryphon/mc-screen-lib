@@ -31,6 +31,14 @@ import java.util.Optional;
  * current value when computing what a wire from that output carries
  * downstream. Inputs and properties leave it {@link Optional#empty()}.
  *
+ * <p>{@link #optional} marks an input port that doesn't require a
+ * connection to function — the node falls back to a sensible default
+ * when the port is unwired. The widget layer renders optional ports as
+ * a hollow ring (just the type-colored outline, no inner fill) so the
+ * user can tell at a glance which inputs need wiring and which don't.
+ * The flag is meaningless for outputs and properties; both default it
+ * to {@code false} and the renderer ignores it on those.
+ *
  * @param name           a human-facing label / local key — e.g. "Position", "x",
  *                       "seed". Used both as the renderable port label and as the
  *                       persistence key for property values.
@@ -41,28 +49,48 @@ import java.util.Optional;
  *                       same node whose value this output relays; absent
  *                       for inputs, for properties, and for outputs that
  *                       don't shadow a property.
+ * @param optional       {@code true} when an input is allowed to be left
+ *                       unwired (drives the ring-style port rendering);
+ *                       always {@code false} for outputs and property
+ *                       entries.
  */
 public record PortDefinition(String name,
                              Holder<PropertyDefinition<?>> type,
-                             Optional<String> linkedProperty) {
+                             Optional<String> linkedProperty,
+                             boolean optional) {
 
-    /** Convenience constructor — no linked property, the common case. */
+    /** Convenience constructor — no linked property, not optional. The common case. */
     public PortDefinition(String name, Holder<PropertyDefinition<?>> type) {
-        this(name, type, Optional.empty());
+        this(name, type, Optional.empty(), false);
+    }
+
+    /** Convenience constructor — no linked property, explicit optional flag. */
+    public PortDefinition(String name, Holder<PropertyDefinition<?>> type, boolean optional) {
+        this(name, type, Optional.empty(), optional);
     }
 
     /**
-     * Datapack-facing codec. {@code linked_property} is optional so
-     * pre-existing JSON entries — and the vast majority of port
-     * definitions, which don't shadow any property — round-trip
-     * unchanged. JSON form:
+     * Convenience constructor — explicit linked property, not optional.
+     * Output ports that relay a property's value land here.
+     */
+    public PortDefinition(String name, Holder<PropertyDefinition<?>> type,
+                          Optional<String> linkedProperty) {
+        this(name, type, linkedProperty, false);
+    }
+
+    /**
+     * Datapack-facing codec. {@code linked_property} and {@code optional}
+     * are both optional fields so pre-existing JSON entries — and the vast
+     * majority of port definitions, which don't shadow any property and
+     * aren't optional — round-trip unchanged. JSON form:
      * <pre>
-     * { "name": "BOOLEAN", "type": "minecraft:bool", "linked_property": "value" }
+     * { "name": "BOOLEAN", "type": "minecraft:bool", "linked_property": "value", "optional": false }
      * </pre>
      */
     public static final Codec<PortDefinition> CODEC = Codec.lazyInitialized(() -> RecordCodecBuilder.create(i -> i.group(
             Codec.STRING.fieldOf("name").forGetter(PortDefinition::name),
             PropertyDefinition.HOLDER_CODEC.fieldOf("type").forGetter(PortDefinition::type),
-            Codec.STRING.optionalFieldOf("linked_property").forGetter(PortDefinition::linkedProperty)
+            Codec.STRING.optionalFieldOf("linked_property").forGetter(PortDefinition::linkedProperty),
+            Codec.BOOL.optionalFieldOf("optional", false).forGetter(PortDefinition::optional)
     ).apply(i, PortDefinition::new)));
 }

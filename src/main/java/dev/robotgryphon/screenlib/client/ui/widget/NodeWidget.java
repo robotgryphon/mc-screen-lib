@@ -19,6 +19,7 @@ import net.minecraft.client.gui.layouts.LayoutElement;
 import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.core.Holder;
+import net.minecraft.util.Util;
 import org.joml.Vector2dc;
 import org.joml.Vector4f;
 import org.joml.Vector4fc;
@@ -34,7 +35,9 @@ import org.joml.Vector2fc;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -64,8 +67,43 @@ public class NodeWidget extends AbstractWidget {
     private static final int BORDER_DRAG_COLOR = 0xFFFFD24A;
     private static final int TITLE_BAR_COLOR = 0xFF3A3A45;
 
-    private static final int PORT_HOVER_COLOR = 0xFFFFD24A;
-    private static final int PORT_OUTLINE_COLOR = 0xFF101012;
+    /**
+     * Fraction of the way from a port's base color toward white that
+     * its outline ring sits at. Tuned high enough that the outline
+     * reads as a clearly distinct "halo" against the inner fill at any
+     * type color, without turning the ring into a featureless white
+     * smear.
+     */
+    public static final float PORT_OUTLINE_LIGHTEN = 0.30f;
+
+    /**
+     * Same idea as {@link #PORT_OUTLINE_LIGHTEN} but applied while the
+     * cursor is hovering the port — the lighter shade signals "this is
+     * the live click target" without changing the port's hue. Both
+     * lighten strengths are intentionally relative to the base color
+     * so every port type contrasts the same way against its outline.
+     */
+    public static final float PORT_HOVER_OUTLINE_LIGHTEN = 0.55f;
+
+    /**
+     * Multiplier on the port's visual radius while hovered. Picks a
+     * "noticeable but not jumpy" growth — the user sees the port
+     * expand a few pixels under their cursor, confirming the hit
+     * target, without the surrounding label getting pushed visibly.
+     */
+    public static final float PORT_HOVER_RADIUS_FACTOR = 1.3f;
+
+    /**
+     * Exponential decay speed for the hover-progress animation, in
+     * inverse seconds. {@code 18.0} means {@code 1 - e^(-18 * 0.16) ≈
+     * 0.94} of the way from 0 to 1 after ~160ms — fast enough to feel
+     * responsive (the user perceives the port expanding "right when"
+     * they hover), slow enough that the growth and the halo brighten
+     * both read as a smooth transition rather than a snap. Used for
+     * both the radius lerp and the outline-lighten lerp so the two
+     * stay visually coupled.
+     */
+    private static final float PORT_HOVER_ANIM_SPEED = 18f;
 
     /**
      * Corner radius for the node body / title bar / outline. Picked to
@@ -103,6 +141,28 @@ public class NodeWidget extends AbstractWidget {
     private static final float MISMATCHED_TYPE_ALPHA = 0.3f;
 
     private final Node node;
+
+    /**
+     * Per-port hover-animation progress, keyed by port reference (identity
+     * — two structurally equal ports on different node rebuilds are still
+     * distinct entries). {@code 0} means "fully at rest"; {@code 1} means
+     * "fully hovered." Each frame the progress is nudged toward its
+     * target via an exponential lerp keyed by wall-clock delta, so a port
+     * smoothly grows / brightens when the cursor lands on it and smoothly
+     * shrinks / dims when the cursor leaves. Lives on the widget (not the
+     * model) because it's a pure view-layer affordance — undo / persistence
+     * shouldn't care about it.
+     */
+    private final Map<Port, Float> portHoverProgress = new IdentityHashMap<>();
+
+    /**
+     * Wall-clock time of the most recent {@link #appendPortEntries} call,
+     * used to compute the per-frame delta for the hover animation. Zero
+     * means "no prior frame yet" — the next call seeds the timestamp
+     * without advancing any progress (so a freshly-attached widget
+     * doesn't jump on its first render frame).
+     */
+    private long lastPortAnimMillis;
 
     /**
      * The canvas this widget lives on, installed by {@link Canvas#addNode}.
@@ -251,17 +311,59 @@ public class NodeWidget extends AbstractWidget {
 
         boolean hovered = this.isHovered() || this.dragging;
         int bodyArgb = hovered ? BACKGROUND_HOVER_COLOR : BACKGROUND_COLOR;
+        int titleArgb = TITLE_BAR_COLOR;
         int borderArgb = this.dragging ? BORDER_DRAG_COLOR : BORDER_COLOR;
+
+        // Optional per-node tint — blended into the body and title at
+        // a fixed strength so the node still reads as a node (dark
+        // base shade with hover lift), just a different family. The
+        // border / drag-border are left untinted so the focus state
+        // remains visually distinct across all tints.
+        Integer tint = this.node.tintColor();
+        if (tint != null) {
+            bodyArgb = blendTint(bodyArgb, tint);
+            titleArgb = blendTint(titleArgb, tint);
+        }
 
         float titleHeight = Node.TITLE_BAR_HEIGHT * viewport.zoom() * guiScale;
 
         return new NodeBackgroundUniform.Entry(
                 new Vector4f(relX, relY, w, h),
                 argbToVec(bodyArgb),
-                argbToVec(TITLE_BAR_COLOR),
+                argbToVec(titleArgb),
                 argbToVec(borderArgb),
                 titleHeight,
                 dropShadow);
+    }
+
+    /**
+     * Fraction of the tint color mixed into the base body / title
+     * shade. Tuned so a tinted node still reads as dark (you can see
+     * which is body and which is title); higher values wash out the
+     * underlying color and lose the depth the dark base gives.
+     */
+    private static final float TINT_STRENGTH = 0.35f;
+
+    /**
+     * Linearly mixes the tint's RGB channels into {@code base} at
+     * {@link #TINT_STRENGTH}, preserving {@code base}'s alpha. The
+     * tint's own alpha is ignored — callers express the tint
+     * intensity through the constant, not the color value, so
+     * "red 0xFFFF0000" and "red 0x80FF0000" produce the same result.
+     */
+    private static int blendTint(int base, int tint) {
+        int br = (base >> 16) & 0xFF;
+        int bg = (base >> 8) & 0xFF;
+        int bb = base & 0xFF;
+        int ba = (base >>> 24) & 0xFF;
+        int tr = (tint >> 16) & 0xFF;
+        int tg = (tint >> 8) & 0xFF;
+        int tb = tint & 0xFF;
+        float s = TINT_STRENGTH;
+        int r = Math.round(br * (1f - s) + tr * s);
+        int g = Math.round(bg * (1f - s) + tg * s);
+        int b = Math.round(bb * (1f - s) + tb * s);
+        return (ba << 24) | (r << 16) | (g << 8) | b;
     }
 
     /** Decompose an ARGB int into normalized 0..1 RGBA for the shader uniforms. */
@@ -580,18 +682,17 @@ public class NodeWidget extends AbstractWidget {
         // states (e.g., the numeric editor's button highlights).
         this.renderProperties(graphics, font, mouseX, mouseY);
 
-        // Regular connection ports — diamond + per-port label. Property
-        // ports anchor to the body and follow their own visibility rules
-        // (hidden unless connected or row-hovered), so they're handled in
-        // a separate pass after this loop.
+        // Per-port labels — the colored circles themselves are batched
+        // through the canvas-level port shader pass (see
+        // {@link CanvasWidget#extractPortCircles}), so this loop only
+        // submits the small piece of text next to each port. Property
+        // ports skip the label step — their row already labels the
+        // value, and a second copy on the port itself would clutter
+        // the body.
         for (Port port : this.node.ports()) {
             if (port.isProperty()) continue;
-            this.renderPort(graphics, font, port, mouseX, mouseY);
+            this.renderPortLabel(graphics, font, port, mouseX, mouseY);
         }
-
-        // Property ports last so any decoration they draw lands on top of
-        // the row's pill fill, not underneath it.
-        this.renderPropertyPorts(graphics, mouseX, mouseY);
 
         // No separate EditBox pass — each numeric editor renders its
         // own in-place {@link EditBox} (when editing) from inside its
@@ -1008,75 +1109,6 @@ public class NodeWidget extends AbstractWidget {
     }
 
     /**
-     * Renders the implicit input/output ports for each property. A property
-     * port draws in one of three modes:
-     *
-     * <ol>
-     *   <li><b>Connected</b> — there's at least one {@link Connection}
-     *       touching this port. Drawn as a colored diamond matching the
-     *       property type, exactly like a regular port.</li>
-     *   <li><b>Port-hovered</b> — the mouse is on the port itself (within
-     *       the hit radius). Drawn in the hover-yellow so the user knows
-     *       the click target is live.</li>
-     *   <li><b>Row-hovered</b> — the mouse is somewhere over the property's
-     *       row, but not exactly on the port. Drawn as a translucent gray
-     *       circle: a soft "you can connect here" affordance that goes
-     *       away as soon as the cursor leaves the row.</li>
-     * </ol>
-     *
-     * Otherwise the port renders nothing — keeping the node's body uncluttered
-     * for properties that are purely local-value configuration.
-     */
-    private void renderPropertyPorts(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
-        List<PortDefinition> properties = this.node.definition().properties();
-        if (properties.isEmpty()) {
-            return;
-        }
-        int nodeLeft = this.node.x();
-        int nodeRight = nodeLeft + this.node.width();
-        Port hoveredPort = this.portAt(mouseX, mouseY);
-
-        for (int i = 0; i < properties.size(); i++) {
-            int rowTop = this.node.propertyRowTop(i);
-            int rowBottom = rowTop + Node.PROPERTY_PITCH;
-            boolean rowHovered = mouseX >= nodeLeft && mouseX < nodeRight
-                    && mouseY >= rowTop && mouseY < rowBottom;
-            String propertyName = properties.get(i).name();
-
-            for (Port port : this.node.ports()) {
-                if (!port.isProperty()) continue;
-                if (!propertyName.equals(port.propertyName())) continue;
-
-                boolean connected = isPortConnected(port);
-                boolean portHovered = hoveredPort == port;
-                if (!connected && !rowHovered && !portHovered) {
-                    continue;
-                }
-
-                Vector2fc center = this.node.portCenter(port);
-                int px = (int) center.x();
-                int py = (int) center.y();
-                float alpha = this.effectiveAlpha(port.type());
-
-                if (connected || portHovered) {
-                    // Match the regular port look so the user reads "this
-                    // is a live connection point" the same way they do for
-                    // explicit ports.
-                    int fill = portHovered ? PORT_HOVER_COLOR : port.color();
-                    fillDiamond(graphics, px, py, Node.PORT_RADIUS + 1,
-                            ARGB.multiply(PORT_OUTLINE_COLOR, ARGB.white(alpha)));
-                    fillDiamond(graphics, px, py, Node.PORT_RADIUS,
-                            ARGB.multiply(fill, ARGB.white(alpha)));
-                } else {
-                    // Row-hover affordance — soft circle, no outline.
-                    fillCircle(graphics, px, py, Node.PORT_RADIUS,
-                            ARGB.multiply(PROPERTY_PORT_PLACEHOLDER_COLOR, ARGB.white(alpha)));
-                }
-            }
-        }
-    }
-
-    /**
      * Looks up whether any active connection touches {@code port}. Returns
      * false when the widget is detached (no canvas back-reference) so
      * preview / standalone renders don't accidentally light up property
@@ -1107,63 +1139,253 @@ public class NodeWidget extends AbstractWidget {
         return value.toString();
     }
 
-    private void renderPort(GuiGraphicsExtractor graphics, Font font, Port port, int mouseX, int mouseY) {
-        Vector2fc center = this.node.portCenter(port);
-        // Truncate to the integer pixel anchor used by the diamond geometry;
-        // the +0.5 in portCenter() is for the bezier endpoint, not for raster.
-        int px = (int) center.x();
-        int py = (int) center.y();
-        boolean hovered = this.portAt(mouseX, mouseY) == port;
-        int fill = hovered ? PORT_HOVER_COLOR : port.color();
-        float alpha = this.effectiveAlpha(port.type());
-
-        // Outline first, fill on top — the outline diamond is one pixel larger
-        // on every side, so the fill leaves a 1px dark border that reads cleanly
-        // against the panel background regardless of port color. Both diamonds
-        // ride the same effective alpha so the port either dims or doesn't as a
-        // single graphic, never an outline-without-fill ghost.
-        fillDiamond(graphics, px, py, Node.PORT_RADIUS + 1,
-                ARGB.multiply(PORT_OUTLINE_COLOR, ARGB.white(alpha)));
-        fillDiamond(graphics, px, py, Node.PORT_RADIUS,
-                ARGB.multiply(fill, ARGB.white(alpha)));
-
+    /**
+     * Renders only the text label next to a port — the port's visual
+     * circle is built into a batched shader entry in
+     * {@link #appendPortEntries} instead. Splitting the two means every
+     * port circle on the canvas can ride a single PiP submission with
+     * sub-pixel-AA SDF edges, while labels stay CPU-rendered (they don't
+     * benefit from the shader path).
+     */
+    private void renderPortLabel(GuiGraphicsExtractor graphics, Font font, Port port, int mouseX, int mouseY) {
         Component title = port.title();
         if (title == null || title.getString().isEmpty()) {
             return;
         }
+        Vector2fc center = this.node.portCenter(port);
+        int px = (int) center.x();
+        int py = (int) center.y();
+        float alpha = this.effectiveAlpha(port.type());
         int labelColor = ARGB.color((int) (255 * alpha), 0xCC, 0xCC, 0xD4);
         int textWidth = font.width(title);
         int textY = py - font.lineHeight / 2 + 1;
         switch (port.side()) {
-            case LEFT -> graphics.text(font, title, px + Node.PORT_RADIUS + 1 + Node.PORT_LABEL_GAP, textY, labelColor, false);
-            case RIGHT -> graphics.text(font, title, px - Node.PORT_RADIUS - Node.PORT_LABEL_GAP - textWidth, textY, labelColor, false);
+            case LEFT -> graphics.text(font, title,
+                    px + Node.PORT_RADIUS + 1 + Node.PORT_LABEL_GAP, textY, labelColor, false);
+            case RIGHT -> graphics.text(font, title,
+                    px - Node.PORT_RADIUS - Node.PORT_LABEL_GAP - textWidth, textY, labelColor, false);
         }
     }
 
     /**
-     * Draws a filled diamond inscribed in the (2r+1)×(2r+1) square centered
-     * at ({@code cx}, {@code cy}). Each scanline from the center outward is
-     * one pixel narrower per row, producing a 4-corner rhombus.
+     * Appends shader entries for every visible port on this node into
+     * {@code outEntries}. Visibility rules:
+     * <ul>
+     *   <li>Regular ports (non-property): always visible.</li>
+     *   <li>Property ports: visible when connected, port-hovered, or
+     *       row-hovered. The row-hovered case uses a soft gray
+     *       placeholder so the user gets a "you can wire here" hint
+     *       without permanent clutter.</li>
+     * </ul>
+     *
+     * <p>Each visible port carries its own animated hover progress
+     * (advanced each frame by the wall-clock delta computed at the
+     * top of this method via an exponential lerp at
+     * {@link #PORT_HOVER_ANIM_SPEED}), so a port mid-transition can
+     * have a half-grown circle and a half-brightened halo without
+     * snapping. The progress is written into the entry as a per-entry
+     * corner radius / border thickness override (packed into the
+     * shader's {@code extras.z} / {@code extras.w} slots), which is
+     * what lets a single PiP batch render dozens of ports at
+     * arbitrary intermediate radii — the shader picks each entry's
+     * size off its own extras instead of the batch's shared param.
+     *
+     * <p>Body color is the port's full type color (or transparent for
+     * optional-input rings); the border color is the same type color
+     * {@link #lighten lightened} toward white, interpolating between
+     * {@link #PORT_OUTLINE_LIGHTEN} (rest) and
+     * {@link #PORT_HOVER_OUTLINE_LIGHTEN} (hover) by the same progress,
+     * so every port type contrasts the same way against its halo at
+     * every point along the animation.
+     *
+     * @param canvasMouseX mouse position in canvas space, for hover detection
+     * @param canvasMouseY same
      */
-    private static void fillDiamond(GuiGraphicsExtractor graphics, int cx, int cy, int r, int color) {
-        for (int dy = -r; dy <= r; dy++) {
-            int half = r - Math.abs(dy);
-            graphics.fill(cx - half, cy + dy, cx + half + 1, cy + dy + 1, color);
+    public void appendPortEntries(CanvasViewport viewport,
+                                  double textureOriginX, double textureOriginY,
+                                  float guiScale,
+                                  double canvasMouseX, double canvasMouseY,
+                                  List<NodeBackgroundUniform.Entry> outEntries) {
+        Port hoveredPort = this.portAt(canvasMouseX, canvasMouseY);
+
+        // Advance the per-port hover progress before we read it for
+        // entry building. Doing this in a single pass over all ports
+        // (not just visible ones) keeps the animation playing even for
+        // currently-invisible property ports — so they're already at
+        // rest by the time row-hover makes them visible again.
+        float lerpAmount = computeHoverLerpAmount();
+        for (Port port : this.node.ports()) {
+            advanceHoverProgress(port, port == hoveredPort, lerpAmount);
+        }
+
+        // Regular non-property ports — always drawn.
+        for (Port port : this.node.ports()) {
+            if (port.isProperty()) continue;
+            // Optional inputs render as a hollow ring regardless of
+            // hover: the ring just grows + brightens under the cursor.
+            appendPortEntry(port, port.color(), port.optional(), viewport,
+                    textureOriginX, textureOriginY, guiScale, outEntries);
+        }
+
+        // Property ports — conditional visibility.
+        List<PortDefinition> properties = this.node.definition().properties();
+        if (properties.isEmpty()) return;
+        int nodeLeft = this.node.x();
+        int nodeRight = nodeLeft + this.node.width();
+        for (int i = 0; i < properties.size(); i++) {
+            int rowTop = this.node.propertyRowTop(i);
+            int rowBottom = rowTop + Node.PROPERTY_PITCH;
+            boolean rowHovered = canvasMouseX >= nodeLeft && canvasMouseX < nodeRight
+                    && canvasMouseY >= rowTop && canvasMouseY < rowBottom;
+            String propertyName = properties.get(i).name();
+            for (Port port : this.node.ports()) {
+                if (!port.isProperty()) continue;
+                if (!propertyName.equals(port.propertyName())) continue;
+                boolean connected = isPortConnected(port);
+                boolean portHovered = hoveredPort == port;
+                if (!connected && !rowHovered && !portHovered) continue;
+
+                int color;
+                if (connected || portHovered) {
+                    color = port.color();
+                } else {
+                    // Row-hover affordance — soft gray placeholder.
+                    color = PROPERTY_PORT_PLACEHOLDER_COLOR;
+                }
+                // Property ports always render as solid (the placeholder
+                // hint is a solid translucent gray, not a ring) so the
+                // user can read the row-hover state at a glance.
+                appendPortEntry(port, color, false, viewport,
+                        textureOriginX, textureOriginY, guiScale, outEntries);
+            }
         }
     }
 
     /**
-     * Scanline rasterizer for a filled disc of radius {@code r}. Each row's
-     * half-width is the integer floor of {@code sqrt(r² - dy²) + 0.5}, which
-     * gives the same rounded silhouette vanilla uses for small UI badges
-     * without leaning on antialiasing.
+     * Computes the per-frame lerp amount for the hover animation off
+     * the wall-clock delta since the previous {@link #appendPortEntries}
+     * call. Returns {@code 0} on the very first frame so a
+     * freshly-attached widget doesn't snap its first animation step
+     * by an enormous interval. The delta is capped at 100 ms so a
+     * paused / backgrounded screen doesn't fast-forward the animation
+     * the moment the user returns.
      */
-    private static void fillCircle(GuiGraphicsExtractor graphics, int cx, int cy, int r, int color) {
-        int r2 = r * r;
-        for (int dy = -r; dy <= r; dy++) {
-            int dx = (int) Math.floor(Math.sqrt(r2 - dy * dy) + 0.5);
-            graphics.fill(cx - dx, cy + dy, cx + dx + 1, cy + dy + 1, color);
+    private float computeHoverLerpAmount() {
+        long now = Util.getMillis();
+        long previous = this.lastPortAnimMillis;
+        this.lastPortAnimMillis = now;
+        if (previous == 0L) {
+            return 0f;
         }
+        float dt = Math.min((now - previous) / 1000f, 0.1f);
+        // Exponential approach: progress closes by {@code 1 - e^(-speed * dt)}
+        // of the remaining gap each frame, giving an ease-out curve
+        // that's frame-rate independent.
+        return 1f - (float) Math.exp(-PORT_HOVER_ANIM_SPEED * dt);
+    }
+
+    /**
+     * Nudges {@code port}'s stored hover progress one frame closer to
+     * its current target ({@code 1} when hovered, {@code 0} when not).
+     * Snaps to the target when within a small epsilon so the animation
+     * settles cleanly instead of decaying forever (asymptotic exponential
+     * lerps never quite hit their target).
+     */
+    private void advanceHoverProgress(Port port, boolean hovered, float lerpAmount) {
+        float target = hovered ? 1f : 0f;
+        Float stored = this.portHoverProgress.get(port);
+        float current = stored == null ? target : stored;
+        float next = current + (target - current) * lerpAmount;
+        if (Math.abs(next - target) < 0.005f) {
+            next = target;
+        }
+        this.portHoverProgress.put(port, next);
+    }
+
+    /**
+     * Builds one shader entry for {@code port} and adds it to
+     * {@code outEntries}. The bounds and outline color are interpolated
+     * by this port's current hover-animation progress (read from
+     * {@link #portHoverProgress}, advanced earlier in the frame by
+     * {@link #advanceHoverProgress}). The per-entry corner radius and
+     * border thickness ride along on the entry so the shader can
+     * render this port at its current animated size — no batch split
+     * required.
+     *
+     * <p>{@code ring} flips the entry into hollow-ring mode: body alpha
+     * goes to zero so the lightened type-colored border (drawn by the
+     * shader using this entry's own {@code borderThicknessOverride})
+     * is the only visible mark. The title color rides with the body so
+     * the shader's title-strip code path is a no-op either way.
+     */
+    private void appendPortEntry(Port port, int color, boolean ring,
+                                 CanvasViewport viewport,
+                                 double textureOriginX, double textureOriginY,
+                                 float guiScale,
+                                 List<NodeBackgroundUniform.Entry> outEntries) {
+        Vector2fc center = this.node.portCenter(port);
+        Vector2dc screen = viewport.canvasToScreen(center.x(), center.y());
+
+        // Lerp radius factor and outline lightness off the same progress
+        // so the visual change reads as one motion — the port doesn't
+        // grow before its halo brightens, or vice versa.
+        float progress = this.portHoverProgress.getOrDefault(port, 0f);
+        float radiusFactor = 1f + (PORT_HOVER_RADIUS_FACTOR - 1f) * progress;
+        float radiusScaled = Node.PORT_RADIUS * viewport.zoom() * guiScale * radiusFactor;
+        float borderThicknessScaled = Math.max(1f, radiusScaled * 0.45f);
+
+        float w = 2f * radiusScaled;
+        float h = 2f * radiusScaled;
+        float relX = (float) ((screen.x() - textureOriginX) * guiScale) - radiusScaled;
+        float relY = (float) ((screen.y() - textureOriginY) * guiScale) - radiusScaled;
+
+        float alpha = this.effectiveAlpha(port.type());
+        int tinted = ARGB.multiply(color, ARGB.white(alpha));
+        // Outline lightness is a linear blend between the at-rest and
+        // hover values, driven by the same progress as the radius.
+        float lightenStrength = PORT_OUTLINE_LIGHTEN
+                + (PORT_HOVER_OUTLINE_LIGHTEN - PORT_OUTLINE_LIGHTEN) * progress;
+        int outlined = ARGB.multiply(lighten(color, lightenStrength), ARGB.white(alpha));
+
+        Vector4f borderVec = argbToFloatVec(outlined);
+        Vector4f bodyVec = ring ? new Vector4f(0f, 0f, 0f, 0f) : argbToFloatVec(tinted);
+
+        outEntries.add(new NodeBackgroundUniform.Entry(
+                new Vector4f(relX, relY, w, h),
+                bodyVec,
+                bodyVec,
+                borderVec,
+                0f, false,
+                radiusScaled, borderThicknessScaled));
+    }
+
+    /**
+     * Linearly mixes the RGB channels of {@code argb} toward white
+     * by {@code strength} ({@code 0} = unchanged, {@code 1} = full
+     * white), preserving the alpha channel. Used to derive a
+     * lightened outline / halo color directly from the port's base
+     * type color — every type ends up with a consistent contrast
+     * ratio between its body and ring without needing per-type
+     * outline registrations.
+     */
+    private static int lighten(int argb, float strength) {
+        int a = (argb >>> 24) & 0xFF;
+        int r = (argb >> 16) & 0xFF;
+        int g = (argb >> 8) & 0xFF;
+        int b = argb & 0xFF;
+        int nr = Math.round(r + (255 - r) * strength);
+        int ng = Math.round(g + (255 - g) * strength);
+        int nb = Math.round(b + (255 - b) * strength);
+        return (a << 24) | (nr << 16) | (ng << 8) | nb;
+    }
+
+    /** Normalize an ARGB int into a straight-alpha 0..1 rgba vector. */
+    private static Vector4f argbToFloatVec(int argb) {
+        return new Vector4f(
+                ARGB.redFloat(argb),
+                ARGB.greenFloat(argb),
+                ARGB.blueFloat(argb),
+                ARGB.alphaFloat(argb));
     }
 
     @Override
