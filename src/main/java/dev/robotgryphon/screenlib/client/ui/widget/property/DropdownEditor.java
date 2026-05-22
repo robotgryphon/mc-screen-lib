@@ -1,8 +1,10 @@
-package dev.robotgryphon.screenlib.client.ui.widget;
+package dev.robotgryphon.screenlib.client.ui.widget.property;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.ARGB;
 
@@ -49,12 +51,20 @@ public final class DropdownEditor extends PropertyEditor {
      */
     private String value;
 
-    /** Opacity multiplier — see {@link NumericPropertyEditor#setAlpha}. */
-    private float alpha = 1f;
+    /**
+     * Callback fired when the user clicks the trigger — typically the
+     * host's "open the option popup for this property" hook. The editor
+     * doesn't carry the popup itself; it's the host's job to render it
+     * (so it can land above any sibling node in the canvas's z-order
+     * without the editor having to know about that).
+     */
+    private final Runnable onOpenRequested;
 
-    public DropdownEditor(int x, int y, int width, int height, String value) {
+    public DropdownEditor(int x, int y, int width, int height,
+                          String value, Runnable onOpenRequested) {
         super(x, y, width, height);
         this.value = value;
+        this.onOpenRequested = onOpenRequested;
     }
 
     public String getValue() {
@@ -62,31 +72,33 @@ public final class DropdownEditor extends PropertyEditor {
     }
 
     /**
-     * Update the value shown in the trigger. Hosts call this after the
-     * popup's {@code onSelect} writes a new pick through to the model;
-     * the next render then displays the new selection without rebuilding
-     * the editor.
+     * Update the value shown in the trigger. Hosts call this each frame
+     * from their render path so the popup's {@code onSelect} (or any
+     * other property write) flows into the editor without rebuilding it.
      */
     public void setValue(String value) {
         this.value = value;
     }
 
-    public float getAlpha() {
-        return this.alpha;
-    }
-
-    public void setAlpha(float alpha) {
-        this.alpha = alpha;
-    }
-
     @Override
-    public void extractRenderState(GuiGraphicsExtractor graphics,
-                                   int mouseX, int mouseY, float partialTick) {
-        // Instance render — defer to the existing static so the layout
-        // logic (chevron geometry, text baseline) stays in one place.
+    protected void extractWidgetRenderState(GuiGraphicsExtractor graphics,
+                                            int mouseX, int mouseY, float partialTick) {
+        // Defer to the existing static so the layout logic (chevron
+        // geometry, text baseline) stays in one place.
         render(graphics, Minecraft.getInstance().font,
-                this.x, this.y, this.width, this.height,
-                mouseX, mouseY, this.value, this.alpha);
+                getX(), getY(), getWidth(), getHeight(),
+                mouseX, mouseY, this.value, getAlpha());
+    }
+
+    /**
+     * Click anywhere on the trigger fires the
+     * {@link #onOpenRequested} hook — the host then spawns the option
+     * popup. The bounds check is handled by
+     * {@link AbstractWidget#mouseClicked} before {@code onClick} fires.
+     */
+    @Override
+    public void onClick(MouseButtonEvent event, boolean doubleClick) {
+        this.onOpenRequested.run();
     }
 
     // -- Static API --------------------------------------------------------

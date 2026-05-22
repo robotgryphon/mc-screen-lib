@@ -3,17 +3,18 @@ package dev.robotgryphon.screenlib.client.ui.widget;
 import dev.robotgryphon.screenlib.client.ui.render.pip.BezierCurveRenderState;
 import dev.robotgryphon.screenlib.client.ui.render.pip.NodeBackgroundRenderState;
 import dev.robotgryphon.screenlib.client.ui.render.uniforms.NodeBackgroundUniform;
+import dev.robotgryphon.screenlib.client.ui.widget.property.NumericPropertyEditor;
 import dev.robotgryphon.screenlib.geometry.BezierCurve;
 import dev.robotgryphon.screenlib.geometry.CurveIndicator;
 import dev.robotgryphon.screenlib.graph.Canvas;
 import dev.robotgryphon.screenlib.graph.CanvasViewport;
 import dev.robotgryphon.screenlib.graph.Node;
 import dev.robotgryphon.screenlib.graph.PortSide;
-import dev.robotgryphon.screenlib.types.PropertyDefinition;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
-import net.minecraft.core.Holder;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -22,6 +23,7 @@ import net.minecraft.network.chat.Component;
 import org.joml.Vector2dc;
 import org.joml.Vector2f;
 import org.joml.Vector2fc;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -162,6 +164,26 @@ public class CanvasWidget extends AbstractWidget {
             // to start a node drag or pan.
             popupNode.clearFocusedProperty();
             return true;
+        }
+
+        // Same modal pattern for an in-place numeric edit: clicks
+        // inside the editing editor's {@link EditBox} go through to it
+        // (for cursor placement / text selection); clicks outside
+        // commit the edit. The commit fall-through is intentional —
+        // after committing, the click continues to the rest of the
+        // flow so the user can drag a node, pan, etc. in one motion.
+        // The editor owns the inside/outside test and the commit, so
+        // we just hand it the canvas-space click and look at the
+        // return value.
+        NumericPropertyEditor editingEditor = this.findEditingEditor();
+        if (editingEditor != null) {
+            final var canvasClickEvent = convertMouseButtonEvent(event);
+            if (editingEditor.handleClickWhileEditing(canvasClickEvent, doubleClick)) {
+                return true;
+            }
+            // Outside-the-box click — editor already committed; fall
+            // through so the click can re-target a different row /
+            // node / pan / context menu.
         }
 
         // Right-click → open a context menu in screen space at the cursor.
@@ -320,6 +342,49 @@ public class CanvasWidget extends AbstractWidget {
         // keeps the cursor's canvas point stationary across a zoom change.
         this.viewport.zoomAround(this.viewport.zoom() * factor, mouseX, mouseY);
         return true;
+    }
+
+    // -- Keyboard input (numeric-edit text routing) ------------------------
+
+
+    @Override
+    public boolean keyPressed(@NonNull KeyEvent event) {
+        NumericPropertyEditor editor = this.findEditingEditor();
+        if (editor != null) {
+            // Commit / cancel / EditBox text input all live on the
+            // editor — its {@code keyPressed} routes the key by
+            // event-type so we don't reinvent the check here.
+            return editor.keyPressed(event);
+        }
+
+        return super.keyPressed(event);
+    }
+
+    @Override
+    public boolean charTyped(@NonNull CharacterEvent event) {
+        NumericPropertyEditor editor = this.findEditingEditor();
+        if (editor != null) {
+            return editor.charTyped(event);
+        }
+
+        return super.charTyped(event);
+    }
+
+    /**
+     * Linear scan for the numeric editor (across all nodes' property
+     * rows) hosting an active in-place edit. Returns the first hit;
+     * the click handler commits any existing edit before opening a
+     * new one, so at most one editor is in this state at a time. O(N)
+     * in node count, fine for typical canvas sizes.
+     */
+    private @Nullable NumericPropertyEditor findEditingEditor() {
+        for (NodeWidget node : this.canvas.nodes()) {
+            NumericPropertyEditor editor = node.activeNumericEditor();
+            if (editor != null) {
+                return editor;
+            }
+        }
+        return null;
     }
 
     // -- Render -------------------------------------------------------------

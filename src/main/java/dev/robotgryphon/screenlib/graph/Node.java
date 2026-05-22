@@ -62,6 +62,15 @@ public class Node {
     public static final int PROPERTY_ROW_GAP = 2;
     /** Pixels of horizontal padding on each side of a property row. */
     public static final int PROPERTY_PADDING_X = 6;
+    /**
+     * Pixels of empty space above the first property row and below the
+     * last one. Set equal to {@link #PROPERTY_PADDING_X} so the property
+     * region's vertical breathing room matches the horizontal — a row's
+     * label sits {@code PROPERTY_PADDING_X} from the node's side edges,
+     * and the first / last rows sit {@code PROPERTY_REGION_PADDING_Y}
+     * from the region's top / bottom edges, all the same value.
+     */
+    public static final int PROPERTY_REGION_PADDING_Y = PROPERTY_PADDING_X;
     /** Minimum width reserved for a property's value area regardless of current content. */
     public static final int PROPERTY_VALUE_MIN_WIDTH = 60;
     /** Pixels between a property's label and its value column. */
@@ -122,6 +131,19 @@ public class Node {
     /** Total height of the property region (all rows stacked), cached at construction. */
     private final int propertyRegionHeight;
 
+    /**
+     * Total height of the port band, cached at construction. The band
+     * sits directly under the title bar and above the property region;
+     * its height is driven by the busier of the two port sides (the
+     * one with the most ports) so a single-port-per-side node still
+     * has the minimum visual breathing room.
+     *
+     * <p>Cached here so {@link #propertyRegionTop} can place the
+     * property region directly below it without recomputing the
+     * pitch / max-port math on every call.
+     */
+    private final int portBandHeight;
+
     private int x;
     private int y;
     private int width;
@@ -137,15 +159,19 @@ public class Node {
         this.portsBySide = groupBySide(this.ports);
 
         // Stacked rows plus a small empty gap between each consecutive
-        // pair. Matches the geometry an {@code EqualSpacingLayout} with
+        // pair, framed by {@link #PROPERTY_REGION_PADDING_Y} of empty
+        // space at the top and bottom of the region. Matches the
+        // geometry an {@code EqualSpacingLayout} with
         // {@code PROPERTY_PITCH}-tall children and a
-        // {@link #PROPERTY_ROW_GAP} inter-child gap produces — the
-        // widget layer relies on this agreement so property ports anchor
-        // exactly on the row's edge.
+        // {@link #PROPERTY_ROW_GAP} inter-child gap produces, positioned
+        // by the widget at {@code propertyRegionTop + PADDING_Y}, so
+        // property ports still anchor exactly on the row's edge.
         int propRowCount = this.definition.properties().size();
         this.propertyRegionHeight = propRowCount == 0
                 ? 0
-                : propRowCount * PROPERTY_PITCH + (propRowCount - 1) * PROPERTY_ROW_GAP;
+                : 2 * PROPERTY_REGION_PADDING_Y
+                        + propRowCount * PROPERTY_PITCH
+                        + (propRowCount - 1) * PROPERTY_ROW_GAP;
 
         // Seed property values from the schema's declared defaults so a
         // freshly-spawned node renders the same numbers the datapack
@@ -159,7 +185,8 @@ public class Node {
         // ports map (and indirectly, port titles) for label-width measurement.
         Font font = Minecraft.getInstance().font;
         this.width = computeWidth(font, title, this.definition);
-        this.height = computeHeight(font, this.definition, this.propertyRegionHeight);
+        this.portBandHeight = computePortBandHeight(font, this.definition);
+        this.height = TITLE_BAR_HEIGHT + this.portBandHeight + this.propertyRegionHeight;
     }
 
     /**
@@ -180,20 +207,25 @@ public class Node {
 
     private List<Port> buildPorts(NodeDefinition def) {
         List<Port> result = new ArrayList<>(
-                def.inputs().size() + def.outputs().size() + 2 * def.properties().size());
+                def.inputs().size() + def.outputs().size() + def.properties().size());
         for (PortDefinition input : def.inputs()) {
             result.add(new Port(this, PortSide.LEFT, Component.literal(input.name()), input.type()));
         }
         for (PortDefinition output : def.outputs()) {
-            result.add(new Port(this, PortSide.RIGHT, Component.literal(output.name()), output.type()));
+            // Output ports thread the optional {@code linkedProperty} into the
+            // runtime port so a wire from the output knows which property's
+            // value to relay — that's the only way data leaves a node now
+            // that property right-side ports are gone.
+            result.add(new Port(this, PortSide.RIGHT, Component.literal(output.name()),
+                    output.type(), null, output.linkedProperty().orElse(null)));
         }
-        // Every property gets both an incoming and an outgoing port. They're
-        // not "active" in the visual sense until something connects to them
-        // (or the user hovers the row) — the renderer decides when to draw
-        // them — but they're real Ports as far as the graph is concerned.
+        // Properties get a LEFT (input) port only. A wire targeting it
+        // overrides the property's local value with the upstream's. There's
+        // no right-side property port — values flow OUT of a node only
+        // through regular output ports, which can optionally name a
+        // property to relay from via {@link PortDefinition#linkedProperty}.
         for (PortDefinition prop : def.properties()) {
             result.add(Port.property(this, PortSide.LEFT, prop.name(), prop.type()));
-            result.add(Port.property(this, PortSide.RIGHT, prop.name(), prop.type()));
         }
         return List.copyOf(result);
     }
@@ -248,13 +280,28 @@ public class Node {
         return Math.max(MIN_WIDTH, Math.max(Math.max(titleNeed, portsNeed), propsNeed));
     }
 
-    private static int computeHeight(Font font, NodeDefinition def, int propertyRegionHeight) {
+    /**
+     * Height of the port-band region in pixels. The band has to host
+     * the busier of the two sides (left vs. right ports), distributed
+     * at {@code (i+1)/(N+1)} of its height, so it needs {@code N+1}
+     * pitches to give every port a comfortable row. Floored at
+     * {@link #MIN_PORT_BAND_HEIGHT} so a single-port-per-side node
+     * still has room for its labels.
+     *
+     * <p>Special case: when a node has <em>no</em> ports on either side
+     * (a properties-only node like a sampler, or any pure configuration
+     * node), the band collapses to zero. Otherwise the band would
+     * reserve {@link #MIN_PORT_BAND_HEIGHT} pixels of empty space
+     * directly under the title bar — visible as a large gap above the
+     * first property row.
+     */
+    private static int computePortBandHeight(Font font, NodeDefinition def) {
         int maxPortsPerSide = Math.max(def.inputs().size(), def.outputs().size());
-        // Ports distribute evenly at (i+1)/(N+1) of the port band; the band
-        // needs (N+1) pitches to give every port a comfortable row.
+        if (maxPortsPerSide == 0) {
+            return 0;
+        }
         int pitch = Math.max(MIN_PORT_PITCH, font.lineHeight + 3);
-        int portBandHeight = Math.max(MIN_PORT_BAND_HEIGHT, pitch * (maxPortsPerSide + 1));
-        return TITLE_BAR_HEIGHT + propertyRegionHeight + portBandHeight;
+        return Math.max(MIN_PORT_BAND_HEIGHT, pitch * (maxPortsPerSide + 1));
     }
 
     private static int maxPortLabelWidth(Font font, List<PortDefinition> ports) {
@@ -362,9 +409,14 @@ public class Node {
         return this.propertyRegionHeight;
     }
 
-    /** Top edge (inclusive) of the property region, in screen pixels. */
+    /**
+     * Top edge (inclusive) of the property region, in screen pixels.
+     * The region sits below the title bar and the port band; this
+     * means port labels never have to share vertical space with
+     * property labels.
+     */
     public int propertyRegionTop() {
-        return this.y + TITLE_BAR_HEIGHT;
+        return this.y + TITLE_BAR_HEIGHT + this.portBandHeight;
     }
 
     /**
@@ -372,10 +424,13 @@ public class Node {
      * occupies {@link #PROPERTY_PITCH} pixels followed by a
      * {@link #PROPERTY_ROW_GAP}-pixel strip of empty space before the
      * next row begins — matching the geometry the widget's
-     * {@code EqualSpacingLayout} produces.
+     * {@code EqualSpacingLayout} produces. The first row sits
+     * {@link #PROPERTY_REGION_PADDING_Y} below the region's top edge,
+     * so callers don't need to apply the padding themselves.
      */
     public int propertyRowTop(int index) {
-        return this.propertyRegionTop() + index * (PROPERTY_PITCH + PROPERTY_ROW_GAP);
+        return this.propertyRegionTop() + PROPERTY_REGION_PADDING_Y
+                + index * (PROPERTY_PITCH + PROPERTY_ROW_GAP);
     }
 
     // -- Port geometry -----------------------------------------------------
@@ -384,8 +439,8 @@ public class Node {
      * The on-screen center of the given port. Ports on the same side share
      * the port-band region equally: with N ports on a side, the i-th port
      * (0-indexed) sits at {@code (i+1)/(N+1)} along the band. The port
-     * band starts <em>below</em> the property region so property rows
-     * never have a port stamped on top of them.
+     * band starts directly under the title bar (and ends where the
+     * property region begins) so port labels and rows never collide.
      *
      * <p>The returned point is the visual center of the port's center pixel:
      * the integer pixel anchor plus 0.5 on each axis. This keeps every port
@@ -429,9 +484,12 @@ public class Node {
         int count = sidePorts.size();
         float t = (index + 1f) / (count + 1f);
 
-        // Port band sits below both the title bar and the property region.
-        int bandTop = this.y + TITLE_BAR_HEIGHT + this.propertyRegionHeight;
-        int bandHeight = this.height - TITLE_BAR_HEIGHT - this.propertyRegionHeight;
+        // Port band sits directly under the title bar and above the
+        // property region — properties are pushed down by the same
+        // {@link #portBandHeight} the band reports here, so the two
+        // never overlap.
+        int bandTop = this.y + TITLE_BAR_HEIGHT;
+        int bandHeight = this.portBandHeight;
 
         // Snap layout to integer pixels so multi-port distribution doesn't
         // leave one port's line a fraction of a pixel above center and the

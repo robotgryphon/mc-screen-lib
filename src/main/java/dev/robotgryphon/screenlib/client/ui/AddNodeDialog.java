@@ -1,7 +1,7 @@
 package dev.robotgryphon.screenlib.client.ui;
 
-import dev.robotgryphon.screenlib.client.ui.widget.ChipFilterInput;
-import dev.robotgryphon.screenlib.client.ui.widget.ChipSuggestion;
+import dev.robotgryphon.screenlib.client.ui.widget.chips.ChipFilterInput;
+import dev.robotgryphon.screenlib.client.ui.widget.chips.ChipSuggestion;
 import dev.robotgryphon.screenlib.client.ui.widget.NodePreviewWidget;
 import dev.robotgryphon.screenlib.client.ui.widget.NodeWidget;
 import dev.robotgryphon.screenlib.graph.Node;
@@ -17,7 +17,6 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.StringWidget;
 import net.minecraft.client.gui.layouts.GridLayout;
 import net.minecraft.client.gui.layouts.HeaderAndFooterLayout;
-import net.minecraft.client.gui.layouts.LayoutSettings;
 import net.minecraft.client.gui.layouts.LinearLayout;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;

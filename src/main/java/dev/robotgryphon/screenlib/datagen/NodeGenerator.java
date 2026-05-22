@@ -110,5 +110,20 @@ public class NodeGenerator extends DatapackBuiltinEntriesProvider {
                 .addProperty("scheduler", schedDef)
                 .addProperty("denoise", denoiseDef)
                 .build());
+
+        // Boolean primitive — single typed value paired with an output
+        // port that advertises the node's role ("BOOLEAN") to the canvas.
+        // The {@code value} property uses the dedicated
+        // {@code boolean_primitive/value} definition so the slot ships
+        // with a {@code false} default; the {@code BOOLEAN} output uses
+        // the generic {@code bool} type for wire compatibility with any
+        // other boolean port, linked to {@code value} so wires from it
+        // carry the property's current state.
+        var boolType    = propertyDef(defs, "minecraft", "bool");
+        var boolValDef  = propertyDef(defs, ScreenLib.MOD_ID, "boolean_primitive/value");
+        ctx.register(nodeType("boolean"), new NodeBuilder()
+                .addOutput("BOOLEAN", boolType, "value")
+                .addProperty("value", boolValDef)
+                .build());
     }
 }

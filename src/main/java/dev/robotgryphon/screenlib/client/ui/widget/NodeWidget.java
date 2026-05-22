@@ -2,6 +2,11 @@ package dev.robotgryphon.screenlib.client.ui.widget;
 
 import com.mojang.serialization.Codec;
 import dev.robotgryphon.screenlib.client.ui.render.uniforms.NodeBackgroundUniform;
+import dev.robotgryphon.screenlib.client.ui.widget.property.BooleanPropertyEditor;
+import dev.robotgryphon.screenlib.client.ui.widget.property.DropdownEditor;
+import dev.robotgryphon.screenlib.client.ui.widget.property.DropdownPopup;
+import dev.robotgryphon.screenlib.client.ui.widget.property.NumericPropertyEditor;
+import dev.robotgryphon.screenlib.client.ui.widget.property.PropertyEditor;
 import dev.robotgryphon.screenlib.graph.Canvas;
 import dev.robotgryphon.screenlib.graph.CanvasViewport;
 import dev.robotgryphon.screenlib.graph.Node;
@@ -25,7 +30,6 @@ import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.ARGB;
-import org.joml.Vector2dc;
 import org.joml.Vector2fc;
 import org.jspecify.annotations.Nullable;
 
@@ -70,10 +74,6 @@ public class NodeWidget extends AbstractWidget {
      */
     static final int NODE_CORNER_RADIUS = 4;
 
-    /** Pill background for property rows, slightly lighter than the body. */
-    private static final int PROPERTY_ROW_COLOR = 0xCC2F303A;
-    /** Pill background for a row that's being driven by an incoming wire — sunk a shade so it reads as "locked". */
-    private static final int PROPERTY_ROW_DRIVEN_COLOR = 0xCC23242C;
     /** Property label color — softer than the value so the eye lands on the value first. */
     private static final int PROPERTY_LABEL_COLOR = 0xFFA0A4B3;
     /** Dimmer label for input-driven rows — signals "you can't edit this anymore" without disappearing. */
@@ -159,8 +159,19 @@ public class NodeWidget extends AbstractWidget {
             this.propertiesLayout = null;
             this.propertyRows = List.of();
         } else {
+            // The layout's height is the *inner content* span: rows plus
+            // the inter-row gaps, no top / bottom padding. The padding
+            // ({@link Node#PROPERTY_REGION_PADDING_Y}) is applied at
+            // positioning time in {@link #renderProperties}, by offsetting
+            // the layout's Y past the region top. This keeps the
+            // equal-spacing distribution producing exactly
+            // {@link Node#PROPERTY_ROW_GAP} between consecutive rows
+            // (it would otherwise spread the padding into the gaps too).
+            int n = properties.size();
+            int contentHeight = n * Node.PROPERTY_PITCH
+                    + Math.max(0, n - 1) * Node.PROPERTY_ROW_GAP;
             EqualSpacingLayout layout = new EqualSpacingLayout(
-                    node.width(), node.propertyRegionHeight(),
+                    node.width(), contentHeight,
                     EqualSpacingLayout.Orientation.VERTICAL);
             List<PropertyRow> rows = new ArrayList<>(properties.size());
             for (int i = 0; i < properties.size(); i++) {
@@ -284,7 +295,7 @@ public class NodeWidget extends AbstractWidget {
             // drag state (super.mouseClicked → onClick would set
             // dragging=true), which would otherwise have the node
             // sliding around as the user tried to nudge a value.
-            if (this.handlePropertyEditorClick(event)) {
+            if (this.handlePropertyEditorClick(event, doubleClick)) {
                 return true;
             }
         }
@@ -302,40 +313,32 @@ public class NodeWidget extends AbstractWidget {
      * locally editable, so a click on what would be the editor area
      * falls through to the normal drag behavior.
      */
-    private boolean handlePropertyEditorClick(MouseButtonEvent event) {
+    private boolean handlePropertyEditorClick(MouseButtonEvent event, boolean doubleClick) {
         List<PortDefinition> properties = this.node.definition().properties();
         if (properties.isEmpty()) {
             return false;
         }
-        int left = this.node.x();
-        int width = this.node.width();
-        int editorX = left + width - Node.PROPERTY_PADDING_X - Node.PROPERTY_VALUE_MIN_WIDTH;
-        int editorWidth = Node.PROPERTY_VALUE_MIN_WIDTH;
-        int editorHeight = Node.PROPERTY_PITCH;
 
+        // Each editor is a proper {@link AbstractWidget} that owns its
+        // own column hit-test, value step, and write-back callback —
+        // the iteration here is just "ask every editor whether the
+        // click is theirs," and the first {@code true} wins. Driven
+        // rows are skipped: their value is the upstream's, so the
+        // local editor wouldn't have anything to do anyway.
         for (int i = 0; i < properties.size(); i++) {
             PortDefinition prop = properties.get(i);
-            // Driven rows show the upstream's value — no local editing.
             if (this.findInputConnection(prop.name()) != null) continue;
 
-            int editorY = this.node.propertyRowTop(i);
-            Codec<?> codec = prop.type().value().codec();
+            PropertyEditor editor = this.propertyRows.get(i).editor();
+            if (editor == null) continue;
 
-            if (isNumericCodec(codec)) {
-                if (!NumericPropertyEditor.isInside(event.x(), event.y(),
-                        editorX, editorY, editorWidth, editorHeight)) {
-                    continue;
-                }
-                this.applyNumericClick(prop, codec, event.x(), editorX, editorWidth);
-                return true;
-            }
+            // Refresh the editor's value snapshot right before the
+            // click so the column step / commit operates on whatever
+            // the model currently holds, even if some other path
+            // wrote to the property since the last render.
+            this.propertyRows.get(i).syncEditorValueFromNode();
 
-            if (isDropdownProperty(prop)) {
-                if (!DropdownEditor.isInside(event.x(), event.y(),
-                        editorX, editorY, editorWidth, editorHeight)) {
-                    continue;
-                }
-                this.openDropdownPopup(prop, editorX, editorY, editorWidth, editorHeight);
+            if (editor.mouseClicked(event, doubleClick)) {
                 return true;
             }
         }
@@ -347,31 +350,13 @@ public class NodeWidget extends AbstractWidget {
      * a fixed value set and the property's value type is something the
      * dropdown editor knows how to render. Today that's just String —
      * other dropdown-able types (enums, integers picked from a known
-     * set) can extend this check as they show up.
+     * set) can extend this check as they show up. Kept around because
+     * {@link PropertyRow} consults it at construction time to pick the
+     * right editor subclass for the row.
      */
     private static boolean isDropdownProperty(PortDefinition prop) {
         PropertyDefinition<?> def = prop.type().value();
         return def.codec() == Codec.STRING && def.allowedValues().isPresent();
-    }
-
-    /**
-     * Marks {@code prop} as the focused property on this widget's node.
-     * The popup itself is built lazily from the node's state each frame
-     * (via {@link #buildFocusedPropertyPopup}) — storing only the name
-     * here means a node-position change or value edit flows through the
-     * popup naturally on the next frame without needing to rebuild and
-     * reassign anything.
-     *
-     * <p>The editor bounds are unused at this point but kept on the
-     * signature so the caller doesn't need to recompute them: when the
-     * popup is rebuilt for render, it derives its position from the
-     * node's live row geometry, not from whatever the editor bounds
-     * were at click time. That keeps the popup pinned to its row even
-     * if the node moves while the popup is open.
-     */
-    private void openDropdownPopup(PortDefinition prop,
-                                   int editorX, int editorY, int editorWidth, int editorHeight) {
-        this.node.setFocusedPropertyName(prop.name());
     }
 
     /**
@@ -388,6 +373,24 @@ public class NodeWidget extends AbstractWidget {
     /** Clears the focused-property marker on the underlying node. */
     public void clearFocusedProperty() {
         this.node.setFocusedPropertyName(null);
+    }
+
+    // -- Inline numeric editing -------------------------------------------
+
+    /**
+     * The numeric editor currently hosting an in-place edit on this
+     * widget, or {@code null} when none is editing. At most one row
+     * can be editing at a time — the click-dispatch path commits any
+     * other row's in-flight edit before opening a new one — so the
+     * first hit during the scan is the right one.
+     */
+    public @Nullable NumericPropertyEditor activeNumericEditor() {
+        for (PropertyRow row : this.propertyRows) {
+            if (row.editor() instanceof NumericPropertyEditor editor && editor.isEditing()) {
+                return editor;
+            }
+        }
+        return null;
     }
 
     /**
@@ -495,33 +498,6 @@ public class NodeWidget extends AbstractWidget {
     }
 
     /**
-     * Routes the click to whichever {@link NumericPropertyEditor} step
-     * variant matches the property's codec, and writes the result back
-     * through {@link Node#setPropertyValue} if it actually moved. The
-     * dispatch is reference-equality on the codec singleton — {@code
-     * Codec.INT}, {@code Codec.FLOAT}, {@code Codec.DOUBLE} are all
-     * unique instances, so this is both correct and faster than a class
-     * check on the boxed value.
-     */
-    private void applyNumericClick(PortDefinition prop, Codec<?> codec,
-                                   double mouseX, int editorX, int editorWidth) {
-        Object current = this.node.propertyValue(prop.name());
-        if (codec == Codec.INT) {
-            int v = current instanceof Integer iv ? iv : 0;
-            int next = NumericPropertyEditor.applyIntClick(mouseX, editorX, editorWidth, v);
-            if (next != v) this.node.setPropertyValue(prop.name(), next);
-        } else if (codec == Codec.FLOAT) {
-            float v = current instanceof Float fv ? fv : 0f;
-            float next = NumericPropertyEditor.applyFloatClick(mouseX, editorX, editorWidth, v);
-            if (next != v) this.node.setPropertyValue(prop.name(), next);
-        } else if (codec == Codec.DOUBLE) {
-            double v = current instanceof Double dv ? dv : 0.0;
-            double next = NumericPropertyEditor.applyDoubleClick(mouseX, editorX, editorWidth, v);
-            if (next != v) this.node.setPropertyValue(prop.name(), next);
-        }
-    }
-
-    /**
      * True if the property's value type is one the {@link NumericPropertyEditor}
      * knows how to render and step. Comparing to the codec singletons
      * (rather than {@code instanceof}-checking the boxed value) keeps
@@ -616,6 +592,10 @@ public class NodeWidget extends AbstractWidget {
         // Property ports last so any decoration they draw lands on top of
         // the row's pill fill, not underneath it.
         this.renderPropertyPorts(graphics, mouseX, mouseY);
+
+        // No separate EditBox pass — each numeric editor renders its
+        // own in-place {@link EditBox} (when editing) from inside its
+        // {@code extractRenderState}, called via the PropertyRow above.
     }
 
     /**
@@ -634,8 +614,15 @@ public class NodeWidget extends AbstractWidget {
         if (this.propertiesLayout == null) {
             return;
         }
+        // Offset the layout past the region's top edge by the vertical
+        // padding so the first row sits the same {@code PADDING_Y}
+        // pixels below the region top that the last row sits above the
+        // region bottom. The layout itself only spans the inner content
+        // height (see the constructor), so the padding is purely a
+        // positioning concern here — not folded into the equal-spacing
+        // distribution.
         this.propertiesLayout.setX(this.node.x());
-        this.propertiesLayout.setY(this.node.propertyRegionTop());
+        this.propertiesLayout.setY(this.node.propertyRegionTop() + Node.PROPERTY_REGION_PADDING_Y);
         this.propertiesLayout.arrangeElements();
         for (PropertyRow row : this.propertyRows) {
             row.extractRenderState(graphics, mouseX, mouseY, 0f);
@@ -655,7 +642,6 @@ public class NodeWidget extends AbstractWidget {
                                    int rowWidth, int rowHeight,
                                    int mouseX, int mouseY) {
         PortDefinition prop = this.node.definition().properties().get(rowIndex);
-        int rowBottom = rowTop + rowHeight;
 
         // Resolve the row's render mode. A row is "driven" when its
         // input port has at least one incoming connection; once driven,
@@ -669,25 +655,23 @@ public class NodeWidget extends AbstractWidget {
         Object upstreamValue = driven ? this.resolveUpstreamValue(inputConn) : null;
         boolean undriven = driven && upstreamValue == null;
 
-        int pillColor = driven ? PROPERTY_ROW_DRIVEN_COLOR : PROPERTY_ROW_COLOR;
         int labelColor = undriven
                 ? PROPERTY_LABEL_UNDRIVEN_COLOR
                 : (driven ? PROPERTY_LABEL_DRIVEN_COLOR : PROPERTY_LABEL_COLOR);
         int valueColor = driven ? PROPERTY_VALUE_DRIVEN_COLOR : PROPERTY_VALUE_COLOR;
 
-        // The entire row reads as a single typed unit — pill, label,
-        // and value all dim together when the user is mid-drag from a
-        // port of a different type, so a property can't accidentally
-        // look like a valid drop target.
+        // The entire row reads as a single typed unit — label and value
+        // dim together when the user is mid-drag from a port of a
+        // different type, so a property can't accidentally look like a
+        // valid drop target.
         float alpha = this.effectiveAlpha(prop.type());
 
-        // Row pill — full-width darker fill so the property region reads
-        // as distinct strips, like the screenshot's KSampler-style node.
-        // The vertical strip between rows is owned by the surrounding
-        // {@code EqualSpacingLayout}, so the pill fills its full
-        // assigned height here without an inset.
-        graphics.fill(rowLeft + 1, rowTop, rowLeft + rowWidth - 1, rowBottom,
-                ARGB.multiply(pillColor, ARGB.white(alpha)));
+        // No row-pill fill: the property row inherits the node body
+        // color so the editor controls (numeric pill, dropdown trigger,
+        // boolean switch) read as the active widgets on the row instead
+        // of being undercut by another lighter rectangle. Driven /
+        // undriven / normal state is now conveyed via the label and
+        // value text colors alone.
 
         // Label (left), value (right). Vertically centered using the
         // font line height — the +1 nudges the text optical center down
@@ -701,41 +685,29 @@ public class NodeWidget extends AbstractWidget {
                 ARGB.multiply(labelColor, ARGB.white(alpha)),
                 false);
 
-        // Value area on the right edge of the row. Used either by the
-        // typed inline editor (for editable, non-driven properties whose
-        // codec we know how to render a control for) or as a plain
-        // read-only text slot otherwise.
-        int editorX = rowLeft + rowWidth - Node.PROPERTY_PADDING_X - Node.PROPERTY_VALUE_MIN_WIDTH;
-        int editorY = rowTop;
-        int editorWidth = Node.PROPERTY_VALUE_MIN_WIDTH;
-        int editorHeight = rowHeight;
+        // Value area on the right edge of the row. Non-driven rows that
+        // have a registered editor route through the editor; everything
+        // else (driven rows, plus the rare property type with no editor
+        // yet) falls back to plain text.
+        PropertyRow row = this.propertyRows.get(rowIndex);
+        PropertyEditor editor = row.editor();
 
-        if (!driven && isNumericCodec(prop.type().value().codec())) {
-            // Numeric editor — handles int, float, and double via the
-            // same +/- pill. The value falls back to a zero of the
-            // matching type when nothing is set yet so the buttons
-            // still operate from a sane starting point rather than
-            // reading null.
-            Number current = currentNumericValue(prop);
-            NumericPropertyEditor.render(graphics, font,
-                    editorX, editorY, editorWidth, editorHeight,
-                    mouseX, mouseY,
-                    current, alpha);
-        } else if (!driven && isDropdownProperty(prop)) {
-            // Dropdown editor — the property is a pick from a fixed
-            // value set, so the row trigger reads the current value
-            // with a chevron and the actual list opens as a popup
-            // when clicked.
-            Object current = this.node.propertyValue(prop.name());
-            String display = current instanceof String s ? s : "";
-            DropdownEditor.render(graphics, font,
-                    editorX, editorY, editorWidth, editorHeight,
-                    mouseX, mouseY,
-                    display, alpha);
+        if (!driven && editor != null) {
+            // Editors own their own +/- click dispatch, in-place edit,
+            // popup-open hook, etc. — all the row needs to do is refresh
+            // the editor's value snapshot from the node (so any external
+            // writes show up next frame), push the current effective
+            // alpha (which tracks the canvas's drag-time dimming), and
+            // delegate the draw. Bounds are kept in sync by
+            // {@link PropertyRow#setX}/{@link PropertyRow#setY} so we
+            // don't have to reposition the editor here.
+            row.syncEditorValueFromNode();
+            editor.setAlpha(alpha);
+            editor.extractRenderState(graphics, mouseX, mouseY, 0f);
         } else {
             // Plain text path — driven rows (showing upstream value or
-            // the red "undriven" blank), and any non-int property type
-            // until those get their own editors.
+            // the red "undriven" blank), and any property type without
+            // a registered editor (the future-codec branch).
             String valueText;
             if (undriven) {
                 valueText = "";
@@ -780,6 +752,19 @@ public class NodeWidget extends AbstractWidget {
     private final class PropertyRow implements LayoutElement, Renderable {
 
         private final int rowIndex;
+
+        /**
+         * Editor for this row, built once based on the property's codec
+         * — a {@link NumericPropertyEditor} for int/float/double, a
+         * {@link DropdownEditor} for {@code allowedValues} strings, a
+         * {@link BooleanPropertyEditor} for booleans, or {@code null}
+         * for property types without a registered editor (falls back to
+         * the plain-text render path). Each editor owns its own click
+         * dispatch and write-back closure, so the row doesn't need to
+         * fan out on codec at click / render time.
+         */
+        private final @Nullable PropertyEditor editor;
+
         private int x;
         private int y;
         private int width;
@@ -794,6 +779,89 @@ public class NodeWidget extends AbstractWidget {
             // when distributing children.
             this.width = NodeWidget.this.node.width();
             this.height = Node.PROPERTY_PITCH;
+
+            // Build the right editor subclass for the row's property
+            // codec. The closures captured here ({@code propName} and
+            // {@code this.node}) outlive any single click, so the
+            // editor can write back to the model without having to
+            // know about the row, the node widget, or the canvas.
+            // Editor bounds are passed at construction (X / Y get
+            // refreshed each layout pass via {@link #setX} / {@link #setY};
+            // width / height are constant for the row's lifetime since
+            // nodes don't resize at runtime). Building with the final
+            // size matters for editors like
+            // {@link NumericPropertyEditor} that arrange their internal
+            // child layout once in the constructor.
+            this.editor = buildEditor(rowIndex);
+        }
+
+        /**
+         * Picks the right editor subclass based on the property's codec.
+         * Returns {@code null} for any codec without a registered
+         * editor type (the row then falls back to the plain-text
+         * value renderer).
+         */
+        private @Nullable PropertyEditor buildEditor(int rowIndex) {
+            PortDefinition prop = NodeWidget.this.node.definition().properties().get(rowIndex);
+            Codec<?> codec = prop.type().value().codec();
+            final String propName = prop.name();
+            int editorW = Node.PROPERTY_VALUE_MIN_WIDTH;
+            int editorH = Node.PROPERTY_PITCH;
+            if (isNumericCodec(codec)) {
+                Number seed = NodeWidget.this.currentNumericValue(prop);
+                return new NumericPropertyEditor(0, 0, editorW, editorH,
+                        seed, codec,
+                        next -> NodeWidget.this.node.setPropertyValue(propName, next));
+            }
+            if (isDropdownProperty(prop)) {
+                Object current = NodeWidget.this.node.propertyValue(propName);
+                String seed = current instanceof String s ? s : "";
+                // The dropdown's click hook just marks the property as
+                // focused on the node — the popup itself is built by
+                // {@link NodeWidget#buildFocusedPropertyPopup} from the
+                // node's focus state, so the canvas can position it in
+                // screen-space above all other nodes.
+                return new DropdownEditor(0, 0, editorW, editorH, seed,
+                        () -> NodeWidget.this.node.setFocusedPropertyName(propName));
+            }
+            if (codec == Codec.BOOL) {
+                Object current = NodeWidget.this.node.propertyValue(propName);
+                boolean seed = current instanceof Boolean b && b;
+                return new BooleanPropertyEditor(0, 0, editorW, editorH, seed,
+                        next -> NodeWidget.this.node.setPropertyValue(propName, next));
+            }
+            return null;
+        }
+
+        /**
+         * The editor for this row, or {@code null} when the property's
+         * codec has no registered editor type. Exposed for
+         * {@link NodeWidget}'s click iteration and render delegation;
+         * the latter calls {@link #syncEditorValueFromNode} first so
+         * the editor reflects the live property value.
+         */
+        @Nullable PropertyEditor editor() {
+            return this.editor;
+        }
+
+        /**
+         * Pushes the property's current model value into the editor.
+         * Called both per-frame (during render) and per-click (before
+         * mouse dispatch) so the editor never operates on a stale
+         * snapshot. The codec dictates which {@code setValue} variant
+         * runs; non-editor rows are a no-op here.
+         */
+        void syncEditorValueFromNode() {
+            if (this.editor == null) return;
+            PortDefinition prop = NodeWidget.this.node.definition().properties().get(this.rowIndex);
+            Object current = NodeWidget.this.node.propertyValue(prop.name());
+            if (this.editor instanceof NumericPropertyEditor n) {
+                n.setValue(NodeWidget.this.currentNumericValue(prop));
+            } else if (this.editor instanceof DropdownEditor d) {
+                d.setValue(current instanceof String s ? s : "");
+            } else if (this.editor instanceof BooleanPropertyEditor b) {
+                b.setValue(current instanceof Boolean v && v);
+            }
         }
 
         @Override public int getX() { return this.x; }
@@ -801,13 +869,36 @@ public class NodeWidget extends AbstractWidget {
         @Override public int getWidth() { return this.width; }
         @Override public int getHeight() { return this.height; }
 
-        @Override public void setX(int x) { this.x = x; }
-        @Override public void setY(int y) { this.y = y; }
+        @Override
+        public void setX(int x) {
+            this.x = x;
+            // Editor sits at the right edge of the row, padded inside
+            // the value column. Keeping the editor's X in sync with
+            // the row's X here means later click / render paths don't
+            // have to recompute it.
+            if (this.editor != null) {
+                this.editor.setX(x + this.width
+                        - Node.PROPERTY_PADDING_X - Node.PROPERTY_VALUE_MIN_WIDTH);
+            }
+        }
+
+        @Override
+        public void setY(int y) {
+            this.y = y;
+            if (this.editor != null) {
+                this.editor.setY(y);
+            }
+        }
 
         @Override
         public void visitWidgets(Consumer<AbstractWidget> visitor) {
-            // No inner AbstractWidget children — the row draws itself
-            // directly using {@code GuiGraphicsExtractor} primitives.
+            // The editor (if any) is the row's only widget child — but
+            // we don't expose it here because {@code NodeWidget} routes
+            // mouse / key events to the editor manually through
+            // {@link #handlePropertyEditorClick} and
+            // {@link CanvasWidget#findEditingEditor}; the implicit
+            // {@code visitWidgets}-driven event dispatch isn't wired
+            // into this widget tree yet.
         }
 
         @Override
@@ -868,32 +959,40 @@ public class NodeWidget extends AbstractWidget {
     }
 
     /**
-     * Best-effort "what value is flowing into this input?" lookup. Only
-     * property outputs carry a value today (their owning node's local
-     * property value); regular output ports don't have a value pipeline
-     * behind them, so a wire from one of those is treated as "connected
-     * but undriven" and triggers the red-label state.
+     * Best-effort "what value is flowing into this input?" lookup.
+     * Values exit a node only through regular output ports — properties
+     * no longer have right-side handles of their own — so the resolution
+     * looks for an output port that declares a {@code linkedProperty},
+     * and reads through to that property's current value on the source
+     * node. Outputs without a linked property carry no value (they're
+     * pure type connectors) so a wire from one renders as
+     * "connected but undriven" (the red-label state).
      *
      * <p>Resolution is intentionally non-recursive: if the upstream
-     * property is itself driven by yet another wire, we still look at its
-     * own local value rather than chasing the chain. Chained evaluation
-     * is a follow-up once the graph has real semantics for what an output
-     * "produces"; for now this is purely a visual reflection.
+     * property is itself driven by yet another wire, we still look at
+     * its own local value rather than chasing the chain. Chained
+     * evaluation is a follow-up once the graph has real semantics for
+     * what an output "produces"; for now this is purely a visual
+     * reflection.
      *
-     * <p>When the source's slot is null — typically because its registered
-     * {@code PropertyDefinition} declared no default — the lookup mirrors
-     * the editor's own null fallback (see {@link #currentNumericValue})
-     * so the driven row displays the same zero value the source's editor
-     * would. Without this, the source could show {@code "0"} on its own
-     * row while the target showed an empty red-label "undriven" state,
-     * making it look like the wire was broken when it was working fine.
+     * <p>When the source's property slot is null — typically because its
+     * registered {@code PropertyDefinition} declared no default — the
+     * lookup mirrors the editor's own null fallback (see
+     * {@link #currentNumericValue}) so the driven row displays the same
+     * zero value the source's editor would. Without this, the source
+     * could show {@code "0"} on its own row while the target showed an
+     * empty red-label "undriven" state, making it look like the wire was
+     * broken when it was working fine.
      */
     private @Nullable Object resolveUpstreamValue(Connection connection) {
         Port source = connection.sourcePort();
-        if (!source.isProperty()) {
+        String linkedProp = source.linkedPropertyName();
+        if (linkedProp == null) {
+            // Source is a plain output port (or, defensively, something
+            // else that has no property to relay) — no value to report.
             return null;
         }
-        Object value = source.node().propertyValue(source.propertyName());
+        Object value = source.node().propertyValue(linkedProp);
         if (value != null) {
             return value;
         }

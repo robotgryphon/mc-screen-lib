@@ -197,6 +197,18 @@ public class ScreenLib {
                 Codec.FLOAT, COLOR_NUMBER,
                 Component.translatable("property_type.minecraft.float"),
                 Optional.of(1.0f)));
+
+        // -- Boolean primitive ---------------------------------------------
+        // Seeds the Boolean primitive node's single property with a typed
+        // default of `false`. A freshly placed Boolean node therefore reads
+        // as "off" without the user having to touch the switch first, and
+        // any downstream consumer that reads the property's value through
+        // the property port gets a real boolean rather than a null
+        // placeholder.
+        PROPERTY_DEFINITIONS.register("boolean_primitive/value", () -> new PropertyDefinition<>(
+                Codec.BOOL, COLOR_BOOLEAN,
+                Component.translatable("property_type.minecraft.bool"),
+                Optional.of(false)));
     }
 
     public ScreenLib(IEventBus modBus) {

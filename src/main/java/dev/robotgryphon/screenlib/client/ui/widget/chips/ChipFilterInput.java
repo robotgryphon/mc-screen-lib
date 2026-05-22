@@ -1,4 +1,4 @@
-package dev.robotgryphon.screenlib.client.ui.widget;
+package dev.robotgryphon.screenlib.client.ui.widget.chips;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;

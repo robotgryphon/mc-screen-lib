@@ -15,41 +15,44 @@ import org.jspecify.annotations.Nullable;
  * the model without going through a view.
  *
  * <p>A port may optionally be bound to a property name (see
- * {@code propertyName}). These "property ports" exist for every declared
- * property on the node — one LEFT (input-side) and one RIGHT (output-side)
- * — and let the user expose a property's value as either an incoming
- * connection point (override the local property value) or an outgoing
- * connection point (consume the property's value downstream). They differ
- * from regular ports in two ways:
+ * {@code propertyName}). A "property port" is the input-side handle that
+ * exists for every declared property on the node: a single LEFT-side port
+ * that lets a wire override the property's local value with whatever
+ * value flows in. Properties don't expose a right-side "output" port —
+ * values flow OUT of a node only through regular output ports — so the
+ * property port count is exactly one per property, on the left.
  *
- * <ul>
- *   <li>They anchor to the property's row inside the node body, not to
- *       the side's port band.</li>
- *   <li>Their visible state is conditional — a property port shows only
- *       while the user is hovering its row or when something is actually
- *       connected to it. This is purely a rendering concern; the port
- *       itself is always a real {@code Port} for hit-testing and graph
- *       semantics.</li>
- * </ul>
+ * <p>{@code linkedPropertyName} is the converse bridge: a regular output
+ * port (right side, non-property) can declare that the value it carries
+ * downstream is the current value of one of the same node's properties.
+ * The widget layer reads through this link when computing what a wire
+ * from that output reports to its target. Inputs leave it null. Property
+ * ports leave it null too — they are themselves the property's handle,
+ * there's nothing further to link.
  *
- * @param node          the node this port belongs to
- * @param side          which edge of the node this port lives on
- * @param title         small label rendered inside the node body next to the port
- * @param type          the data type the port carries — drives the port's color
- *                      and is later used to gate which connections are valid
- * @param propertyName  the name of the property this port is bound to, or
- *                      {@code null} for a regular (always-visible) port
+ * @param node                  the node this port belongs to
+ * @param side                  which edge of the node this port lives on
+ * @param title                 small label rendered inside the node body next to the port
+ * @param type                  the data type the port carries — drives the port's color
+ *                              and is later used to gate which connections are valid
+ * @param propertyName          the name of the property this port is bound to, or
+ *                              {@code null} for a regular (always-visible) port
+ * @param linkedPropertyName    for a regular output port that relays a property's
+ *                              value, the name of that property; {@code null} on every
+ *                              other port (inputs, property ports, and outputs that
+ *                              don't shadow a property)
  */
 public record Port(Node node, PortSide side, Component title, Holder<PropertyDefinition<?>> type,
-                   @Nullable String propertyName) {
+                   @Nullable String propertyName,
+                   @Nullable String linkedPropertyName) {
 
-    /** Regular-port constructor — the property name slot is left empty. */
+    /** Regular-port constructor — no property binding, no link to a property. */
     public Port(Node node, PortSide side, Component title, Holder<PropertyDefinition<?>> type) {
-        this(node, side, title, type, null);
+        this(node, side, title, type, null, null);
     }
 
     public static Port of(Node node, PortSide side, Component title, Holder<PropertyDefinition<?>> type) {
-        return new Port(node, side, title, type, null);
+        return new Port(node, side, title, type, null, null);
     }
 
     public static Port of(Node node, PortSide side, String title, Holder<PropertyDefinition<?>> type) {
@@ -65,10 +68,10 @@ public record Port(Node node, PortSide side, Component title, Holder<PropertyDef
      */
     public static Port property(Node node, PortSide side, String propertyName,
                                 Holder<PropertyDefinition<?>> type) {
-        return new Port(node, side, Component.literal(propertyName), type, propertyName);
+        return new Port(node, side, Component.literal(propertyName), type, propertyName, null);
     }
 
-    /** {@code true} when this port is the input/output handle for a property. */
+    /** {@code true} when this port is the input handle for a property. */
     public boolean isProperty() {
         return this.propertyName != null;
     }

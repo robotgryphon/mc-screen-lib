@@ -1,5 +1,6 @@
-package dev.robotgryphon.screenlib.client.ui.widget;
+package dev.robotgryphon.screenlib.client.ui.widget.property;
 
+import dev.robotgryphon.screenlib.client.ui.widget.ContextMenu;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;

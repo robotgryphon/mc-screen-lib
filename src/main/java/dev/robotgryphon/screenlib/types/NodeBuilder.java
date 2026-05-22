@@ -4,6 +4,7 @@ import net.minecraft.core.Holder;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Fluent builder for {@link NodeDefinition} — the schema-level description
@@ -49,6 +50,24 @@ public class NodeBuilder {
 
     public NodeBuilder addOutput(String name, Holder<PropertyDefinition<?>> type) {
         return this.addOutput(new PortDefinition(name, type));
+    }
+
+    /**
+     * Add an output port that relays the current value of one of the
+     * node's own properties. The {@code linkedProperty} argument names
+     * which property on this node — typically also declared via
+     * {@link #addProperty} — supplies the value that wires from this
+     * port carry downstream.
+     *
+     * <p>Used by primitive nodes (Boolean, Number, etc.) where the
+     * editor inside the node sets a value and an output port exposes
+     * it. The data flow is one-way: changes to the property write
+     * through to anything wired off the linked output on the next
+     * render frame. The runtime side of the resolution lives in
+     * {@code NodeWidget.resolveUpstreamValue}.
+     */
+    public NodeBuilder addOutput(String name, Holder<PropertyDefinition<?>> type, String linkedProperty) {
+        return this.addOutput(new PortDefinition(name, type, Optional.of(linkedProperty)));
     }
 
     /**
