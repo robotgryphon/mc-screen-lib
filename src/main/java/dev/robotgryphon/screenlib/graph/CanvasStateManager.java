@@ -8,6 +8,7 @@ import dev.robotgryphon.screenlib.client.ui.widget.NodeWidget;
 import dev.robotgryphon.screenlib.types.PortDefinition;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -89,11 +90,39 @@ public final class CanvasStateManager {
             if (srcPortIdx < 0 || tgtPortIdx < 0) {
                 continue;
             }
+            // Names are written alongside indices so a future load can
+            // re-resolve the connection even if the node's port order
+            // has changed (e.g., a property added / removed between
+            // save and load shifted "Storage" from index 2 to index 1).
+            // Indices remain as a fallback for ports whose names happen
+            // to collide or have shifted, but the name lookup wins.
             connectionStates.add(new ConnectionState(
-                    srcIdx, srcPortIdx, tgtIdx, tgtPortIdx, c.color()));
+                    srcIdx, srcPortIdx, Optional.of(portLocalName(c.sourcePort())),
+                    tgtIdx, tgtPortIdx, Optional.of(portLocalName(c.targetPort())),
+                    c.color()));
         }
 
         return new CanvasState(nodeStates, connectionStates);
+    }
+
+    /**
+     * Local identifier for a port — the string the
+     * {@link ConnectionState} serializes so load can re-resolve the
+     * port even if its index in {@link Node#ports()} has shifted.
+     * Regular ports use their visible title (the same string the
+     * datapack's {@code "name"} JSON field carries — declared inputs
+     * have their port {@code title} built from that name verbatim);
+     * property ports use their bound property name. The two namespaces
+     * don't collide in practice — schemas use capitalized labels for
+     * regular ports ("Position", "Storage") and lower-case identifiers
+     * for property names ("value", "seed") — and even if they did, the
+     * side check on load disambiguates.
+     */
+    private static String portLocalName(Port port) {
+        if (port.isProperty()) {
+            return port.propertyName();
+        }
+        return port.title().getString();
     }
 
     /**
@@ -108,11 +137,18 @@ public final class CanvasStateManager {
      *       of whatever defaults the node constructor seeded, and add it
      *       to the canvas. Adding in order preserves the indices that
      *       {@link ConnectionState} entries reference.</li>
-     *   <li>For each {@link ConnectionState}, resolve the indexed
-     *       nodes / ports against the rebuilt graph. References that
-     *       fall outside (a missing node, a port index that doesn't
-     *       exist on the definition anymore) are dropped silently rather
-     *       than crashing the load.</li>
+     *   <li>For each {@link ConnectionState}, resolve the source / target
+     *       ports against the rebuilt graph — preferring the saved port
+     *       names (so a node-definition refactor that reordered or
+     *       added / removed ports doesn't relocate the wire to a
+     *       different port at the same index), falling back to the
+     *       saved indices for legacy saves that pre-date the name
+     *       fields. Each rehydrated connection is then re-validated
+     *       (source must be RIGHT, target must be LEFT, port types
+     *       must match) the same way {@link Canvas#connect} validates
+     *       at edit time; failures are dropped silently so a stale
+     *       wire from a previous schema doesn't poison the loaded
+     *       graph.</li>
      * </ol>
      */
     public static void loadState(Canvas canvas, CanvasState state,
@@ -142,12 +178,60 @@ public final class CanvasStateManager {
             if (!isValidIndex(cs.targetNodeIndex(), rebuilt.size())) continue;
             Node srcNode = rebuilt.get(cs.sourceNodeIndex()).node();
             Node tgtNode = rebuilt.get(cs.targetNodeIndex()).node();
-            if (!isValidIndex(cs.sourcePortIndex(), srcNode.ports().size())) continue;
-            if (!isValidIndex(cs.targetPortIndex(), tgtNode.ports().size())) continue;
-            Port srcPort = srcNode.ports().get(cs.sourcePortIndex());
-            Port tgtPort = tgtNode.ports().get(cs.targetPortIndex());
+
+            Port srcPort = resolvePort(srcNode, cs.sourcePortName(), cs.sourcePortIndex());
+            Port tgtPort = resolvePort(tgtNode, cs.targetPortName(), cs.targetPortIndex());
+            if (srcPort == null || tgtPort == null) continue;
+
+            // Same validation as {@link Canvas#connect}: source must be
+            // a RIGHT-side output, target must be a LEFT-side input,
+            // and both ports must agree on the registry-resolved type.
+            // A schema change between save and load that breaks any of
+            // these (e.g., a port flipped from input to property) gets
+            // the wire silently dropped here, so the loaded graph
+            // never carries an invalid connection.
+            if (srcPort.side() != PortSide.RIGHT) continue;
+            if (tgtPort.side() != PortSide.LEFT) continue;
+            if (srcPort.type().value() != tgtPort.type().value()) continue;
+
             canvas.addConnection(new Connection(srcNode, srcPort, tgtNode, tgtPort, cs.color()));
         }
+    }
+
+    /**
+     * Resolves a saved port reference to a live {@link Port} on
+     * {@code node}. Prefers name lookup — the durable identifier
+     * across node-definition changes — and falls back to the saved
+     * index when the name is absent (legacy save) or no port on the
+     * current node carries that name. Returns {@code null} when both
+     * lookups fail, signaling the connection should be dropped.
+     *
+     * <p>Name lookup keys off {@link Port#title()} for regular ports
+     * and {@link Port#propertyName()} for property ports, matching the
+     * encoding {@link #portLocalName} uses on save.
+     */
+    private static @Nullable Port resolvePort(Node node,
+                                              Optional<String> savedName,
+                                              int savedIndex) {
+        if (savedName.isPresent()) {
+            String name = savedName.get();
+            for (Port port : node.ports()) {
+                String portName = port.isProperty()
+                        ? port.propertyName()
+                        : port.title().getString();
+                if (name.equals(portName)) {
+                    return port;
+                }
+            }
+            // Saved name doesn't match anything on the current
+            // definition — fall through to the index lookup. Covers
+            // the case where a port was renamed but kept structurally
+            // the same; if THAT also fails the connection is dropped.
+        }
+        if (isValidIndex(savedIndex, node.ports().size())) {
+            return node.ports().get(savedIndex);
+        }
+        return null;
     }
 
     /**

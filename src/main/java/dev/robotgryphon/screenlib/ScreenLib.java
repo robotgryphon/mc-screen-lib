@@ -111,10 +111,22 @@ public class ScreenLib {
                 Component.translatable("property_type.minecraft.block_pos"),
                 Optional.empty()));
 
+        // Direction is a closed enum — there are exactly six concrete
+        // directions, so we register the type with that fixed value set
+        // baked in. Any property of type {@code minecraft:direction} now
+        // renders as a dropdown of those six, and any output / input
+        // declared as {@code direction} shares the same registry
+        // identity (the type-equality check in {@code Canvas.connect}
+        // uses reference identity, so two ports of "minecraft:direction"
+        // wire together naturally).
         CORE_PROPERTY_DEFINITIONS.register("direction", () -> new PropertyDefinition<>(
                 Direction.CODEC, COLOR_DIRECTION,
                 Component.translatable("property_type.minecraft.direction"),
-                Optional.empty()));
+                Optional.of(Direction.UP),
+                Optional.of(List.of(
+                        Direction.UP, Direction.DOWN,
+                        Direction.NORTH, Direction.SOUTH,
+                        Direction.WEST, Direction.EAST))));
 
         CORE_PROPERTY_DEFINITIONS.register("int", () -> new PropertyDefinition<>(
                 Codec.INT, COLOR_NUMBER,
@@ -209,6 +221,7 @@ public class ScreenLib {
                 Codec.BOOL, COLOR_BOOLEAN,
                 Component.translatable("property_type.minecraft.bool"),
                 Optional.of(false)));
+
     }
 
     public ScreenLib(IEventBus modBus) {

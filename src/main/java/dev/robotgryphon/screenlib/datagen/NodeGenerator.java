@@ -62,26 +62,32 @@ public class NodeGenerator extends DatapackBuiltinEntriesProvider {
                 .addOutput("z", intType)
                 .build());
 
-        // Direction — exposes each axis-aligned direction (and a wildcard) as a
-        // separate output, the way the mockup lays out a "constants" node.
+        // Direction — pick one of the six axis-aligned directions from a
+        // dropdown and emit it through a single typed output. Both the
+        // output port and the property's implicit input port reference
+        // the same {@code minecraft:direction} {@link PropertyDefinition}
+        // (which carries the allowed-value list + default registered in
+        // {@link ScreenLib}), so a wire from one Direction node's output
+        // to another Direction node's {@code value} input round-trips
+        // without a type mismatch. The output's
+        // {@link PortDefinition#linkedProperty} = {@code "value"} relays
+        // the property's current pick through to downstream consumers.
         ctx.register(nodeType("direction"), new NodeBuilder()
-                .addOutput("Any", direction)
-                .addOutput("Up", direction)
-                .addOutput("Down", direction)
-                .addOutput("North", direction)
-                .addOutput("South", direction)
-                .addOutput("West", direction)
-                .addOutput("East", direction)
+                .addOutput("direction", direction, "value")
+                .addProperty("value", direction)
                 .build());
 
-        // Resource Access (Items) — given a block position and a side, hand back
-        // the item-handler exposed by that face of the block. {@code Side} is
-        // optional so a node consumer can leave it unwired (falling back to
-        // a default face); the widget renders the unconnected side as a
-        // hollow type-colored ring.
+        // Resource Access (Items) — given a block position (and an optional
+        // direction the user picks from the property dropdown), hand back
+        // the item-handler exposed by that face of the block. The Side
+        // value lives inside the node body as a {@code minecraft:direction}
+        // property (dropdown over the six concrete directions) rather than
+        // as a left-side input port, since most users want to commit to a
+        // direction once and forget about it; wires can still drive the
+        // value through the property's implicit input port when needed.
         ctx.register(nodeType("resource_access_items"), new NodeBuilder()
                 .addInput("Position", blockPos)
-                .addInput("Side", direction, true)
+                .addProperty("Side", direction)
                 .addOutput("Storage", itemHandler)
                 .build());
 

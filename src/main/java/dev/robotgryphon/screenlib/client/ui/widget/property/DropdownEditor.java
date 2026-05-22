@@ -43,13 +43,19 @@ public final class DropdownEditor extends PropertyEditor {
     private static final int CHEVRON_HALF_WIDTH = 2;
 
     /**
-     * Current value shown in the trigger. Held as a plain {@link String}
-     * because the dropdown is currently gated to string-codec properties
-     * ({@link dev.robotgryphon.screenlib.types.PropertyDefinition}s with
-     * an {@code allowedValues} list). If that ever expands to other
-     * picker types, this becomes the natural point to broaden.
+     * Current value shown in the trigger, held as an opaque {@link Object}
+     * — the dropdown's display text comes from
+     * {@link Object#toString()}, so any value type whose
+     * {@code toString} produces a sensible label works (typically the
+     * codec's serialized form: a String for sampler names,
+     * {@link net.minecraft.core.Direction#toString} returning {@code "up"}
+     * for a {@link net.minecraft.core.Direction}, etc.). Picking up the
+     * raw object — rather than pre-stringifying at the host — keeps the
+     * value round-tripping through the {@link DropdownPopup}'s
+     * {@code onSelect} callback exactly as the property's
+     * {@link com.mojang.serialization.Codec} expects it.
      */
-    private String value;
+    private Object value;
 
     /**
      * Callback fired when the user clicks the trigger — typically the
@@ -61,13 +67,13 @@ public final class DropdownEditor extends PropertyEditor {
     private final Runnable onOpenRequested;
 
     public DropdownEditor(int x, int y, int width, int height,
-                          String value, Runnable onOpenRequested) {
+                          Object value, Runnable onOpenRequested) {
         super(x, y, width, height);
         this.value = value;
         this.onOpenRequested = onOpenRequested;
     }
 
-    public String getValue() {
+    public Object getValue() {
         return this.value;
     }
 
@@ -76,7 +82,7 @@ public final class DropdownEditor extends PropertyEditor {
      * from their render path so the popup's {@code onSelect} (or any
      * other property write) flows into the editor without rebuilding it.
      */
-    public void setValue(String value) {
+    public void setValue(Object value) {
         this.value = value;
     }
 
@@ -84,10 +90,14 @@ public final class DropdownEditor extends PropertyEditor {
     protected void extractWidgetRenderState(GuiGraphicsExtractor graphics,
                                             int mouseX, int mouseY, float partialTick) {
         // Defer to the existing static so the layout logic (chevron
-        // geometry, text baseline) stays in one place.
+        // geometry, text baseline) stays in one place. The static
+        // takes a plain string, so we stringify via toString here —
+        // for non-null values that's the codec's serialized form
+        // ({@code Direction.UP.toString() = "up"}, etc.).
+        String display = this.value == null ? "" : this.value.toString();
         render(graphics, Minecraft.getInstance().font,
                 getX(), getY(), getWidth(), getHeight(),
-                mouseX, mouseY, this.value, getAlpha());
+                mouseX, mouseY, display, getAlpha());
     }
 
     /**

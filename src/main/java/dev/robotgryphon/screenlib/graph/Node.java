@@ -151,6 +151,20 @@ public class Node {
      */
     private final int portBandHeight;
 
+    /**
+     * Max port count across the two sides — drives both the port band
+     * height and the per-port Y distribution. Caching it on the node
+     * lets {@link #portCenter} place every port (left or right) into
+     * the same shared row grid, so the i-th port on each side lines
+     * up vertically regardless of how many ports the OTHER side has.
+     * Without this shared index space, a 1-port side would center its
+     * single port while a 2-port side would stack two, and the lone
+     * port on the lighter side would end up between the busier side's
+     * two — visually unaligned. Zero when the node has no regular
+     * ports on either side.
+     */
+    private final int maxPortsPerSide;
+
     private int x;
     private int y;
     private int width;
@@ -209,7 +223,9 @@ public class Node {
         // ports map (and indirectly, port titles) for label-width measurement.
         Font font = Minecraft.getInstance().font;
         this.width = computeWidth(font, title, this.definition);
-        this.portBandHeight = computePortBandHeight(font, this.definition);
+        this.maxPortsPerSide = Math.max(
+                this.definition.inputs().size(), this.definition.outputs().size());
+        this.portBandHeight = computePortBandHeight(font, this.maxPortsPerSide);
         this.height = TITLE_BAR_HEIGHT + this.portBandHeight + this.propertyRegionHeight;
     }
 
@@ -326,8 +342,7 @@ public class Node {
      * directly under the title bar — visible as a large gap above the
      * first property row.
      */
-    private static int computePortBandHeight(Font font, NodeDefinition def) {
-        int maxPortsPerSide = Math.max(def.inputs().size(), def.outputs().size());
+    private static int computePortBandHeight(Font font, int maxPortsPerSide) {
         if (maxPortsPerSide == 0) {
             return 0;
         }
@@ -531,8 +546,13 @@ public class Node {
         if (index < 0) {
             throw new IllegalArgumentException("Port not on this node: " + port);
         }
-        int count = sidePorts.size();
-        float t = (index + 1f) / (count + 1f);
+        // Distribute against the busier side's count, not just this
+        // side's own count — that way the i-th port on each side lands
+        // at the same Y, so a 1-output node with 2 inputs has its
+        // output aligned with the first input rather than centered
+        // between them. The lighter side simply leaves its lower rows
+        // empty.
+        float t = (index + 1f) / (this.maxPortsPerSide + 1f);
 
         // Port band sits directly under the title bar and above the
         // property region — properties are pushed down by the same

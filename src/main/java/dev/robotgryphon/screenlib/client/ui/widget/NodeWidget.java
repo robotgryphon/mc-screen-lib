@@ -449,16 +449,16 @@ public class NodeWidget extends AbstractWidget {
 
     /**
      * True if a property's registered {@link PropertyDefinition} declares
-     * a fixed value set and the property's value type is something the
-     * dropdown editor knows how to render. Today that's just String —
-     * other dropdown-able types (enums, integers picked from a known
-     * set) can extend this check as they show up. Kept around because
-     * {@link PropertyRow} consults it at construction time to pick the
-     * right editor subclass for the row.
+     * a fixed value set. The {@link DropdownEditor} / {@link DropdownPopup}
+     * pair now display values via {@link Object#toString()}, so any
+     * value type whose {@code toString} returns a sensible label is
+     * usable here — strings, enums like {@link net.minecraft.core.Direction},
+     * boxed ints, etc. The presence of {@code allowedValues} alone is
+     * enough; the codec type is the property's concern, not the
+     * dropdown's.
      */
     private static boolean isDropdownProperty(PortDefinition prop) {
-        PropertyDefinition<?> def = prop.type().value();
-        return def.codec() == Codec.STRING && def.allowedValues().isPresent();
+        return prop.type().value().allowedValues().isPresent();
     }
 
     /**
@@ -569,15 +569,13 @@ public class NodeWidget extends AbstractWidget {
         PortDefinition prop = focused.prop();
 
         PropertyDefinition<?> def = prop.type().value();
-        // The dropdown is currently String-only, gated by isDropdownProperty.
-        // The unchecked cast is the standard shape — Codec<?> erases to a
-        // String at runtime when the codec is Codec.STRING.
-        @SuppressWarnings("unchecked")
-        List<String> options = (List<String>) def.allowedValues().orElseThrow();
+        // {@link DropdownPopup} now renders entries via
+        // {@link Object#toString} so the raw {@code List<?>} flows
+        // straight through — no codec-specific narrowing needed.
+        List<?> options = def.allowedValues().orElseThrow();
 
         String name = prop.name();
-        Object current = this.node.propertyValue(name);
-        String currentValue = current instanceof String s ? s : "";
+        Object currentValue = this.node.propertyValue(name);
 
         int editorWidth = Node.PROPERTY_VALUE_MIN_WIDTH;
         int editorHeight = Node.PROPERTY_PITCH;
@@ -915,14 +913,16 @@ public class NodeWidget extends AbstractWidget {
                         next -> NodeWidget.this.node.setPropertyValue(propName, next));
             }
             if (isDropdownProperty(prop)) {
+                // Pass the raw current value (or null) — the dropdown
+                // renders via {@link Object#toString}, so we don't need
+                // to coerce to String at this layer anymore.
                 Object current = NodeWidget.this.node.propertyValue(propName);
-                String seed = current instanceof String s ? s : "";
                 // The dropdown's click hook just marks the property as
                 // focused on the node — the popup itself is built by
                 // {@link NodeWidget#buildFocusedPropertyPopup} from the
                 // node's focus state, so the canvas can position it in
                 // screen-space above all other nodes.
-                return new DropdownEditor(0, 0, editorW, editorH, seed,
+                return new DropdownEditor(0, 0, editorW, editorH, current,
                         () -> NodeWidget.this.node.setFocusedPropertyName(propName));
             }
             if (codec == Codec.BOOL) {
@@ -959,7 +959,11 @@ public class NodeWidget extends AbstractWidget {
             if (this.editor instanceof NumericPropertyEditor n) {
                 n.setValue(NodeWidget.this.currentNumericValue(prop));
             } else if (this.editor instanceof DropdownEditor d) {
-                d.setValue(current instanceof String s ? s : "");
+                // Pass the raw value through — the dropdown renders via
+                // {@link Object#toString}, so any codec's value type
+                // works (string options, {@link net.minecraft.core.Direction}
+                // enum values, …).
+                d.setValue(current);
             } else if (this.editor instanceof BooleanPropertyEditor b) {
                 b.setValue(current instanceof Boolean v && v);
             }
@@ -1039,9 +1043,12 @@ public class NodeWidget extends AbstractWidget {
 
     /**
      * Finds an active connection whose target is the named property's
-     * input port on this node. Returns {@code null} when nothing is wired
-     * to that input, or when the widget is detached from a canvas (no
-     * connection list to consult).
+     * input port on this widget's node. Returns {@code null} when
+     * nothing is wired to that input, or when the widget is detached
+     * from a canvas (no connection list to consult). Cross-node
+     * chain-walking lives on {@link Canvas#resolveUpstreamValue} now;
+     * this method only services widget-local "is this row driven?"
+     * checks.
      */
     private @Nullable Connection findInputConnection(String propertyName) {
         if (this.canvas == null) {
@@ -1060,51 +1067,30 @@ public class NodeWidget extends AbstractWidget {
     }
 
     /**
-     * Best-effort "what value is flowing into this input?" lookup.
-     * Values exit a node only through regular output ports — properties
-     * no longer have right-side handles of their own — so the resolution
-     * looks for an output port that declares a {@code linkedProperty},
-     * and reads through to that property's current value on the source
-     * node. Outputs without a linked property carry no value (they're
-     * pure type connectors) so a wire from one renders as
-     * "connected but undriven" (the red-label state).
+     * "What value is flowing into this input?" — delegates the chain
+     * walk to {@link Canvas#resolveUpstreamValue} (the canonical
+     * model-side resolution, used by both display and the
+     * capture-on-disconnect path) and applies a display-only
+     * typed-zero fallback when the chain bottoms out at {@code null}.
      *
-     * <p>Resolution is intentionally non-recursive: if the upstream
-     * property is itself driven by yet another wire, we still look at
-     * its own local value rather than chasing the chain. Chained
-     * evaluation is a follow-up once the graph has real semantics for
-     * what an output "produces"; for now this is purely a visual
-     * reflection.
-     *
-     * <p>When the source's property slot is null — typically because its
-     * registered {@code PropertyDefinition} declared no default — the
-     * lookup mirrors the editor's own null fallback (see
-     * {@link #currentNumericValue}) so the driven row displays the same
-     * zero value the source's editor would. Without this, the source
-     * could show {@code "0"} on its own row while the target showed an
-     * empty red-label "undriven" state, making it look like the wire was
-     * broken when it was working fine.
+     * <p>The fallback exists so a driven numeric row always renders
+     * something rather than an empty red-label "undriven" state when
+     * the source's property is unset but the source's own editor
+     * would still show {@code 0}. Strings / bools / non-numeric types
+     * intentionally fall through to null: there's no obvious zero,
+     * and an empty render correctly signals "this wire isn't
+     * delivering anything yet."
      */
     private @Nullable Object resolveUpstreamValue(Connection connection) {
-        Port source = connection.sourcePort();
-        String linkedProp = source.linkedPropertyName();
-        if (linkedProp == null) {
-            // Source is a plain output port (or, defensively, something
-            // else that has no property to relay) — no value to report.
-            return null;
-        }
-        Object value = source.node().propertyValue(linkedProp);
+        if (this.canvas == null) return null;
+        Object value = this.canvas.resolveUpstreamValue(connection);
         if (value != null) {
             return value;
         }
-        Codec<?> codec = source.type().value().codec();
+        Codec<?> codec = connection.sourcePort().type().value().codec();
         if (codec == Codec.INT) return 0;
         if (codec == Codec.FLOAT) return 0f;
         if (codec == Codec.DOUBLE) return 0.0;
-        // String / bool / non-numeric types intentionally fall through to
-        // null: there's no obvious "zero" string or bool to show, and a
-        // missing source value on those should keep reading as a wiring
-        // issue (red label) rather than silently substituting "".
         return null;
     }
 

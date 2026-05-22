@@ -141,7 +141,113 @@ public class Canvas {
     }
 
     public void removeConnection(Connection connection) {
+        // Latch the value the wire was delivering into the target's
+        // property slot before dropping the wire — the user's intent
+        // when they unplug a driven input is "keep what I last set,"
+        // not "fall back to whatever the schema default was." Done
+        // here so every disconnect path that comes through this
+        // method preserves the value uniformly.
+        captureUpstreamIntoProperty(connection);
         this.connections.remove(connection);
+    }
+
+    /**
+     * If {@code connection}'s target is a property port, resolves the
+     * value the wire was last delivering and writes it into the
+     * target node's local property slot, gated by the property's
+     * declared {@code allowedValues} when present.
+     *
+     * <p>The capture-on-disconnect behavior makes a disconnect read
+     * like "freeze the value that was flowing in" rather than "snap
+     * back to the schema default" — so a Direction wired to a Side
+     * input that's been driven to {@code north} stays at {@code north}
+     * after the user unplugs it, instead of reverting to the default
+     * {@code up}. No-op for non-property targets (regular input ports
+     * have no local storage), for connections whose source can't
+     * supply a value (the {@link #resolveUpstreamValue} chain bottoms
+     * out at {@code null}), and for values rejected by an
+     * {@code allowedValues} membership check on the target's
+     * {@link PropertyDefinition}.
+     */
+    private void captureUpstreamIntoProperty(Connection connection) {
+        Port targetPort = connection.targetPort();
+        if (!targetPort.isProperty()) return;
+        String propName = targetPort.propertyName();
+        if (propName == null) return;
+
+        Object value = resolveUpstreamValue(connection);
+        if (value == null) return;
+
+        PropertyDefinition<?> def = targetPort.type().value();
+        if (def.allowedValues().isPresent()
+                && !def.allowedValues().get().contains(value)) {
+            // The wire was delivering a value the target's property
+            // type wouldn't normally accept (a Direction outside the
+            // six-direction set, etc.). Drop it on the floor rather
+            // than corrupt the property with an unrepresentable
+            // entry.
+            return;
+        }
+        connection.target().setPropertyValue(propName, value);
+    }
+
+    /**
+     * Walks the wire chain backwards from {@code connection} to find
+     * the value flowing through it. Same algorithm the widget layer
+     * uses for driven-display rendering — at each hop, if the source
+     * node's linked property has its OWN inbound wire, recurse into
+     * that wire's source; otherwise return the source node's stored
+     * property value. A {@link java.util.HashSet} of visited source
+     * ports terminates any accidental cycle with a {@code null}
+     * result.
+     *
+     * <p>Returns {@code null} when the chain bottoms out at an output
+     * with no linked property, a node whose linked property is unset,
+     * or a cycle. Callers that need a typed fallback (the renderer
+     * uses a zero of the appropriate numeric type so a driven row
+     * always shows something) apply it on top of this method's
+     * return value.
+     */
+    public @Nullable Object resolveUpstreamValue(Connection connection) {
+        return resolveUpstreamValue(connection, new java.util.HashSet<>());
+    }
+
+    private @Nullable Object resolveUpstreamValue(Connection connection,
+                                                  java.util.Set<Port> visited) {
+        Port source = connection.sourcePort();
+        if (!visited.add(source)) {
+            return null;
+        }
+        String linkedProp = source.linkedPropertyName();
+        if (linkedProp == null) return null;
+        Node sourceNode = source.node();
+
+        Connection upstream = findInboundPropertyConnection(sourceNode, linkedProp);
+        if (upstream != null) {
+            return resolveUpstreamValue(upstream, visited);
+        }
+        return sourceNode.propertyValue(linkedProp);
+    }
+
+    /**
+     * Looks for an active connection whose target is the named
+     * property's input port on {@code node}. Returns {@code null}
+     * when no such wire exists. Used by {@link #resolveUpstreamValue}
+     * to detect when the source of a wire is itself driven, so the
+     * chain walk can recurse instead of reading a stale local
+     * property value.
+     */
+    private @Nullable Connection findInboundPropertyConnection(Node node, String propertyName) {
+        for (Connection connection : this.connections) {
+            Port target = connection.targetPort();
+            if (target.node() != node) continue;
+            if (!target.isProperty()) continue;
+            if (target.side() != PortSide.LEFT) continue;
+            if (propertyName.equals(target.propertyName())) {
+                return connection;
+            }
+        }
+        return null;
     }
 
     /**
@@ -157,12 +263,29 @@ public class Canvas {
         if (!this.nodes.remove(widget)) {
             return;
         }
-        Node target = widget.node();
+        Node removed = widget.node();
         // Drop any wires that touched this node on either side. Using the
         // model-level Node identity (not the widget) so this works for
         // both source and target sides — Connection records hold Nodes,
         // not NodeWidgets.
-        this.connections.removeIf(c -> c.source() == target || c.target() == target);
+        //
+        // For wires whose SOURCE is the removed node, capture the last
+        // value into the downstream target's property before dropping
+        // the wire — same "freeze the value" intent the user gets when
+        // they unplug a wire manually. Wires whose TARGET is the
+        // removed node skip the capture (writing into a node that's
+        // about to disappear is pointless).
+        var it = this.connections.iterator();
+        while (it.hasNext()) {
+            Connection c = it.next();
+            boolean sourceMatch = c.source() == removed;
+            boolean targetMatch = c.target() == removed;
+            if (!sourceMatch && !targetMatch) continue;
+            if (sourceMatch && !targetMatch) {
+                captureUpstreamIntoProperty(c);
+            }
+            it.remove();
+        }
         widget.setCanvas(null);
     }
 
