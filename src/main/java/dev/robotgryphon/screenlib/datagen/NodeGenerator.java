@@ -93,11 +93,12 @@ public class NodeGenerator extends DatapackBuiltinEntriesProvider {
 
         // Tree Cutter Upgrade — a sink-style node: it consumes two item handles
         // (where to pull tools from, where to push drops to) and produces nothing.
-        // The drops-output sink is optional — leaving it unwired makes the
-        // cutter discard drops, which the node falls back to by default.
+        // Both inputs are required — the cutter has nowhere to source tools and
+        // nowhere to deposit drops without them, so leaving either unwired is
+        // a configuration error that validation should surface.
         ctx.register(nodeType("tree_cutter_upgrade"), new NodeBuilder()
                 .addInput("Tools", itemHandler)
-                .addInput("Drops", itemHandler, true)
+                .addInput("Drops", itemHandler)
                 .build());
 
         // Sampler — exercises the property-row layout the way the KSampler

@@ -597,10 +597,25 @@ public class CanvasWidget extends AbstractWidget {
         int shadowPad = dropShadow
                 ? Math.max(2, Math.round(NodeWidget.NODE_CORNER_RADIUS * this.viewport.zoom() * 2f))
                 : 0;
-        int leftPad = basePad + shadowPad;
-        int topPad = basePad + shadowPad;
-        int rightPad = basePad + shadowPad;
-        int bottomPad = basePad + shadowPad;
+        // A non-zero glow on any entry in this batch needs the same
+        // kind of breathing room as the shadow does — same SDF, just
+        // centered with a shorter blur. Use the corner-radius scale
+        // factor as a conservative upper bound on the glow's extent
+        // so the fade-out has somewhere to go.
+        boolean anyGlow = false;
+        for (NodeWidget widget : nodes) {
+            if (widget.hasVisibleGlow()) {
+                anyGlow = true;
+                break;
+            }
+        }
+        int glowPad = anyGlow
+                ? Math.max(2, Math.round(NodeWidget.NODE_CORNER_RADIUS * this.viewport.zoom()))
+                : 0;
+        int leftPad = basePad + Math.max(shadowPad, glowPad);
+        int topPad = basePad + Math.max(shadowPad, glowPad);
+        int rightPad = basePad + Math.max(shadowPad, glowPad);
+        int bottomPad = basePad + Math.max(shadowPad, glowPad);
         minX -= leftPad; minY -= topPad;
         maxX += rightPad; maxY += bottomPad;
         ScreenRectangle textureBounds = new ScreenRectangle(minX, minY, maxX - minX, maxY - minY);
@@ -614,9 +629,16 @@ public class CanvasWidget extends AbstractWidget {
         // 1 scaled pixel of AA falloff — enough to soften the edge
         // without bleeding into neighboring rows.
         float featherScaled = 1f;
-        // 1 canvas pixel of border thickness, then through the same
-        // zoom * guiScale conversion as the radius.
-        float borderThicknessScaled = 1f * this.viewport.zoom() * guiScale;
+        // Half a canvas pixel of border thickness, then through the
+        // same zoom * guiScale conversion as the radius. Lighter than
+        // a full canvas pixel so the outline reads as a delicate ring
+        // around the body rather than a hard frame, and so the
+        // invalid-node brick-red recolor blends smoothly into the
+        // outer red glow instead of stacking a thick band on top of
+        // a soft halo. Floored at one scaled pixel so the AA feather
+        // still has a real edge to sample against at extreme zoom-outs.
+        float borderThicknessScaled = Math.max(1f,
+                0.5f * this.viewport.zoom() * guiScale);
 
         // Second pass: build per-node entries relative to the texture origin.
         List<NodeBackgroundUniform.Entry> entries = new ArrayList<>(nodes.size());

@@ -14,9 +14,9 @@ import java.util.function.Supplier;
  *
  * <p>One uniform write covers every node in a single PiP pass — the
  * shader iterates {@link #entries} per fragment to figure out which
- * node (if any) it belongs to. Per-node data is packed across five
- * parallel arrays (bounds + body / title / border colors + title-bar
- * extras) so the GLSL side can pull all attributes via one index.
+ * node (if any) it belongs to. Per-node data is packed across six
+ * parallel arrays (bounds + body / title / border colors + extras +
+ * glow color) so the GLSL side can pull all attributes via one index.
  *
  * <p>Array storage is always {@link #MAX_NODES} slots wide regardless
  * of how many nodes are in the batch — std140 arrays have a fixed
@@ -52,6 +52,14 @@ public record NodeBackgroundUniform(int textureWidth, int textureHeight,
      * backgrounds and editor pills want. The port batch sets per-entry
      * values so each hovered port can animate its size and halo
      * thickness independently of the rest of the batch.
+     *
+     * <p>{@code glowColor} carries an optional soft outer glow drawn
+     * around the entry, copied from the drop-shadow approach but with
+     * no offset and a shorter blur — used for visual states like
+     * "this node failed validation" where the consumer wants to call
+     * attention to a node without altering its body. An alpha of zero
+     * (the default from the convenience constructors) disables the
+     * glow entirely so existing call sites pay no cost.
      */
     public record Entry(Vector4fc bounds,
                         Vector4fc bodyColor,
@@ -60,12 +68,16 @@ public record NodeBackgroundUniform(int textureWidth, int textureHeight,
                         float titleHeight,
                         boolean dropShadow,
                         float cornerRadiusOverride,
-                        float borderThicknessOverride) {
+                        float borderThicknessOverride,
+                        Vector4fc glowColor) {
+
+        /** Transparent — the shader treats {@code glowColor.a <= 0} as "no glow." */
+        private static final Vector4fc NO_GLOW = new org.joml.Vector4f(0f, 0f, 0f, 0f);
 
         /**
          * Six-arg convenience — keeps existing callers source-compatible.
-         * Defaults the per-entry overrides to {@code 0}, which the
-         * shader treats as "fall back to the batch-shared params."
+         * Defaults the per-entry overrides to {@code 0} (use shared
+         * params) and the glow to transparent (off).
          */
         public Entry(Vector4fc bounds,
                      Vector4fc bodyColor,
@@ -73,7 +85,24 @@ public record NodeBackgroundUniform(int textureWidth, int textureHeight,
                      Vector4fc borderColor,
                      float titleHeight,
                      boolean dropShadow) {
-            this(bounds, bodyColor, titleColor, borderColor, titleHeight, dropShadow, 0f, 0f);
+            this(bounds, bodyColor, titleColor, borderColor, titleHeight, dropShadow, 0f, 0f, NO_GLOW);
+        }
+
+        /**
+         * Eight-arg convenience — keeps the port-batch call sites that
+         * already pass corner / border overrides source-compatible.
+         * Defaults the glow to transparent.
+         */
+        public Entry(Vector4fc bounds,
+                     Vector4fc bodyColor,
+                     Vector4fc titleColor,
+                     Vector4fc borderColor,
+                     float titleHeight,
+                     boolean dropShadow,
+                     float cornerRadiusOverride,
+                     float borderThicknessOverride) {
+            this(bounds, bodyColor, titleColor, borderColor, titleHeight, dropShadow,
+                    cornerRadiusOverride, borderThicknessOverride, NO_GLOW);
         }
     }
 
@@ -82,8 +111,8 @@ public record NodeBackgroundUniform(int textureWidth, int textureHeight,
     /** Hard cap on nodes per batch — must match {@code MAX_NODES} in the shader. */
     public static final int MAX_NODES = 64;
 
-    /** Five parallel arrays of vec4, plus two header vec4s ({@code size}, {@code params}). */
-    private static final int VEC4_COUNT = 2 + 5 * MAX_NODES;
+    /** Six parallel arrays of vec4, plus two header vec4s ({@code size}, {@code params}). */
+    private static final int VEC4_COUNT = 2 + 6 * MAX_NODES;
 
     public static final Supplier<DynamicUniformStorage<NodeBackgroundUniform>> STORAGE =
             RenderPipelineUniformsStorage.register(NAME + " UBO", 2, buildSizeCalculator());
@@ -154,6 +183,17 @@ public record NodeBackgroundUniform(int textureWidth, int textureHeight,
                 Entry e = entries.get(i);
                 b.putVec4(e.titleHeight(), e.dropShadow() ? 1f : 0f,
                         e.cornerRadiusOverride(), e.borderThicknessOverride());
+            } else {
+                b.putVec4(0f, 0f, 0f, 0f);
+            }
+        }
+        // glowColors[]: rgba 0..1. alpha <= 0 → no glow (the shader's
+        // bail-out condition). Carried in its own parallel array so the
+        // existing four color arrays stay untouched and call sites that
+        // don't want a glow don't pay any per-entry packing cost.
+        for (int i = 0; i < MAX_NODES; i++) {
+            if (i < n) {
+                b.putVec4(entries.get(i).glowColor());
             } else {
                 b.putVec4(0f, 0f, 0f, 0f);
             }

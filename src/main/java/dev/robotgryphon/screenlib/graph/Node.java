@@ -1,5 +1,7 @@
 package dev.robotgryphon.screenlib.graph;
 
+import com.mojang.serialization.DataResult;
+import dev.robotgryphon.screenlib.graph.validation.GraphValidator;
 import dev.robotgryphon.screenlib.types.NodeDefinition;
 import dev.robotgryphon.screenlib.types.PortDefinition;
 import net.minecraft.client.Minecraft;
@@ -186,6 +188,19 @@ public class Node {
      * tint at runtime; persistence rounds through the canvas codec.
      */
     private @Nullable Integer tintColor;
+
+    /**
+     * The canvas this node is currently a member of, installed by
+     * {@link Canvas#addNode}. Null while the node is detached (e.g.,
+     * inside an Add Node preview, between load steps in
+     * {@code CanvasStateManager.loadState}, or before being added at
+     * all). Used by {@link #validate()} to push its result back to
+     * the owning canvas and to look up the canvas's current
+     * connection list. Mirrors the widget's own canvas back-reference
+     * — both are kept in sync by {@link Canvas#addNode} so the data
+     * model and the view layer agree on parentage.
+     */
+    private @Nullable Canvas canvas;
 
     public Node(Holder<NodeDefinition> definition, Component title, int x, int y) {
         this.definitionHolder = definition;
@@ -394,12 +409,31 @@ public class Node {
      * {@link dev.robotgryphon.screenlib.types.PropertyDefinition} — the
      * node itself stores values type-erased so it can host any property
      * kind without generic gymnastics.
+     *
+     * <p>When the node is currently attached to a canvas, this also
+     * triggers {@link #validate()} so the canvas sees an up-to-date
+     * status after every input change. The widget layer's property
+     * editors and the canvas-state load path both route through here,
+     * so attaching the validation hook at this single site covers
+     * every user-visible input mutation. The load path doesn't pay
+     * for this — properties are applied before {@code Canvas.addNode}
+     * installs the back-reference, so {@link #canvas} is still null
+     * and the call short-circuits.
      */
     public void setPropertyValue(String name, @Nullable Object value) {
         if (value == null) {
             this.propertyValues.remove(name);
         } else {
             this.propertyValues.put(name, value);
+        }
+        if (this.canvas != null) {
+            this.validate();
+            // A property change on this node can alter what downstream
+            // nodes resolve through any linked-property output on us,
+            // so propagate the revalidation through the wire chain.
+            // Cheap when no such wires exist; bounded by the visited
+            // set when they do.
+            this.canvas.revalidateDownstreamOf(this);
         }
     }
 
@@ -433,6 +467,57 @@ public class Node {
      */
     public void setFocusedPropertyName(@Nullable String name) {
         this.focusedPropertyName = name;
+    }
+
+    // -- Canvas membership / self-validation -------------------------------
+
+    /**
+     * The canvas this node currently belongs to, or {@code null} if
+     * the node is detached. Installed by {@link Canvas#addNode} and
+     * cleared by {@link Canvas#removeNode} / {@link Canvas#clear};
+     * consumers shouldn't normally write through this.
+     */
+    public @Nullable Canvas canvas() {
+        return this.canvas;
+    }
+
+    /**
+     * Used by {@link Canvas} to keep the node's parent reference in
+     * sync as it's added to / removed from a canvas. Public so the
+     * canvas (in a different package, even though it isn't) can wire
+     * it; consumers placing nodes go through {@code Canvas.addNode}
+     * rather than calling this directly.
+     */
+    public void setCanvas(@Nullable Canvas canvas) {
+        this.canvas = canvas;
+    }
+
+    /**
+     * Re-runs this node's validity check and submits the result to
+     * the parent canvas. Called automatically after any mutation that
+     * could change the answer:
+     * <ul>
+     *   <li>Local input changes — {@link #setPropertyValue} dispatches here.</li>
+     *   <li>Connection changes — {@link Canvas#connect},
+     *       {@link Canvas#removeConnection}, {@link Canvas#removeNode},
+     *       and {@link Canvas#addConnection} all dispatch here on the
+     *       affected target node (and, for {@code removeNode}, on
+     *       every neighbor that lost a wire).</li>
+     * </ul>
+     *
+     * <p>When the node is detached from any canvas, the validation
+     * still runs (property-local checks) but there's no canvas to
+     * submit to; the returned {@link DataResult} is the only output
+     * in that case.
+     */
+    public DataResult<Node> validate() {
+        DataResult<Node> result = this.canvas != null
+                ? GraphValidator.validateNodeInGraph(this, this.canvas)
+                : GraphValidator.validateNode(this);
+        if (this.canvas != null) {
+            this.canvas.submitValidity(this, result);
+        }
+        return result;
     }
 
     // -- Layout state ------------------------------------------------------

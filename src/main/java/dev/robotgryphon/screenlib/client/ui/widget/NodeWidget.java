@@ -68,6 +68,28 @@ public class NodeWidget extends AbstractWidget {
     private static final int TITLE_BAR_COLOR = 0xFF3A3A45;
 
     /**
+     * Suggested ARGB glow color for nodes flagged as invalid by
+     * {@link dev.robotgryphon.screenlib.graph.validation.GraphValidator}.
+     * The alpha drives the visual intensity, and at {@code ~0.6} alpha
+     * paired with the shader's short blur radius the result reads as a
+     * subtle red halo around the node rather than a hard red ring — the
+     * "short but subtle" target. Exposed as a constant so consumers
+     * who wire their validator results to the visual layer don't have
+     * to invent their own color and stay consistent across screens.
+     */
+    public static final int INVALID_GLOW_COLOR = 0x99FF4D4D;
+
+    /**
+     * Brick-red outline color used in place of {@link #BORDER_COLOR}
+     * when the canvas has flagged the node invalid. Sits in the same
+     * hue family as {@link #INVALID_GLOW_COLOR} but darker and fully
+     * opaque so the border reads as a continuation of the outer glow
+     * — the soft red halo gradually transitions into the saturated
+     * red ring instead of crossing a visible color step.
+     */
+    private static final int INVALID_BORDER_COLOR = 0xFFA13838;
+
+    /**
      * Fraction of the way from a port's base color toward white that
      * its outline ring sits at. Tuned high enough that the outline
      * reads as a clearly distinct "halo" against the inner fill at any
@@ -179,6 +201,25 @@ public class NodeWidget extends AbstractWidget {
     private double grabOffsetY;
 
     /**
+     * Optional ARGB glow color drawn around the node body — same SDF
+     * the drop shadow uses, but centered on the node and with a shorter
+     * blur radius (see {@code GLOW_BLUR_FACTOR} in the fragment shader).
+     * {@code null} means "no glow" and the shader bails on the
+     * alpha-zero check, so a widget that never gets flagged pays
+     * nothing per frame.
+     *
+     * <p>View-layer state, not persisted. This field is the
+     * <em>manual</em> override slot — consumers writing here use it
+     * for things like a search-result highlight, "selected" cue, or
+     * mid-tutorial breadcrumb. When this slot is null,
+     * {@link #effectiveGlowColor} falls back to the canvas's
+     * validation state so any node the canvas has flagged invalid
+     * automatically glows in {@link #INVALID_GLOW_COLOR} without
+     * the consumer having to wire it themselves.
+     */
+    private @Nullable Integer glowColor;
+
+    /**
      * Vertical layout frame that owns the property region's rows. Each
      * child is a {@link PropertyRow} sized to one row pitch tall, and
      * the layout's height matches {@link Node#propertyRegionHeight()}
@@ -262,6 +303,50 @@ public class NodeWidget extends AbstractWidget {
     }
 
     /**
+     * Current glow color (ARGB) drawn around this node, or {@code null}
+     * when no glow is active. {@link #INVALID_GLOW_COLOR} is a
+     * convenient value to pass for "this node failed validation."
+     */
+    public @Nullable Integer glowColor() {
+        return this.glowColor;
+    }
+
+    /**
+     * Sets the glow color drawn around this node, or {@code null} to
+     * clear it. Forwarded into the node-background shader's per-entry
+     * glow slot on the next render frame; the alpha of the color
+     * controls visual intensity (the shader multiplies it through the
+     * SDF falloff), so a half-transparent color produces a softer
+     * halo than an opaque one.
+     *
+     * <p>This is the <em>manual</em> override slot. Passing {@code null}
+     * doesn't disable glow outright — it just removes the consumer's
+     * override, after which {@link #effectiveGlowColor} falls back to
+     * the canvas's validation state and a flagged-invalid node still
+     * glows red by default.
+     */
+    public void setGlowColor(@Nullable Integer color) {
+        this.glowColor = color;
+    }
+
+    /**
+     * Glow color the renderer should actually use for this node on the
+     * next frame. The manual override from {@link #setGlowColor} takes
+     * priority; when it's null, the widget falls back to
+     * {@link #INVALID_GLOW_COLOR} for any node the parent canvas has
+     * flagged invalid (see {@link Canvas#isInvalid}). Returns
+     * {@code null} when neither source supplies a color, meaning the
+     * shader sees a transparent glow and emits no halo.
+     */
+    public @Nullable Integer effectiveGlowColor() {
+        if (this.glowColor != null) return this.glowColor;
+        if (this.canvas != null && this.canvas.isInvalid(this.node)) {
+            return INVALID_GLOW_COLOR;
+        }
+        return null;
+    }
+
+    /**
      * Screen-space bounds for this node under {@code viewport}'s current
      * pan / zoom. Used by {@code CanvasWidget} when computing the
      * bounding box for the batched node-background PiP texture.
@@ -312,7 +397,21 @@ public class NodeWidget extends AbstractWidget {
         boolean hovered = this.isHovered() || this.dragging;
         int bodyArgb = hovered ? BACKGROUND_HOVER_COLOR : BACKGROUND_COLOR;
         int titleArgb = TITLE_BAR_COLOR;
-        int borderArgb = this.dragging ? BORDER_DRAG_COLOR : BORDER_COLOR;
+        // Border-color priority: drag > invalid > normal. Drag is a
+        // momentary user action and should always confirm the grab
+        // visually, even on a node that's already flagged invalid; the
+        // invalid red border returns the moment the drag ends. The
+        // "invalid" check goes through the canvas's validation log
+        // rather than the effective glow color so a consumer-set
+        // glow (e.g., a search highlight) doesn't recolor the border.
+        int borderArgb;
+        if (this.dragging) {
+            borderArgb = BORDER_DRAG_COLOR;
+        } else if (this.canvas != null && this.canvas.isInvalid(this.node)) {
+            borderArgb = INVALID_BORDER_COLOR;
+        } else {
+            borderArgb = BORDER_COLOR;
+        }
 
         // Optional per-node tint — blended into the body and title at
         // a fixed strength so the node still reads as a node (dark
@@ -327,13 +426,40 @@ public class NodeWidget extends AbstractWidget {
 
         float titleHeight = Node.TITLE_BAR_HEIGHT * viewport.zoom() * guiScale;
 
+        // Per-entry glow color — alpha 0 means the shader paints no
+        // glow, so the no-glow case is free at the GPU level. The
+        // effective color folds in both the consumer's manual override
+        // and the canvas's automatic invalid-state fallback, so an
+        // unflagged node with no override gets the cheap path and an
+        // invalid node automatically gets the red halo.
+        Integer effectiveGlow = this.effectiveGlowColor();
+        Vector4fc glowVec = effectiveGlow != null
+                ? argbToVec(effectiveGlow)
+                : new Vector4f(0f, 0f, 0f, 0f);
+
         return new NodeBackgroundUniform.Entry(
                 new Vector4f(relX, relY, w, h),
                 argbToVec(bodyArgb),
                 argbToVec(titleArgb),
                 argbToVec(borderArgb),
                 titleHeight,
-                dropShadow);
+                dropShadow,
+                0f, 0f,
+                glowVec);
+    }
+
+    /**
+     * Whether this widget will paint a non-trivial glow on its next
+     * render — i.e., {@link #effectiveGlowColor} resolves to a color
+     * whose alpha channel is greater than zero. Used by the canvas
+     * widget to decide whether the PiP texture rectangle needs extra
+     * padding so the glow's fade-out has room to render. Covers both
+     * a consumer-set manual glow and the canvas's automatic
+     * invalid-state fallback.
+     */
+    public boolean hasVisibleGlow() {
+        Integer color = this.effectiveGlowColor();
+        return color != null && ((color >>> 24) & 0xFF) > 0;
     }
 
     /**

@@ -16,6 +16,13 @@ const float SHADOW_OFFSET_Y_FACTOR = 0.6;
 const float SHADOW_BLUR_FACTOR     = 1.0;
 const float SHADOW_ALPHA           = 0.45;
 
+// Glow visual constants. The glow is a centered (no offset) version of
+// the drop shadow with a shorter blur radius — same SDF, same falloff
+// shape, just tighter and tinted by a per-node color. "Short" here is
+// {@code GLOW_BLUR_FACTOR < SHADOW_BLUR_FACTOR}; the color and the
+// intensity (via its alpha) come from {@code nodeGlowColors[i]}.
+const float GLOW_BLUR_FACTOR = 0.6;
+
 layout(std140) uniform NodeBatch {
     // x, y = PiP texture dimensions in scaled (window) pixels; z, w unused.
     vec4 size;
@@ -26,7 +33,7 @@ layout(std140) uniform NodeBatch {
     vec4 params;
 
     // Per-node entries — every array has the same stride (16 bytes), so the
-    // four parallel arrays let us pull all per-node attributes with a single
+    // six parallel arrays let us pull all per-node attributes with a single
     // index. Each {@code nodeBounds[i]} is (x, y, width, height) in
     // texture-pixel space (top-left origin, y growing downward).
     vec4 nodeBounds[MAX_NODES];
@@ -36,8 +43,13 @@ layout(std140) uniform NodeBatch {
     // x = title-bar height in scaled pixels (height of the title-colored strip
     // measured from the node's top edge).
     // y = drop-shadow flag (>= 0.5 → on, < 0.5 → off).
-    // z, w reserved for future per-node visual toggles.
+    // z = per-entry corner radius override; 0 = use params.x.
+    // w = per-entry border thickness override; 0 = use params.z.
     vec4 nodeExtras[MAX_NODES];
+    // RGBA color for the outer glow drawn around this node. Alpha <= 0
+    // disables the glow for this entry — the common case for nodes
+    // that aren't currently flagged.
+    vec4 nodeGlowColors[MAX_NODES];
 };
 
 layout(std140) uniform Projection {
@@ -115,6 +127,25 @@ void main() {
                 if (shadowAlpha > outColor.a) {
                     outColor.rgb = vec3(0.0);
                     outColor.a = shadowAlpha;
+                }
+            }
+        }
+
+        // Per-node outer glow — same SDF as the drop shadow but with
+        // no offset and a tighter blur, painted in the per-entry color.
+        // Layered on top of any existing shadow contribution via the
+        // same "most opaque sample wins" rule the shadow uses, so a
+        // dragged invalid node shows both effects without one cancelling
+        // the other.
+        vec4 glowColor = nodeGlowColors[i];
+        if (glowColor.a > 0.0 && d > 0.0) {
+            float glowBlur = radius * GLOW_BLUR_FACTOR;
+            if (d < glowBlur) {
+                float glowFalloff = 1.0 - smoothstep(0.0, glowBlur, d);
+                float glowAlpha = glowColor.a * glowFalloff;
+                if (glowAlpha > outColor.a) {
+                    outColor.rgb = glowColor.rgb;
+                    outColor.a = glowAlpha;
                 }
             }
         }
