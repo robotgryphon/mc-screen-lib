@@ -1,13 +1,18 @@
-#version 330
+#version 450
 
 // Required extensions for the shader.
 #extension GL_ARB_separate_shader_objects : require
 
-#include <minecraft:fog.glsl>
 #include <minecraft:dynamictransforms.glsl>
 
+// MAX_NODES must match the Java-side constant (NodeBackgroundUniform.MAX_NODES).
+// Each array slot occupies 16 bytes in std140 regardless of how much we pack
+// into it — boosting this just to push the cap means more UBO bytes per batch.
+// Declared before the UBO since the block uses it for its array sizes.
+const int MAX_NODES = 64;
+
 layout(location = 0) in vec4 vertexColor;
-layout(location = 1, std140) uniform NodeBatch {
+layout(std140) uniform NodeBatch {
     // x, y = PiP texture dimensions in scaled (window) pixels; z, w unused.
     vec4 size;
     // x = corner radius in scaled pixels.
@@ -36,13 +41,8 @@ layout(location = 1, std140) uniform NodeBatch {
     vec4 nodeGlowColors[MAX_NODES];
 };
 
-out vec4 fragColor;
+layout(location = 0) out vec4 fragColor;
 
-
-// MAX_NODES must match the Java-side constant (NodeBackgroundUniform.MAX_NODES).
-// Each array slot occupies 16 bytes in std140 regardless of how much we pack
-// into it — boosting this just to push the cap means more UBO bytes per batch.
-const int MAX_NODES = 64;
 
 // Drop-shadow visual constants, expressed as multiples of the node's
 // corner radius so the shadow scales naturally with canvas zoom. The

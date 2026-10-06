@@ -1,7 +1,8 @@
+#version 450
+
 // Required extensions for the shader.
 #extension GL_ARB_separate_shader_objects : require
 
-#include <minecraft:fog.glsl>
 #include <minecraft:dynamictransforms.glsl>
 #include <minecraft:projection.glsl>
 
@@ -22,14 +23,13 @@ layout(std140) uniform BezierCurve {
 };
 
 
-layout(location = 0) in vec4 vertexPosition;
-layout(location = 1) in vec4 vertexColor;
+layout(location = 0) in vec4 vertexColor;
 
 //layout(std140) uniform Projection {
 //    mat4 ProjMat;
 //};
 
-out vec4 fragColor;
+layout(location = 0) out vec4 fragColor;
 
 // 1 / sqrt(2) — projection scale for the X-glyph diagonals' perpendicular
 // distance. Cached as a constant to avoid the sqrt every fragment.
