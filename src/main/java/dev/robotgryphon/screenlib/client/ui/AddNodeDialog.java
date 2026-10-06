@@ -9,7 +9,7 @@ import dev.robotgryphon.screenlib.graph.Port;
 import dev.robotgryphon.screenlib.graph.PortSide;
 import dev.robotgryphon.screenlib.types.NodeDefinition;
 import dev.robotgryphon.screenlib.types.PortDefinition;
-import dev.robotgryphon.screenlib.types.PropertyDefinition;
+import dev.robotgryphon.screenlib.graph.types.SimpleGraphDataType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -255,8 +255,8 @@ public class AddNodeDialog extends Screen {
      * preserves the order so two consecutive identical typings yield the
      * same suggestion list rather than a shuffled one.
      */
-    private Stream<Holder<PropertyDefinition<?>>> distinctInputTypes() {
-        Set<Holder<PropertyDefinition<?>>> seen = new LinkedHashSet<>();
+    private Stream<Holder<SimpleGraphDataType<?>>> distinctInputTypes() {
+        Set<Holder<SimpleGraphDataType<?>>> seen = new LinkedHashSet<>();
         for (PreviewTemplate t : this.templates) {
             for (PortDefinition input : t.node.definition().inputs()) {
                 seen.add(input.type());
@@ -479,7 +479,7 @@ public class AddNodeDialog extends Screen {
         },
         /**
          * Match any of the node's input port types. A node matches if at
-         * least one input's {@link dev.robotgryphon.screenlib.types.PropertyDefinition}
+         * least one input's {@link SimpleGraphDataType}
          * display name contains the needle. Mirrors the "Input: IMAGE" chips
          * in graph-style picker UIs.
          */

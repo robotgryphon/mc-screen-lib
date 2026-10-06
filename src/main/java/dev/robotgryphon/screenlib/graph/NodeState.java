@@ -4,6 +4,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.Dynamic;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.robotgryphon.screenlib.types.NodeDefinition;
+import dev.robotgryphon.screenlib.graph.types.SimpleGraphDataType;
 import net.minecraft.core.Holder;
 
 import java.util.Map;
@@ -24,7 +25,7 @@ import java.util.Optional;
  * <p>Property values ride as a {@code Map<String, Dynamic<?>>} — the
  * codec-agnostic raw form — because the codec for {@code NodeState} can't
  * know what concrete value type to deserialize each entry into until the
- * matching {@link dev.robotgryphon.screenlib.types.PropertyDefinition}
+ * matching {@link SimpleGraphDataType}
  * has been resolved. {@link Canvas#loadState} walks the definition and
  * decodes each Dynamic via the property type's own codec when applying
  * the state to a freshly built {@link Node}.

@@ -4,6 +4,7 @@ import com.mojang.serialization.DataResult;
 import dev.robotgryphon.screenlib.graph.validation.GraphValidator;
 import dev.robotgryphon.screenlib.types.NodeDefinition;
 import dev.robotgryphon.screenlib.types.PortDefinition;
+import dev.robotgryphon.screenlib.graph.types.SimpleGraphDataType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.core.Holder;
@@ -116,7 +117,7 @@ public class Node {
      * {@link PortDefinition#name()} the property entry is listed under
      * in {@link NodeDefinition#properties()}. Each entry's value is the
      * typed object decoded through the property's registered
-     * {@link dev.robotgryphon.screenlib.types.PropertyDefinition} codec;
+     * {@link SimpleGraphDataType} codec;
      * absent keys mean "no value set yet" and render as a placeholder.
      * The map is mutable so editor widgets can write through to it.
      */
@@ -247,14 +248,14 @@ public class Node {
     /**
      * Seeds {@link #propertyValues} with the typed default declared by
      * each property's registered {@link
-     * dev.robotgryphon.screenlib.types.PropertyDefinition}. The default
+     * SimpleGraphDataType}. The default
      * is already the typed value (the registry's {@code Optional<T>}
      * field), so no codec round-trip is needed at this point — that's
      * reserved for persistence ({@link Canvas#toState}). Properties whose
      * type carries no default are left unset.
      */
     private void seedDefaultPropertyValues() {
-        for (PortDefinition prop : this.definition.properties()) {
+        for (var prop : this.definition.properties()) {
             prop.type().value().defaultValueRaw()
                     .ifPresent(def -> this.propertyValues.put(prop.name(), def));
         }
@@ -269,7 +270,7 @@ public class Node {
             // diamond / circle for the hollow ring without having to
             // re-consult the schema each frame.
             result.add(new Port(this, PortSide.LEFT, Component.literal(input.name()),
-                    input.type(), null, null, input.optional()));
+                    input.type(), null, input.optional()));
         }
         for (PortDefinition output : def.outputs()) {
             // Output ports thread the optional {@code linkedProperty} into the
@@ -278,15 +279,15 @@ public class Node {
             // that property right-side ports are gone. {@code optional} is
             // forced false on outputs — the ring style only applies to
             // inputs the receiving node tolerates absent.
-            result.add(new Port(this, PortSide.RIGHT, Component.literal(output.name()),
-                    output.type(), null, output.linkedProperty().orElse(null), false));
+            result.add(Port.of(this, PortSide.RIGHT, Component.literal(output.name()),
+                    output.linkedProperty().orElse(null), false));
         }
         // Properties get a LEFT (input) port only. A wire targeting it
         // overrides the property's local value with the upstream's. There's
         // no right-side property port — values flow OUT of a node only
         // through regular output ports, which can optionally name a
         // property to relay from via {@link PortDefinition#linkedProperty}.
-        for (PortDefinition prop : def.properties()) {
+        for (var prop : def.properties()) {
             result.add(Port.property(this, PortSide.LEFT, prop.name(), prop.type()));
         }
         return List.copyOf(result);
@@ -406,7 +407,7 @@ public class Node {
     /**
      * Writes through to the property map. Caller is responsible for the
      * runtime type matching the property's declared
-     * {@link dev.robotgryphon.screenlib.types.PropertyDefinition} — the
+     * {@link SimpleGraphDataType} — the
      * node itself stores values type-erased so it can host any property
      * kind without generic gymnastics.
      *

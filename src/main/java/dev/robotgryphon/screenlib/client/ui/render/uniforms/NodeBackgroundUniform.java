@@ -134,7 +134,7 @@ public record NodeBackgroundUniform(int textureWidth, int textureHeight,
         }
 
         @Override
-        public void close() throws Exception {
+        public void close() {
             buffer.close();
         }
 

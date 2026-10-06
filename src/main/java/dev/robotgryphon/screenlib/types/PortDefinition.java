@@ -2,6 +2,9 @@ package dev.robotgryphon.screenlib.types;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import dev.robotgryphon.screenlib.graph.properties.NodeProperty;
+import dev.robotgryphon.screenlib.graph.types.GraphDataType;
+import dev.robotgryphon.screenlib.graph.types.SimpleGraphDataType;
 import net.minecraft.core.Holder;
 
 import java.util.Optional;
@@ -11,7 +14,7 @@ import java.util.Optional;
  * shared shape used for inputs, outputs, and properties. The "name" is a
  * local identifier (the port label for an input/output; the property key
  * for a node property), and the "type" is a reference to a registered
- * {@link PropertyDefinition} that carries the codec, color, display name,
+ * {@link SimpleGraphDataType} that carries the codec, color, display name,
  * and (for properties) any default value.
  *
  * <p>The same record serves all three roles because they share an
@@ -55,27 +58,18 @@ import java.util.Optional;
  *                       entries.
  */
 public record PortDefinition(String name,
-                             Holder<PropertyDefinition<?>> type,
+                             Holder<GraphDataType<?>> type,
                              Optional<String> linkedProperty,
                              boolean optional) {
 
     /** Convenience constructor — no linked property, not optional. The common case. */
-    public PortDefinition(String name, Holder<PropertyDefinition<?>> type) {
+    public PortDefinition(String name, Holder<GraphDataType<?>> type) {
         this(name, type, Optional.empty(), false);
     }
 
     /** Convenience constructor — no linked property, explicit optional flag. */
-    public PortDefinition(String name, Holder<PropertyDefinition<?>> type, boolean optional) {
+    public PortDefinition(String name, Holder<GraphDataType<?>> type, boolean optional) {
         this(name, type, Optional.empty(), optional);
-    }
-
-    /**
-     * Convenience constructor — explicit linked property, not optional.
-     * Output ports that relay a property's value land here.
-     */
-    public PortDefinition(String name, Holder<PropertyDefinition<?>> type,
-                          Optional<String> linkedProperty) {
-        this(name, type, linkedProperty, false);
     }
 
     /**
@@ -89,7 +83,7 @@ public record PortDefinition(String name,
      */
     public static final Codec<PortDefinition> CODEC = Codec.lazyInitialized(() -> RecordCodecBuilder.create(i -> i.group(
             Codec.STRING.fieldOf("name").forGetter(PortDefinition::name),
-            PropertyDefinition.HOLDER_CODEC.fieldOf("type").forGetter(PortDefinition::type),
+            GraphDataType.HOLDER_CODEC.fieldOf("type").forGetter(PortDefinition::type),
             Codec.STRING.optionalFieldOf("linked_property").forGetter(PortDefinition::linkedProperty),
             Codec.BOOL.optionalFieldOf("optional", false).forGetter(PortDefinition::optional)
     ).apply(i, PortDefinition::new)));

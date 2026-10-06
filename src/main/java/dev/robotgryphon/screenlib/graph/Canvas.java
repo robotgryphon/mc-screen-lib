@@ -3,7 +3,7 @@ package dev.robotgryphon.screenlib.graph;
 import com.mojang.serialization.DataResult;
 import dev.robotgryphon.screenlib.client.ui.widget.Connection;
 import dev.robotgryphon.screenlib.client.ui.widget.NodeWidget;
-import dev.robotgryphon.screenlib.types.PropertyDefinition;
+import dev.robotgryphon.screenlib.graph.types.SimpleGraphDataType;
 import net.minecraft.core.Holder;
 import net.minecraft.util.CommonColors;
 import org.joml.Vector2dc;
@@ -59,7 +59,7 @@ public class Canvas {
      * have a back-reference to {@link Canvas} but not to the widget
      * that owns the pending state.
      */
-    private @Nullable Holder<PropertyDefinition<?>> activeDragType;
+    private @Nullable Holder<SimpleGraphDataType<?>> activeDragType;
 
     /**
      * Add a node to the canvas. Returns the node for chaining. Also
@@ -191,7 +191,7 @@ public class Canvas {
     }
 
     /** The type currently being dragged from, or {@code null} when no drag is in flight. */
-    public @Nullable Holder<PropertyDefinition<?>> activeDragType() {
+    public @Nullable Holder<SimpleGraphDataType<?>> activeDragType() {
         return this.activeDragType;
     }
 
@@ -200,7 +200,7 @@ public class Canvas {
      * pending connection starts; pass {@code null} when it ends (release
      * or cancellation). Idempotent — repeated identical sets are a no-op.
      */
-    public void setActiveDragType(@Nullable Holder<PropertyDefinition<?>> type) {
+    public void setActiveDragType(@Nullable Holder<SimpleGraphDataType<?>> type) {
         this.activeDragType = type;
     }
 
@@ -304,7 +304,7 @@ public class Canvas {
      * supply a value (the {@link #resolveUpstreamValue} chain bottoms
      * out at {@code null}), and for values rejected by an
      * {@code allowedValues} membership check on the target's
-     * {@link PropertyDefinition}.
+     * {@link SimpleGraphDataType}.
      */
     private void captureUpstreamIntoProperty(Connection connection) {
         Port targetPort = connection.targetPort();
@@ -315,7 +315,7 @@ public class Canvas {
         Object value = resolveUpstreamValue(connection);
         if (value == null) return;
 
-        PropertyDefinition<?> def = targetPort.type().value();
+        SimpleGraphDataType<?> def = targetPort.type().value();
         if (def.allowedValues().isPresent()
                 && !def.allowedValues().get().contains(value)) {
             // The wire was delivering a value the target's property

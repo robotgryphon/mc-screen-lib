@@ -13,7 +13,7 @@ import dev.robotgryphon.screenlib.graph.Node;
 import dev.robotgryphon.screenlib.graph.Port;
 import dev.robotgryphon.screenlib.graph.PortSide;
 import dev.robotgryphon.screenlib.types.PortDefinition;
-import dev.robotgryphon.screenlib.types.PropertyDefinition;
+import dev.robotgryphon.screenlib.graph.types.SimpleGraphDataType;
 import net.minecraft.client.gui.layouts.EqualSpacingLayout;
 import net.minecraft.client.gui.layouts.LayoutElement;
 import net.minecraft.client.gui.components.Renderable;
@@ -574,7 +574,7 @@ public class NodeWidget extends AbstractWidget {
     }
 
     /**
-     * True if a property's registered {@link PropertyDefinition} declares
+     * True if a property's registered {@link SimpleGraphDataType} declares
      * a fixed value set. The {@link DropdownEditor} / {@link DropdownPopup}
      * pair now display values via {@link Object#toString()}, so any
      * value type whose {@code toString} returns a sensible label is
@@ -694,7 +694,7 @@ public class NodeWidget extends AbstractWidget {
         }
         PortDefinition prop = focused.prop();
 
-        PropertyDefinition<?> def = prop.type().value();
+        SimpleGraphDataType<?> def = prop.type().value();
         // {@link DropdownPopup} now renders entries via
         // {@link Object#toString} so the raw {@code List<?>} flows
         // straight through — no codec-specific narrowing needed.
@@ -729,7 +729,7 @@ public class NodeWidget extends AbstractWidget {
      * (rather than {@code instanceof}-checking the boxed value) keeps
      * the check correct for properties that haven't had their value set
      * yet — the codec is always present on the registered
-     * {@link dev.robotgryphon.screenlib.types.PropertyDefinition}.
+     * {@link SimpleGraphDataType}.
      */
     private static boolean isNumericCodec(Codec<?> codec) {
         return codec == Codec.INT || codec == Codec.FLOAT || codec == Codec.DOUBLE;
@@ -1150,17 +1150,17 @@ public class NodeWidget extends AbstractWidget {
      * {@link #MISMATCHED_TYPE_ALPHA} so legal targets visually pop.
      *
      * <p>Type identity goes through {@code Holder.value()} because
-     * {@link dev.robotgryphon.screenlib.types.PropertyDefinition} instances are
+     * {@link SimpleGraphDataType} instances are
      * registry singletons — reference equality on the resolved value is
      * the same notion of "same type" {@link Canvas#connect} uses to
      * gate connections.
      */
-    private float effectiveAlpha(Holder<PropertyDefinition<?>> type) {
+    private float effectiveAlpha(Holder<SimpleGraphDataType<?>> type) {
         float base = this.getAlpha();
         if (this.canvas == null) {
             return base;
         }
-        Holder<PropertyDefinition<?>> active = this.canvas.activeDragType();
+        Holder<SimpleGraphDataType<?>> active = this.canvas.activeDragType();
         if (active == null) {
             return base;
         }

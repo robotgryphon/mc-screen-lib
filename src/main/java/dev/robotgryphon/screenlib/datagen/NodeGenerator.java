@@ -3,7 +3,7 @@ package dev.robotgryphon.screenlib.datagen;
 import dev.robotgryphon.screenlib.ScreenLib;
 import dev.robotgryphon.screenlib.types.NodeBuilder;
 import dev.robotgryphon.screenlib.types.NodeDefinition;
-import dev.robotgryphon.screenlib.types.PropertyDefinition;
+import dev.robotgryphon.screenlib.graph.types.SimpleGraphDataType;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderGetter;
 import net.minecraft.core.HolderLookup;
@@ -34,20 +34,20 @@ public class NodeGenerator {
 
     /**
      * Resolves a built-in property definition by namespace+path so node
-     * defs read clearly. The combined {@link PropertyDefinition} registry
+     * defs read clearly. The combined {@link SimpleGraphDataType} registry
      * now covers both the "what's the type" use (for ports) and the
      * "what's the type and what's its default" use (for properties).
      */
-    private static Holder<PropertyDefinition<?>> propertyDef(HolderGetter<PropertyDefinition<?>> lookup,
-                                                             Identifier id) {
+    private static Holder<SimpleGraphDataType<?>> propertyDef(HolderGetter<SimpleGraphDataType<?>> lookup,
+                                                              Identifier id) {
         var key = ResourceKey.create(
-                PropertyDefinition.REGISTRY_KEY, id);
+                SimpleGraphDataType.REGISTRY_KEY, id);
         return lookup.getOrThrow(key);
     }
     //endregion
 
     private static void addCoreNodeTypes(BootstrapContext<NodeDefinition> ctx) {
-        var defs = ctx.lookup(PropertyDefinition.REGISTRY_KEY);
+        var defs = ctx.lookup(SimpleGraphDataType.REGISTRY_KEY);
 
         // Generic types — used for ports (no defaults needed).
         var boolType = propertyDef(defs, Identifier.withDefaultNamespace("bool"));

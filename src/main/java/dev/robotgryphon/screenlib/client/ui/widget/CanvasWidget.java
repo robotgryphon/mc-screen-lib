@@ -1,5 +1,6 @@
 package dev.robotgryphon.screenlib.client.ui.widget;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import dev.robotgryphon.screenlib.client.ui.render.pip.BezierCurveRenderState;
 import dev.robotgryphon.screenlib.client.ui.render.pip.NodeBackgroundRenderState;
 import dev.robotgryphon.screenlib.client.ui.render.uniforms.NodeBackgroundUniform;
@@ -117,7 +118,7 @@ public class CanvasWidget extends AbstractWidget {
     /** Allow right-click (button 1) so it can open the context menu. */
     @Override
     public boolean isValidClickButton(MouseButtonInfo info) {
-        return info.button() == 0 || info.button() == 1;
+        return info.button() == InputConstants.MOUSE_BUTTON_LEFT || info.button() == InputConstants.MOUSE_BUTTON_RIGHT;
     }
 
     // -- Mouse input --------------------------------------------------------
@@ -194,7 +195,7 @@ public class CanvasWidget extends AbstractWidget {
         // ports, so right-clicking a port falls through to the canvas
         // menu — matching the user's likely intent ("the wire-side, not
         // the node-side").
-        if (event.button() == 1) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
             final Vector2dc canvasPos = this.viewport.screenToCanvas(event.x(), event.y());
             final NodeWidget hitNode = canvas.findNodesNear(canvasPos).findFirst().orElse(null);
 
@@ -230,7 +231,7 @@ public class CanvasWidget extends AbstractWidget {
         // 0. Delete-button hit → remove the connection. Only the bezier-hovered
         //    connection's button is visible, so we only honor a click within
         //    that connection's midpoint button.
-        if (event.button() == 0) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
             Connection hovered = findConnectionUnderCursor(clicked);
             if (hovered != null && isInDeleteButton(hovered, clicked)) {
                 canvas.removeConnection(hovered);
@@ -308,7 +309,7 @@ public class CanvasWidget extends AbstractWidget {
             // release lands on a valid target — leaving it set would dim
             // the canvas indefinitely.
             this.canvas.setActiveDragType(null);
-            if (event.button() == 0) {
+            if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
                 // Find ports that are not the starting one and not on the same node
                 final var port = canvas.findPortsNear(canvasSpace)
                         .filter(p2 -> !p2.equals(p.sourcePort()))

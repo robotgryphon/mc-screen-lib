@@ -3,6 +3,8 @@ package dev.robotgryphon.screenlib.types;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.robotgryphon.screenlib.ScreenLib;
+import dev.robotgryphon.screenlib.graph.properties.NodeProperty;
+import dev.robotgryphon.screenlib.graph.types.SimpleGraphDataType;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.codec.RegistryFixedCodec;
@@ -20,12 +22,12 @@ import java.util.List;
  * "name + typed holder" shape; the role (input, output, configurable
  * property) is just which list the entry lives in. Each entry's
  * {@link PortDefinition#type()} resolves to a registered
- * {@link PropertyDefinition} which carries the codec/color/displayName
+ * {@link SimpleGraphDataType} which carries the codec/color/displayName
  * for the value type, plus any default value for property entries.
  */
 public record NodeDefinition(List<PortDefinition> inputs,
                              List<PortDefinition> outputs,
-                             List<PortDefinition> properties) {
+                             List<NodeProperty<?>> properties) {
 
     public static final ResourceKey<Registry<NodeDefinition>> REGISTRY_KEY =
             ResourceKey.createRegistryKey(ScreenLib.id("nodes"));
@@ -44,7 +46,7 @@ public record NodeDefinition(List<PortDefinition> inputs,
             // as the rendered label), and the "type" field resolves to
             // a registered PropertyDefinition whose default value, if
             // present, seeds the property when a fresh node is spawned.
-            PortDefinition.CODEC.listOf()
+            NodeProperty.CODEC.listOf()
                     .optionalFieldOf("properties", List.of())
                     .forGetter(def -> Collections.unmodifiableList(def.properties()))
     ).apply(i, NodeDefinition::new)));

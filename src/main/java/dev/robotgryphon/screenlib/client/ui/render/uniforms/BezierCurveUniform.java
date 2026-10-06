@@ -2,9 +2,15 @@ package dev.robotgryphon.screenlib.client.ui.render.uniforms;
 
 import com.mojang.blaze3d.buffers.Std140Builder;
 import com.mojang.blaze3d.buffers.Std140SizeCalculator;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.renderpearl.api.buffers.GpuBuffer;
+import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
+import dev.robotgryphon.screenlib.ScreenLib;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import org.joml.Vector2fc;
 import org.joml.Vector4fc;
+
+import org.lwjgl.system.MemoryStack;
 
 import java.nio.ByteBuffer;
 
@@ -42,6 +48,27 @@ public record BezierCurveUniform(Vector2fc[] controlPoints, ScreenRectangle area
             .putVec2()  // lineParams (halfWidth, feather)
             .putVec4()  // indicator (relCenterX, relCenterY, radiusPx, featherPx)
             .get();
+
+    /// Owns the GPU buffer a {@link BezierCurveUniform} is written into.
+    public static class Storage implements AutoCloseable {
+        private final GpuBuffer buffer = RenderSystem.getDevice()
+                .createBuffer(() -> ScreenLib.MOD_ID + ": Bezier Curve UBO",
+                        GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST, SIZE);
+
+        public GpuBufferSlice write(BezierCurveUniform uniform) {
+            try (var stack = MemoryStack.stackPush()) {
+                ByteBuffer data = stack.malloc(SIZE);
+                uniform.write(data);
+                RenderSystem.getDevice().createCommandEncoder().writeToBuffer(buffer.slice(), data);
+            }
+            return buffer.slice();
+        }
+
+        @Override
+        public void close() {
+            buffer.close();
+        }
+    }
 
     public void write(ByteBuffer buffer) {
         Std140Builder.intoBuffer(buffer)

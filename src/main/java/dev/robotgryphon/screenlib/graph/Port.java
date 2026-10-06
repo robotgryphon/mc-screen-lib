@@ -1,6 +1,7 @@
 package dev.robotgryphon.screenlib.graph;
 
-import dev.robotgryphon.screenlib.types.PropertyDefinition;
+import dev.robotgryphon.screenlib.graph.properties.NodeProperty;
+import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.core.Holder;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
@@ -36,43 +37,33 @@ import org.jspecify.annotations.Nullable;
  * which inputs the node needs and which it can do without. Always
  * {@code false} for output ports and property ports.
  *
- * @param node                  the node this port belongs to
- * @param side                  which edge of the node this port lives on
- * @param title                 small label rendered inside the node body next to the port
- * @param type                  the data type the port carries — drives the port's color
- *                              and is later used to gate which connections are valid
- * @param propertyName          the name of the property this port is bound to, or
- *                              {@code null} for a regular (always-visible) port
- * @param linkedPropertyName    for a regular output port that relays a property's
- *                              value, the name of that property; {@code null} on every
- *                              other port (inputs, property ports, and outputs that
- *                              don't shadow a property)
- * @param optional              {@code true} for inputs that don't require a
- *                              connection to function; always {@code false} on
- *                              outputs and property ports
+ * @param node     the node this port belongs to
+ * @param side     which edge of the node this port lives on
+ * @param title    small label rendered inside the node body next to the port
+ * @param type     the data type the port carries — drives the port's color
+ *                 and is later used to gate which connections are valid
+ * @param optional {@code true} for inputs that don't require a
+ *                 connection to function; always {@code false} on
+ *                 outputs and property ports
  */
-public record Port(Node node, PortSide side, Component title, Holder<PropertyDefinition<?>> type,
-                   @Nullable String propertyName,
-                   @Nullable String linkedPropertyName,
+public record Port(Node node, PortSide side, Component title, Holder<GraphDataType<?>> type,
+                   @Nullable NodeProperty<?> linkedProperty,
                    boolean optional) {
 
-    /** Regular-port constructor — no property binding, no link to a property, not optional. */
-    public Port(Node node, PortSide side, Component title, Holder<PropertyDefinition<?>> type) {
-        this(node, side, title, type, null, null, false);
+    /**
+     * Regular-port constructor — no property binding, no link to a property, not optional.
+     */
+    public Port(Node node, PortSide side, Component title, Holder<GraphDataType<?>> type) {
+        this(node, side, title, type, null, false);
     }
 
-    /** Six-arg form kept for back-compat with property / linked-output factories. */
-    public Port(Node node, PortSide side, Component title, Holder<PropertyDefinition<?>> type,
-                @Nullable String propertyName, @Nullable String linkedPropertyName) {
-        this(node, side, title, type, propertyName, linkedPropertyName, false);
+    public static <T> Port of(Node node, PortSide side, Component title, NodeProperty<T> property, boolean optional) {
+        //noinspection rawtypes,unchecked
+        return new Port(node, side, title, (Holder<GraphDataType<?>>) (Holder) property.type(), property, optional);
     }
 
-    public static Port of(Node node, PortSide side, Component title, Holder<PropertyDefinition<?>> type) {
-        return new Port(node, side, title, type, null, null, false);
-    }
-
-    public static Port of(Node node, PortSide side, String title, Holder<PropertyDefinition<?>> type) {
-        return of(node, side, Component.literal(title), type);
+    public static Port of(Node node, PortSide side, Component title, Holder<GraphDataType<?>> type) {
+        return new Port(node, side, title, type, null, false);
     }
 
     /**
@@ -82,17 +73,20 @@ public record Port(Node node, PortSide side, Component title, Holder<PropertyDef
      * keeping it here preserves the invariant that every port has a
      * non-null title.
      */
-    public static Port property(Node node, PortSide side, String propertyName,
-                                Holder<PropertyDefinition<?>> type) {
-        return new Port(node, side, Component.literal(propertyName), type, propertyName, null, false);
+    public static <T> Port property(Node node, PortSide side, NodeProperty<T> property) {
+        return Port.of(node, side, Component.literal(property.name()), property, false);
     }
 
-    /** {@code true} when this port is the input handle for a property. */
+    /**
+     * {@code true} when this port is the input handle for a property.
+     */
     public boolean isProperty() {
-        return this.propertyName != null;
+        return this.linkedProperty != null;
     }
 
-    /** Convenience: the color this port should render with. */
+    /**
+     * Convenience: the color this port should render with.
+     */
     public int color() {
         return this.type.value().color();
     }

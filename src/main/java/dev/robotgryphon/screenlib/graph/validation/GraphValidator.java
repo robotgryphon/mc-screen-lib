@@ -9,7 +9,7 @@ import dev.robotgryphon.screenlib.graph.Node;
 import dev.robotgryphon.screenlib.graph.Port;
 import dev.robotgryphon.screenlib.graph.PortSide;
 import dev.robotgryphon.screenlib.types.PortDefinition;
-import dev.robotgryphon.screenlib.types.PropertyDefinition;
+import dev.robotgryphon.screenlib.graph.types.SimpleGraphDataType;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 
@@ -79,7 +79,7 @@ public final class GraphValidator {
     private static void collectNodeErrors(Node node, List<String> errors) {
         String nodeTag = nodeTag(node);
         for (PortDefinition prop : node.definition().properties()) {
-            PropertyDefinition<?> def = prop.type().value();
+            SimpleGraphDataType<?> def = prop.type().value();
             Object value = node.propertyValue(prop.name());
             if (value == null) continue;
 
@@ -102,7 +102,7 @@ public final class GraphValidator {
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static DataResult<Tag> encodeProperty(PropertyDefinition<?> def, Object value) {
+    private static DataResult<Tag> encodeProperty(SimpleGraphDataType<?> def, Object value) {
         Codec codec = def.codec();
         try {
             return codec.encodeStart(NbtOps.INSTANCE, value);
@@ -180,7 +180,7 @@ public final class GraphValidator {
      * value sourced for them — meaning the local property slot is
      * empty AND no wire targets that property's input port. A
      * property whose {@link
-     * dev.robotgryphon.screenlib.types.PropertyDefinition} carries a
+     * SimpleGraphDataType} carries a
      * default ends up with a non-null value during node construction
      * (see {@code Node.seedDefaultPropertyValues}), so most properties
      * naturally satisfy this check; the rule mainly catches properties
@@ -194,7 +194,7 @@ public final class GraphValidator {
      * a value that lies outside the property's declared
      * {@code allowedValues} set. The wire's type identity check at
      * connect time guarantees source and target share a
-     * {@link PropertyDefinition}, so the allowed-values list is the
+     * {@link SimpleGraphDataType}, so the allowed-values list is the
      * same on both sides — but the upstream node's <em>stored</em>
      * property value can still drift outside that list (a stale
      * persisted value from before the schema added the constraint, a
@@ -217,7 +217,7 @@ public final class GraphValidator {
                                                        List<String> errors) {
         String nodeTag = nodeTag(node);
         for (PortDefinition prop : node.definition().properties()) {
-            PropertyDefinition<?> def = prop.type().value();
+            SimpleGraphDataType<?> def = prop.type().value();
             if (def.allowedValues().isEmpty()) continue;
 
             Connection inbound = null;

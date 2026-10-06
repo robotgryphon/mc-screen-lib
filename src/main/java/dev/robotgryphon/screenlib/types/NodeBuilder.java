@@ -1,5 +1,8 @@
 package dev.robotgryphon.screenlib.types;
 
+import dev.robotgryphon.screenlib.graph.properties.NodeProperty;
+import dev.robotgryphon.screenlib.graph.types.GraphDataType;
+import dev.robotgryphon.screenlib.graph.types.SimpleGraphDataType;
 import net.minecraft.core.Holder;
 
 import java.util.ArrayList;
@@ -20,7 +23,7 @@ import java.util.Optional;
  * <p>All three "add" methods (input, output, property) take the same
  * {@code (name, Holder<PropertyDefinition>)} pair because the three
  * roles share {@link PortDefinition}'s schema. Defaults for a property
- * come from the registered {@link PropertyDefinition} itself; no
+ * come from the registered {@link SimpleGraphDataType} itself; no
  * per-use override path exists on the builder.
  *
  * <p>Lives in the {@code types} package (rather than under the client UI)
@@ -30,7 +33,7 @@ import java.util.Optional;
 public class NodeBuilder {
     private final List<PortDefinition> inputs = new ArrayList<>();
     private final List<PortDefinition> outputs = new ArrayList<>();
-    private final List<PortDefinition> properties = new ArrayList<>();
+    private final List<NodeProperty<?>> properties = new ArrayList<>();
 
     public NodeBuilder() {}
 
@@ -39,7 +42,7 @@ public class NodeBuilder {
         return this;
     }
 
-    public NodeBuilder addInput(String name, Holder<PropertyDefinition<?>> type) {
+    public NodeBuilder addInput(String name, Holder<GraphDataType<?>> type) {
         return this.addInput(new PortDefinition(name, type));
     }
 
@@ -50,7 +53,7 @@ public class NodeBuilder {
      * that the input has a fallback. Equivalent to
      * {@link #addInput(String, Holder)} otherwise.
      */
-    public NodeBuilder addInput(String name, Holder<PropertyDefinition<?>> type, boolean optional) {
+    public NodeBuilder addInput(String name, Holder<GraphDataType<?>> type, boolean optional) {
         return this.addInput(new PortDefinition(name, type, optional));
     }
 
@@ -59,7 +62,7 @@ public class NodeBuilder {
         return this;
     }
 
-    public NodeBuilder addOutput(String name, Holder<PropertyDefinition<?>> type) {
+    public NodeBuilder addOutput(String name, Holder<GraphDataType<?>> type) {
         return this.addOutput(new PortDefinition(name, type));
     }
 
@@ -77,24 +80,13 @@ public class NodeBuilder {
      * render frame. The runtime side of the resolution lives in
      * {@code NodeWidget.resolveUpstreamValue}.
      */
-    public NodeBuilder addOutput(String name, Holder<PropertyDefinition<?>> type, String linkedProperty) {
+    public NodeBuilder addOutput(String name, Holder<GraphDataType<?>> type, String linkedProperty) {
         return this.addOutput(new PortDefinition(name, type, Optional.of(linkedProperty)));
     }
 
-    /**
-     * Add a configurable property rendered inside the node body. The name
-     * is both the serialization key (for the per-instance value map on a
-     * {@code Node}) and the rendered label. The default — if any — is
-     * carried by the registered {@link PropertyDefinition} that
-     * {@code type} resolves to.
-     */
-    public NodeBuilder addProperty(PortDefinition def) {
-        this.properties.add(def);
+    public <T extends Comparable<T>> NodeBuilder addProperty(String name, Holder<GraphDataType<T>> type) {
+        this.properties.add(new NodeProperty<T>(name, type));
         return this;
-    }
-
-    public NodeBuilder addProperty(String name, Holder<PropertyDefinition<?>> type) {
-        return this.addProperty(new PortDefinition(name, type));
     }
 
     public NodeDefinition build() {
