@@ -1,5 +1,6 @@
 package dev.robotgryphon.screenlib.client.ui.widget.chips;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -12,7 +13,6 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
 import java.util.function.Function;
@@ -345,7 +345,7 @@ public class ChipFilterInput<F> extends AbstractWidget {
             // into a chip. Handled before forwarding so EditBox doesn't get
             // a chance to claim it (it wouldn't, but order is explicit).
             int key = event.key();
-            if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
+            if (key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER) {
                 if (handleEnter()) {
                     return true;
                 }

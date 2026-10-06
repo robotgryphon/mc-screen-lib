@@ -137,7 +137,7 @@ public class TestScreen extends Screen implements MenuAccess<TestScreenMenu> {
         if (defs.isEmpty()) {
             return;
         }
-        Minecraft.getInstance().setScreen(new AddNodeDialog(this, defs, ref -> {
+        Minecraft.getInstance().setScreenAndShow(new AddNodeDialog(this, defs, ref -> {
             // Submit handler: spawn a fresh Node + NodeWidget at the original
             // right-click location and add the pair to the canvas. Title is
             // resolved from the registry key the same way buildNodeWidget does.

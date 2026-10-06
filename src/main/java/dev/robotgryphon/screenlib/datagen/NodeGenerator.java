@@ -17,14 +17,15 @@ import net.neoforged.neoforge.common.data.DatapackBuiltinEntriesProvider;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
-public class NodeGenerator extends DatapackBuiltinEntriesProvider {
+public class NodeGenerator {
 
     //region Setup
-    private static final RegistrySetBuilder BUILDER = new RegistrySetBuilder()
+    public static final RegistrySetBuilder BUILDER = new RegistrySetBuilder()
             .add(NodeDefinition.REGISTRY_KEY, NodeGenerator::addCoreNodeTypes);
 
-    public NodeGenerator(PackOutput packOutput, CompletableFuture<HolderLookup.Provider> registries) {
-        super(packOutput, registries, BUILDER, Set.of(ScreenLib.MOD_ID));
+    public static DatapackBuiltinEntriesProvider create(PackOutput packOutput, CompletableFuture<HolderLookup.Provider> registries) {
+        return DatapackBuiltinEntriesProvider.forReloadableLayer(packOutput, "NodeGenerator",
+                registries, registries, BUILDER, Set.of(ScreenLib.MOD_ID));
     }
 
     private static ResourceKey<NodeDefinition> nodeType(String name) {
@@ -38,9 +39,9 @@ public class NodeGenerator extends DatapackBuiltinEntriesProvider {
      * "what's the type and what's its default" use (for properties).
      */
     private static Holder<PropertyDefinition<?>> propertyDef(HolderGetter<PropertyDefinition<?>> lookup,
-                                                          String namespace, String path) {
+                                                             Identifier id) {
         var key = ResourceKey.create(
-                PropertyDefinition.REGISTRY_KEY, Identifier.fromNamespaceAndPath(namespace, path));
+                PropertyDefinition.REGISTRY_KEY, id);
         return lookup.getOrThrow(key);
     }
     //endregion
@@ -49,17 +50,40 @@ public class NodeGenerator extends DatapackBuiltinEntriesProvider {
         var defs = ctx.lookup(PropertyDefinition.REGISTRY_KEY);
 
         // Generic types — used for ports (no defaults needed).
-        var blockPos    = propertyDef(defs, "minecraft", "block_pos");
-        var direction   = propertyDef(defs, "minecraft", "direction");
-        var intType     = propertyDef(defs, "minecraft", "int");
-        var itemHandler = propertyDef(defs, ScreenLib.MOD_ID, "item_handler");
+        var boolType = propertyDef(defs, Identifier.withDefaultNamespace("bool"));
+        var intType = propertyDef(defs, Identifier.withDefaultNamespace("int"));
+        var floatType = propertyDef(defs, Identifier.withDefaultNamespace("float"));
+
+        var blockPos = propertyDef(defs, Identifier.withDefaultNamespace("block_pos"));
+        var direction = propertyDef(defs, Identifier.withDefaultNamespace("direction"));
+
+        var itemHandler = propertyDef(defs, Identifier.fromNamespaceAndPath(ScreenLib.MOD_ID, "item_handler"));
+
+        // Integer primitive — single typed value
+        ctx.register(nodeType("integer"), new NodeBuilder()
+                .addOutput("INTEGER", intType, "value")
+                .addProperty("value", intType)
+                .build());
+
+        // Boolean primitive — single typed value
+        ctx.register(nodeType("float"), new NodeBuilder()
+                .addOutput("FLOAT", floatType, "value")
+                .addProperty("value", floatType)
+                .build());
+
+        // Boolean primitive — single typed values
+        ctx.register(nodeType("boolean"), new NodeBuilder()
+                .addOutput("BOOLEAN", boolType, "value")
+                .addProperty("value", boolType)
+                .build());
+
 
         // Block Position — a pure source: the position holder plus its scalar parts.
         ctx.register(nodeType("block_position"), new NodeBuilder()
                 .addOutput("Position", blockPos)
-                .addOutput("x", intType)
-                .addOutput("y", intType)
-                .addOutput("z", intType)
+                .addProperty("x", intType)
+                .addProperty("y", intType)
+                .addProperty("z", intType)
                 .build());
 
         // Direction — pick one of the six axis-aligned directions from a
@@ -101,41 +125,6 @@ public class NodeGenerator extends DatapackBuiltinEntriesProvider {
                 .addInput("Drops", itemHandler)
                 .build());
 
-        // Sampler — exercises the property-row layout the way the KSampler
-        // mockup does. Each property references a distinct registered
-        // PropertyDefinition (registered in ScreenLib's static block) so its
-        // default lands without needing a per-use override path on
-        // NodeBuilder. The "type" registrations carry the codec/color/
-        // displayName/default; this node definition just names them.
-        var seedDef     = propertyDef(defs, ScreenLib.MOD_ID, "sampler/seed");
-        var stepsDef    = propertyDef(defs, ScreenLib.MOD_ID, "sampler/steps");
-        var cfgDef      = propertyDef(defs, ScreenLib.MOD_ID, "sampler/cfg");
-        var samplerDef  = propertyDef(defs, ScreenLib.MOD_ID, "sampler/sampler_name");
-        var schedDef    = propertyDef(defs, ScreenLib.MOD_ID, "sampler/scheduler");
-        var denoiseDef  = propertyDef(defs, ScreenLib.MOD_ID, "sampler/denoise");
 
-        ctx.register(nodeType("sampler"), new NodeBuilder()
-                .addProperty("seed", seedDef)
-                .addProperty("steps", stepsDef)
-                .addProperty("cfg", cfgDef)
-                .addProperty("sampler_name", samplerDef)
-                .addProperty("scheduler", schedDef)
-                .addProperty("denoise", denoiseDef)
-                .build());
-
-        // Boolean primitive — single typed value paired with an output
-        // port that advertises the node's role ("BOOLEAN") to the canvas.
-        // The {@code value} property uses the dedicated
-        // {@code boolean_primitive/value} definition so the slot ships
-        // with a {@code false} default; the {@code BOOLEAN} output uses
-        // the generic {@code bool} type for wire compatibility with any
-        // other boolean port, linked to {@code value} so wires from it
-        // carry the property's current state.
-        var boolType    = propertyDef(defs, "minecraft", "bool");
-        var boolValDef  = propertyDef(defs, ScreenLib.MOD_ID, "boolean_primitive/value");
-        ctx.register(nodeType("boolean"), new NodeBuilder()
-                .addOutput("BOOLEAN", boolType, "value")
-                .addProperty("value", boolValDef)
-                .build());
     }
 }

@@ -735,7 +735,7 @@ public class CanvasWidget extends AbstractWidget {
         // Third pass — submit in MAX_NODES-sized chunks. Each chunk
         // reuses the same texture rectangle and per-state params; the
         // per-entry overrides do the heavy lifting for sizing.
-        int max = NodeBackgroundUniform.MAX_NODES;
+        int max = NodeBackgroundUniform.Storage.MAX_NODES;
         for (int from = 0; from < entries.size(); from += max) {
             int to = Math.min(from + max, entries.size());
             List<NodeBackgroundUniform.Entry> chunk = entries.subList(from, to);

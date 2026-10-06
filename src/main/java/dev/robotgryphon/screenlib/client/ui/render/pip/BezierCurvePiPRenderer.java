@@ -1,32 +1,29 @@
 package dev.robotgryphon.screenlib.client.ui.render.pip;
 
+import com.mojang.renderpearl.api.device.GpuDevice;
+import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
 import dev.robotgryphon.screenlib.client.ui.render.ExRenderPipelines;
 import dev.robotgryphon.screenlib.client.ui.render.PipelineRenderer;
 import dev.robotgryphon.screenlib.client.ui.render.uniforms.BezierCurveUniform;
 import dev.robotgryphon.screenlib.math.BezierCurveCalculator;
-import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
-import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.SubmitNodeCollector;
 import org.jetbrains.annotations.NotNull;
 import org.joml.Vector2fc;
 import org.joml.Vector4f;
 import org.joml.Vector4fc;
-import org.jspecify.annotations.NonNull;
 
+import javax.annotation.ParametersAreNonnullByDefault;
 import java.util.Objects;
-import java.util.OptionalInt;
+import java.util.Optional;
 
 public class BezierCurvePiPRenderer
         extends net.minecraft.client.gui.render.pip.PictureInPictureRenderer<BezierCurveRenderState> {
 
     private BezierCurveRenderState lastState;
-
-    public BezierCurvePiPRenderer(MultiBufferSource.BufferSource bufferSource) {
-        super(bufferSource);
-    }
 
     @Override
     public @NotNull Class<BezierCurveRenderState> getRenderStateClass() {
@@ -39,7 +36,8 @@ public class BezierCurvePiPRenderer
     }
 
     @Override
-    protected void renderToTexture(BezierCurveRenderState state, @NonNull PoseStack stack) {
+    @ParametersAreNonnullByDefault
+    protected void renderToTexture(BezierCurveRenderState state, PoseStack stack, SubmitNodeCollector nodeCollector) {
         var bounds = state.bounds();
 
         float scale = (float) Minecraft.getInstance().getWindow().getGuiScale();
@@ -88,10 +86,10 @@ public class BezierCurvePiPRenderer
                 halfWidthScaled, featherScaled, indicatorParams);
 
         GpuDevice device = RenderSystem.getDevice();
-        var target = Minecraft.getInstance().getMainRenderTarget();
+        var target = Minecraft.getInstance().gameRenderer.mainRenderTarget();
 
         try (var byteBuffer = new ByteBufferBuilder(256)) {
-            var buffer = new BufferBuilder(byteBuffer, VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+            var buffer = new BufferBuilder(byteBuffer, PrimitiveTopology.QUADS, DefaultVertexFormat.POSITION_COLOR);
 
             buffer.addVertex(0f, 0f, 0f).setColor(color);
             buffer.addVertex(0f, scaledHeight, 0f).setColor(color);
@@ -100,27 +98,27 @@ public class BezierCurvePiPRenderer
 
             MeshData mesh = buffer.buildOrThrow();
 
-            var buffers = PipelineRenderer.Buffers.of(mesh, ExRenderPipelines.BEZIER_CURVED_LINES);
+//            var buffers = PipelineRenderer.Buffers.of(mesh, ExRenderPipelines.BEZIER_CURVED_LINES);
             var encoder = device.createCommandEncoder();
 
-            var uniforms = PipelineRenderer.getDynamicUniforms(-1);
-            var bezierSlice = BezierCurveUniform.STORAGE.get().writeUniform(uniform);
+            var uniforms = PipelineRenderer.getDynamicTransforms(-1);
+//            var bezierSlice = BezierCurveUniform.STORAGE.get().writeUniform(uniform);
 
             try (mesh; var pass = encoder.createRenderPass(
                     () -> "Pipeline Render Pass for: " + ExRenderPipelines.BEZIER_CURVED_LINES.getLocation(),
-                    Objects.requireNonNullElse(RenderSystem.outputColorTextureOverride, target.getColorTextureView()),
-                    OptionalInt.empty()
+                    Objects.requireNonNull(target.getColorTextureView()),
+                    Optional.empty()
             )) {
-                pass.setPipeline(ExRenderPipelines.BEZIER_CURVED_LINES);
+                pass.setPipeline(RenderSystem.getCompiledPipeline(ExRenderPipelines.BEZIER_CURVED_LINES));
 
                 RenderSystem.bindDefaultUniforms(pass);
                 pass.setUniform("DynamicTransforms", uniforms);
-                pass.setUniform(BezierCurveUniform.NAME, bezierSlice);
+//                pass.setUniform(BezierCurveUniform.NAME, bezierSlice);
 
-                pass.setVertexBuffer(0, buffers.vertex());
-                pass.setIndexBuffer(buffers.index(), buffers.type());
-
-                pass.drawIndexed(0, 0, mesh.drawState().indexCount(), 1);
+                // fixme 26.1 Reference Code
+//                pass.setVertexBuffer(0, buffers.vertex());
+//                pass.setIndexBuffer(buffers.index(), buffers.type());
+//                pass.drawIndexed(0, 0, mesh.drawState().indexCount(), 1);
             }
         }
 

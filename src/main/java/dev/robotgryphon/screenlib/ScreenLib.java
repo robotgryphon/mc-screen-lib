@@ -22,10 +22,10 @@ import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
-import net.neoforged.neoforge.registries.DataPackRegistryEvent;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
+import net.neoforged.neoforge.registries.NewDatapackRegistryEvent;
 import org.slf4j.Logger;
 
 import java.util.List;
@@ -261,7 +261,7 @@ public class ScreenLib {
         return Identifier.fromNamespaceAndPath(MOD_ID, path);
     }
 
-    private static void datapackRegistries(DataPackRegistryEvent.NewRegistry newRegistries) {
-        newRegistries.dataPackRegistry(NodeDefinition.REGISTRY_KEY, NodeDefinition.CODEC, NodeDefinition.CODEC);
+    private static void datapackRegistries(NewDatapackRegistryEvent newRegistries) {
+        newRegistries.reloadableRegistry(NodeDefinition.REGISTRY_KEY, NodeDefinition.CODEC);
     }
 }

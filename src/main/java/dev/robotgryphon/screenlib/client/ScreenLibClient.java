@@ -7,7 +7,6 @@ import dev.robotgryphon.screenlib.client.ui.render.pip.BezierCurvePiPRenderer;
 import dev.robotgryphon.screenlib.client.ui.render.pip.BezierCurveRenderState;
 import dev.robotgryphon.screenlib.client.ui.render.pip.NodeBackgroundPiPRenderer;
 import dev.robotgryphon.screenlib.client.ui.render.pip.NodeBackgroundRenderState;
-import dev.robotgryphon.screenlib.client.ui.render.uniforms.RenderPipelineUniformsStorage;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.neoforged.neoforge.client.event.RegisterPictureInPictureRenderersEvent;
@@ -26,7 +25,7 @@ public class ScreenLibClient {
         modEventBus.addListener(ScreenLibClient::registerRenderPipelines);
         modEventBus.addListener(ScreenLibClient::registerMenuScreens);
 
-        NeoForge.EVENT_BUS.addListener(ScreenLibClient::onRenderFrameEnd);
+//        NeoForge.EVENT_BUS.addListener(ScreenLibClient::onRenderFrameEnd);
     }
 
     private static void registerPips(RegisterPictureInPictureRenderersEvent pips) {
@@ -49,7 +48,7 @@ public class ScreenLibClient {
         event.register(ScreenLib.TEST_SCREEN_MENU.get(), TestScreen::new);
     }
 
-    private static void onRenderFrameEnd(RenderFrameEvent.Post event) {
-        RenderPipelineUniformsStorage.endFrame();
-    }
+//    private static void onRenderFrameEnd(RenderFrameEvent.Post event) {
+//        RenderPipelineUniformsStorage.endFrame();
+//    }
 }

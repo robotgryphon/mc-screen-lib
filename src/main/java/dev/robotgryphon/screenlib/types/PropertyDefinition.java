@@ -5,8 +5,8 @@ import com.mojang.serialization.Dynamic;
 import dev.robotgryphon.screenlib.ScreenLib;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
+import net.minecraft.core.registries.codec.RegistryFixedCodec;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.RegistryFixedCodec;
 import net.minecraft.resources.ResourceKey;
 
 import java.util.List;

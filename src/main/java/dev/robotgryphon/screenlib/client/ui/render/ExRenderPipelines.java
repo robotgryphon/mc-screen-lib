@@ -1,30 +1,31 @@
 package dev.robotgryphon.screenlib.client.ui.render;
 
+import com.mojang.renderpearl.api.pipeline.*;
 import dev.robotgryphon.screenlib.client.ui.render.uniforms.BezierCurveUniform;
-import dev.robotgryphon.screenlib.client.ui.render.uniforms.NodeBackgroundUniform;
-import com.mojang.blaze3d.pipeline.BlendFunction;
-import com.mojang.blaze3d.pipeline.ColorTargetState;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
-import com.mojang.blaze3d.shaders.UniformType;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vertex.VertexFormat;
+import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.resources.Identifier;
 
 import static dev.robotgryphon.screenlib.ScreenLib.MOD_ID;
 
 public class ExRenderPipelines {
 
+    public static final BindGroupLayout BEZIER_CURVE = BindGroupLayout.builder()
+            .withUniform(BezierCurveUniform.NAME, UniformType.UNIFORM_BUFFER)
+            .build();
+
     /// Shared between all line pipelines
     public static final RenderPipeline.Snippet LINE_SNIPPET = RenderPipeline.builder()
-            .withUniform("DynamicTransforms", UniformType.UNIFORM_BUFFER)
-            .withUniform("Projection", UniformType.UNIFORM_BUFFER)
+            .withBindGroupLayout(BindGroupLayouts.DYNAMIC_TRANSFORMS)
+            .withBindGroupLayout(BindGroupLayouts.PROJECTION)
+            .withBindGroupLayout(BEZIER_CURVE)
             .withCull(false)
-            .withVertexFormat(DefaultVertexFormat.POSITION_COLOR, VertexFormat.Mode.QUADS)
+            .withPrimitiveTopology(PrimitiveTopology.QUADS)
+            .withVertexBinding(0, DefaultVertexFormat.POSITION_COLOR)
             .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
             .buildSnippet();
 
     public static final RenderPipeline BEZIER_CURVED_LINES = RenderPipeline.builder(LINE_SNIPPET)
-            .withUniform(BezierCurveUniform.NAME, UniformType.UNIFORM_BUFFER)
             .withLocation(Identifier.fromNamespaceAndPath(MOD_ID, "pipeline/bezier_curve"))
             .withVertexShader(Identifier.fromNamespaceAndPath(MOD_ID, "bezier_curve"))
             .withFragmentShader(Identifier.fromNamespaceAndPath(MOD_ID, "bezier_curve"))
@@ -38,7 +39,6 @@ public class ExRenderPipelines {
      * RGBA into the PiP texture, same as the bezier curves do.
      */
     public static final RenderPipeline NODE_BACKGROUND = RenderPipeline.builder(LINE_SNIPPET)
-            .withUniform(NodeBackgroundUniform.NAME, UniformType.UNIFORM_BUFFER)
             .withLocation(Identifier.fromNamespaceAndPath(MOD_ID, "pipeline/node_background"))
             .withVertexShader(Identifier.fromNamespaceAndPath(MOD_ID, "node_background"))
             .withFragmentShader(Identifier.fromNamespaceAndPath(MOD_ID, "node_background"))

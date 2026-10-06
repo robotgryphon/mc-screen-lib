@@ -1,29 +1,13 @@
 #version 330
 
-#moj_import <minecraft:fog.glsl>
-#moj_import <minecraft:dynamictransforms.glsl>
+// Required extensions for the shader.
+#extension GL_ARB_separate_shader_objects : require
 
-// MAX_NODES must match the Java-side constant (NodeBackgroundUniform.MAX_NODES).
-// Each array slot occupies 16 bytes in std140 regardless of how much we pack
-// into it — boosting this just to push the cap means more UBO bytes per batch.
-const int MAX_NODES = 64;
+#include <minecraft:fog.glsl>
+#include <minecraft:dynamictransforms.glsl>
 
-// Drop-shadow visual constants, expressed as multiples of the node's
-// corner radius so the shadow scales naturally with canvas zoom. The
-// shadow extends down-and-right and fades out smoothly via its own SDF.
-const float SHADOW_OFFSET_X_FACTOR = 0.4;
-const float SHADOW_OFFSET_Y_FACTOR = 0.6;
-const float SHADOW_BLUR_FACTOR     = 1.0;
-const float SHADOW_ALPHA           = 0.45;
-
-// Glow visual constants. The glow is a centered (no offset) version of
-// the drop shadow with a shorter blur radius — same SDF, same falloff
-// shape, just tighter and tinted by a per-node color. "Short" here is
-// {@code GLOW_BLUR_FACTOR < SHADOW_BLUR_FACTOR}; the color and the
-// intensity (via its alpha) come from {@code nodeGlowColors[i]}.
-const float GLOW_BLUR_FACTOR = 0.6;
-
-layout(std140) uniform NodeBatch {
+layout(location = 0) in vec4 vertexColor;
+layout(location = 1, std140) uniform NodeBatch {
     // x, y = PiP texture dimensions in scaled (window) pixels; z, w unused.
     vec4 size;
     // x = corner radius in scaled pixels.
@@ -52,13 +36,28 @@ layout(std140) uniform NodeBatch {
     vec4 nodeGlowColors[MAX_NODES];
 };
 
-layout(std140) uniform Projection {
-    mat4 ProjMat;
-};
-
-in vec4 vertexColor;
-
 out vec4 fragColor;
+
+
+// MAX_NODES must match the Java-side constant (NodeBackgroundUniform.MAX_NODES).
+// Each array slot occupies 16 bytes in std140 regardless of how much we pack
+// into it — boosting this just to push the cap means more UBO bytes per batch.
+const int MAX_NODES = 64;
+
+// Drop-shadow visual constants, expressed as multiples of the node's
+// corner radius so the shadow scales naturally with canvas zoom. The
+// shadow extends down-and-right and fades out smoothly via its own SDF.
+const float SHADOW_OFFSET_X_FACTOR = 0.4;
+const float SHADOW_OFFSET_Y_FACTOR = 0.6;
+const float SHADOW_BLUR_FACTOR     = 1.0;
+const float SHADOW_ALPHA           = 0.45;
+
+// Glow visual constants. The glow is a centered (no offset) version of
+// the drop shadow with a shorter blur radius — same SDF, same falloff
+// shape, just tighter and tinted by a per-node color. "Short" here is
+// {@code GLOW_BLUR_FACTOR < SHADOW_BLUR_FACTOR}; the color and the
+// intensity (via its alpha) come from {@code nodeGlowColors[i]}.
+const float GLOW_BLUR_FACTOR = 0.6;
 
 // Signed distance from `p` to an axis-aligned rounded rectangle of half-
 // extents `b` and corner radius `r`. Negative inside, positive outside,

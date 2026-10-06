@@ -404,7 +404,7 @@ public class AddNodeDialog extends Screen {
     }
 
     private void close() {
-        Minecraft.getInstance().setScreen(this.parent);
+        Minecraft.getInstance().setScreenAndShow(this.parent);
     }
 
     @Override

@@ -1,23 +1,23 @@
 package dev.robotgryphon.screenlib.client.ui.render.pip;
 
-import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexFormat;
+import com.mojang.renderpearl.api.device.GpuDevice;
+import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
 import dev.robotgryphon.screenlib.client.ui.render.ExRenderPipelines;
 import dev.robotgryphon.screenlib.client.ui.render.PipelineRenderer;
 import dev.robotgryphon.screenlib.client.ui.render.uniforms.NodeBackgroundUniform;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.SubmitNodeCollector;
 import org.jetbrains.annotations.NotNull;
-import org.jspecify.annotations.NonNull;
 
+import javax.annotation.ParametersAreNonnullByDefault;
 import java.util.Objects;
-import java.util.OptionalInt;
+import java.util.Optional;
 
 /**
  * PiP renderer for the batched node-background pass. One state represents
@@ -36,10 +36,7 @@ public class NodeBackgroundPiPRenderer
         extends net.minecraft.client.gui.render.pip.PictureInPictureRenderer<NodeBackgroundRenderState> {
 
     private NodeBackgroundRenderState lastState;
-
-    public NodeBackgroundPiPRenderer(MultiBufferSource.BufferSource bufferSource) {
-        super(bufferSource);
-    }
+    private final NodeBackgroundUniform.Storage STORAGE = new NodeBackgroundUniform.Storage();
 
     @Override
     public @NotNull Class<NodeBackgroundRenderState> getRenderStateClass() {
@@ -57,7 +54,8 @@ public class NodeBackgroundPiPRenderer
     }
 
     @Override
-    protected void renderToTexture(NodeBackgroundRenderState state, @NonNull PoseStack stack) {
+    @ParametersAreNonnullByDefault
+    protected void renderToTexture(NodeBackgroundRenderState state, PoseStack stack, SubmitNodeCollector submitNodeCollector) {
         var bounds = state.bounds();
         float guiScale = (float) Minecraft.getInstance().getWindow().getGuiScale();
         float scaledWidth = bounds.width() * guiScale;
@@ -74,10 +72,10 @@ public class NodeBackgroundPiPRenderer
                 state.entries());
 
         GpuDevice device = RenderSystem.getDevice();
-        var target = Minecraft.getInstance().getMainRenderTarget();
+        var target = Minecraft.getInstance().gameRenderer.mainRenderTarget();
 
         try (var byteBuffer = new ByteBufferBuilder(256)) {
-            var buffer = new BufferBuilder(byteBuffer, VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+            var buffer = new BufferBuilder(byteBuffer, PrimitiveTopology.QUADS, DefaultVertexFormat.POSITION_COLOR);
 
             // Single quad covering the whole texture; the fragment
             // shader uses gl_FragCoord (texture-pixel space) to figure
@@ -90,27 +88,27 @@ public class NodeBackgroundPiPRenderer
 
             MeshData mesh = buffer.buildOrThrow();
 
-            var buffers = PipelineRenderer.Buffers.of(mesh, ExRenderPipelines.NODE_BACKGROUND);
+//            var buffers = PipelineRenderer.Buffers.of(mesh, ExRenderPipelines.NODE_BACKGROUND);
             var encoder = device.createCommandEncoder();
 
-            var dynamicUniforms = PipelineRenderer.getDynamicUniforms(-1);
-            var batchSlice = NodeBackgroundUniform.STORAGE.get().writeUniform(uniform);
+            var dynamicTransforms = PipelineRenderer.getDynamicTransforms(-1);
+            var batchSlice = STORAGE.write(uniform);
 
             try (mesh; var pass = encoder.createRenderPass(
                     () -> "Pipeline Render Pass for: " + ExRenderPipelines.NODE_BACKGROUND.getLocation(),
-                    Objects.requireNonNullElse(RenderSystem.outputColorTextureOverride, target.getColorTextureView()),
-                    OptionalInt.empty()
+                    Objects.requireNonNull(target.getColorTextureView()),
+                    Optional.empty()
             )) {
-                pass.setPipeline(ExRenderPipelines.NODE_BACKGROUND);
+                pass.setPipeline(RenderSystem.getCompiledPipeline(ExRenderPipelines.NODE_BACKGROUND));
 
                 RenderSystem.bindDefaultUniforms(pass);
-                pass.setUniform("DynamicTransforms", dynamicUniforms);
-                pass.setUniform(NodeBackgroundUniform.NAME, batchSlice);
+                pass.setUniform("DynamicTransforms", dynamicTransforms);
+                pass.setUniform(NodeBackgroundUniform.Storage.NAME, batchSlice);
 
-                pass.setVertexBuffer(0, buffers.vertex());
-                pass.setIndexBuffer(buffers.index(), buffers.type());
-
-                pass.drawIndexed(0, 0, mesh.drawState().indexCount(), 1);
+                // FIXME: 26.1 code
+//                pass.setVertexBuffer(0, mesh.vertexBufferSlice());
+//                pass.setIndexBuffer(buffers.index(), IndexType.INT);
+//                pass.drawIndexed(0, 0, mesh.drawState().indexCount(), 1);
             }
         }
 

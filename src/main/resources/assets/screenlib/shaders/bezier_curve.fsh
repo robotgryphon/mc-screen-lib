@@ -1,7 +1,9 @@
-#version 330
+// Required extensions for the shader.
+#extension GL_ARB_separate_shader_objects : require
 
-#moj_import <minecraft:fog.glsl>
-#moj_import <minecraft:dynamictransforms.glsl>
+#include <minecraft:fog.glsl>
+#include <minecraft:dynamictransforms.glsl>
+#include <minecraft:projection.glsl>
 
 layout(std140) uniform BezierCurve {
     vec2 point1;
@@ -19,12 +21,13 @@ layout(std140) uniform BezierCurve {
     vec4 indicator;
 };
 
-layout(std140) uniform Projection {
-    mat4 ProjMat;
-};
 
-in vec4 vertexPosition;
-in vec4 vertexColor;
+layout(location = 0) in vec4 vertexPosition;
+layout(location = 1) in vec4 vertexColor;
+
+//layout(std140) uniform Projection {
+//    mat4 ProjMat;
+//};
 
 out vec4 fragColor;
 
