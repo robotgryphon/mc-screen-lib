@@ -1,7 +1,5 @@
 package dev.robotgryphon.screenlib.math;
 
-import dev.robotgryphon.screenlib.client.ui.widget.NodeWidget;
-import dev.robotgryphon.screenlib.graph.NodeConnection;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import org.joml.Matrix3x2fc;
 import org.joml.Vector2f;
@@ -9,29 +7,10 @@ import org.joml.Vector2fc;
 import org.jspecify.annotations.NonNull;
 
 public class BezierCurveCalculator {
-
-    /**
-     * Pixels of headroom added around the curve's natural bounding box so the
-     * line — which has a fixed pixel width in the shader — has somewhere to
-     * render even when the curve is axis-aligned (bbox height or width near
-     * zero would otherwise clip the line down to a sliver). Must agree with
-     * the padding applied in {@link NodeConnection#bounds()}.
-     */
     public static final int LINE_PADDING_PX = 6;
 
-    /**
-     * Half the visible line thickness, in canvas pixels (i.e., independent of
-     * zoom and guiScale). The shader actually receives this value scaled by
-     * {@code zoom * guiScale}, so the rendered line stays a consistent
-     * thickness in canvas coordinates as the user zooms in or out.
-     *
-     * <p>The port-attachment offset uses this value too (see
-     * {@link NodeWidget#portAttachment}),
-     * so that the line edge always meets the port edge cleanly at any zoom.
-     */
     public static final float LINE_HALFWIDTH = 0.5f;
 
-    /** Width, in canvas pixels, of the antialiasing fade past {@link #LINE_HALFWIDTH}. */
     public static final float LINE_FEATHER = 0.5f;
 
     public static Vector2fc[] calculateRightToLeft(Vector2fc start, Vector2fc end) {

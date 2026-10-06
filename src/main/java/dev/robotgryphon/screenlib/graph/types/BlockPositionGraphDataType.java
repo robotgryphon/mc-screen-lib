@@ -5,7 +5,6 @@ import dev.robotgryphon.screenlib.graph.GraphTheme;
 import net.minecraft.core.BlockPos;
 
 public class BlockPositionGraphDataType implements GraphDataType<BlockPos> {
-
     @Override
     public Class<BlockPos> dataType() {
         return BlockPos.class;

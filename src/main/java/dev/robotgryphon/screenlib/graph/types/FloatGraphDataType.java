@@ -4,7 +4,6 @@ import com.mojang.serialization.Codec;
 import dev.robotgryphon.screenlib.graph.GraphTheme;
 
 public class FloatGraphDataType implements GraphDataType<Float> {
-
     @Override
     public Class<Float> dataType() {
         return Float.class;

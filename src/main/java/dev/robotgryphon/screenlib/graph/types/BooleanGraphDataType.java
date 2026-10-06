@@ -6,7 +6,6 @@ import dev.robotgryphon.screenlib.graph.GraphTheme;
 import java.util.Optional;
 
 public class BooleanGraphDataType implements GraphDataType<Boolean> {
-
     @Override
     public Class<Boolean> dataType() {
         return Boolean.class;

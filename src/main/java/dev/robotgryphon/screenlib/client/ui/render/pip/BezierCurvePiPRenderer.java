@@ -16,10 +16,8 @@ import org.joml.Vector2fc;
 import org.joml.Vector4f;
 import org.joml.Vector4fc;
 
-
 public class BezierCurvePiPRenderer
         extends OffscreenPiPRenderer<BezierCurveRenderState> {
-
     private BezierCurveRenderState lastState;
     private final BezierCurveUniform.Storage storage = new BezierCurveUniform.Storage();
 
@@ -38,30 +36,13 @@ public class BezierCurvePiPRenderer
         float scale = (float) Minecraft.getInstance().getWindow().getGuiScale();
 
         final var scaledBounds = new ScreenRectangle(0, 0, width, height);
-        // Line width scales with zoom so the rendered line stays a consistent
-        // thickness in canvas units rather than shrinking/growing on screen.
-        // Multiplied by guiScale to land in scaled (window) pixels — the same
-        // space the shader computes distances in.
         float zoomFactor = state.zoom();
         float halfWidthScaled = BezierCurveCalculator.LINE_HALFWIDTH * zoomFactor * scale;
         float featherScaled = BezierCurveCalculator.LINE_FEATHER * zoomFactor * scale;
 
         final var color = state.curve().color();
-        // Pass no bbox — toRelativeControlPoints uses the curve's canvas-space
-        // bbox internally, which is the only one in the same coordinate system
-        // as the canvas-space control points. Passing scaledBounds here was
-        // mixing canvas-space points with texture-pixel dimensions, producing
-        // garbage relative coords that the shader couldn't draw.
         final var relativeControlPoints = state.curve().toRelativeControlPoints();
 
-        // Indicator vec4: rel-center xy in [0, 1] bbox coords, radius and
-        // feather in scaled pixels. A zero radius tells the shader "no
-        // indicator" — used for every non-hovered connection. We piggyback
-        // the hovered flag on the *sign* of the scaled radius: negative
-        // radius means "cursor is over this close circle"; the shader reads
-        // abs(radius) for the SDF and the sign for the hover branch. This
-        // keeps the uniform layout unchanged while still letting the shader
-        // react to cursor proximity.
         final Vector4fc indicatorParams;
         final var indicator = state.curve().indicator();
         if (indicator != null) {

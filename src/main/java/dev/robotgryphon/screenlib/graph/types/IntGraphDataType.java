@@ -4,7 +4,6 @@ import com.mojang.serialization.Codec;
 import dev.robotgryphon.screenlib.graph.GraphTheme;
 
 public class IntGraphDataType implements GraphDataType<Integer> {
-
     @Override
     public Class<Integer> dataType() {
         return Integer.class;
@@ -20,4 +19,3 @@ public class IntGraphDataType implements GraphDataType<Integer> {
         return Codec.INT;
     }
 }
-

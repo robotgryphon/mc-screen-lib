@@ -9,40 +9,15 @@ import net.minecraft.network.chat.Component;
 import java.util.List;
 import java.util.function.Consumer;
 
-/**
- * Floating option list spawned by {@link DropdownEditor}. Renders the
- * available values for any picker-style property (string options like
- * the sampler names, enum values like
- * {@link net.minecraft.core.Direction}, …) and reports which one the
- * user picked. Modeled on {@link ContextMenu} — both are transient
- * floating panels owned by the canvas, rendered in screen-space above
- * the canvas pose, dismissed by an outside click.
- *
- * <p>Option labels are derived from {@link Object#toString()}, so any
- * value type whose {@code toString} returns a sensible label works
- * without per-type plumbing. The selection is delivered through a
- * {@link Consumer<Object>} carrying the raw value — the host's
- * callback then writes it back through the property's codec.
- *
- * <p>Position is supplied in screen pixels: the canvas widget converts
- * the editor's canvas-space anchor (typically the row's bottom-left)
- * through {@code Canvas.canvasToScreen} so the popup pins to the
- * trigger regardless of pan/zoom. Width is fixed at construction so the
- * dropdown lines up with the editor that spawned it.
- */
 public class DropdownPopup {
-
     private static final int ROW_HEIGHT = 14;
     private static final int H_PADDING = 6;
     private static final int V_PADDING = 2;
 
-    /** Panel background — slightly more opaque than the context menu so it pops over busy graphs. */
     private static final int BG_COLOR = 0xEE1F1F23;
     private static final int BORDER_COLOR = 0xFF7F7F8C;
     private static final int HOVER_COLOR = 0x33FFFFFF;
-    /** Color of regular option text. */
     private static final int TEXT_COLOR = 0xFFE0E0E0;
-    /** Color of the option matching the property's current value — softly highlighted. */
     private static final int CURRENT_TEXT_COLOR = 0xFFFFD24A;
 
     private final List<Object> options;
@@ -55,21 +30,10 @@ public class DropdownPopup {
 
     public DropdownPopup(int x, int y, int width, List<?> options,
                          Object currentValue, Consumer<Object> onSelect) {
-        // Widen to {@code List<Object>} so a callsite that has a
-        // {@code List<String>} or a {@code List<Direction>} both
-        // round-trip without an extra cast. The popup renders each
-        // entry through {@link Object#toString()} and reports the
-        // raw object back through {@link #onSelect} on click, so the
-        // host's typed callback can decode it via its codec without
-        // a re-lookup step.
         this.options = List.copyOf(options);
         this.currentValue = currentValue;
         this.onSelect = onSelect;
 
-        // Width is caller-controlled so the popup lines up with the editor
-        // that spawned it — but enforce a floor of "fits the widest option"
-        // so the popup never clips its own text. Font lookup is cheap and
-        // happens once per popup construction.
         Font font = Minecraft.getInstance().font;
         int widestOption = 0;
         for (Object opt : this.options) {
@@ -83,19 +47,11 @@ public class DropdownPopup {
         this.height = this.options.size() * ROW_HEIGHT + 2 * V_PADDING;
     }
 
-    /** Outer bounds test — used by the canvas widget to decide "click inside vs outside". */
     public boolean contains(double mouseX, double mouseY) {
         return mouseX >= this.x && mouseX < this.x + this.width
                 && mouseY >= this.y && mouseY < this.y + this.height;
     }
 
-    /**
-     * Forwarded from the parent widget on click. Returns {@code true} if
-     * the click landed on the popup — the caller dismisses the popup
-     * unconditionally afterwards, even on an inside click that resolved
-     * to an option. An outside click returns {@code false}, which is the
-     * signal the caller uses to keep the click propagating to the canvas.
-     */
     public boolean mouseClicked(double mouseX, double mouseY) {
         if (!contains(mouseX, mouseY)) {
             return false;
@@ -122,10 +78,6 @@ public class DropdownPopup {
             if (hovered) {
                 graphics.fill(this.x + 1, rowY, this.x + this.width - 1, rowY + ROW_HEIGHT, HOVER_COLOR);
             }
-            // Current-row tinting uses {@code equals} on the raw value
-            // rather than its rendered string so enum values that share
-            // a {@code toString} (none do today, but the safety is free)
-            // still get tagged correctly.
             int color = opt.equals(this.currentValue) ? CURRENT_TEXT_COLOR : TEXT_COLOR;
             graphics.text(font, Component.literal(opt.toString()),
                     this.x + H_PADDING, rowY + textOffsetY, color, false);

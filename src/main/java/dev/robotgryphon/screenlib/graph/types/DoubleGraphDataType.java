@@ -4,7 +4,6 @@ import com.mojang.serialization.Codec;
 import dev.robotgryphon.screenlib.graph.GraphTheme;
 
 public class DoubleGraphDataType implements GraphDataType<Double> {
-
     @Override
     public Class<Double> dataType() {
         return Double.class;

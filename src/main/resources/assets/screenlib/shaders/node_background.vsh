@@ -1,6 +1,5 @@
 #version 450
 
-// Required for location qualifiers on outputs under #version 330.
 #extension GL_ARB_separate_shader_objects : require
 
 #include <minecraft:dynamictransforms.glsl>

@@ -7,18 +7,7 @@ import net.minecraft.network.chat.Component;
 
 import java.util.List;
 
-/**
- * Lightweight right-click popup. Not an {@code AbstractWidget} — it lives as
- * a transient child of {@link CanvasWidget}, which spawns one per right-click
- * and renders/forwards events to it manually. Keeping it off the screen's
- * widget list means position can be set per-click without juggling
- * {@code addRenderableWidget} / {@code removeWidget} calls.
- *
- * <p>The menu is presented in screen-space (above the canvas's pan/zoom
- * transform), so it stays anchored to the cursor regardless of canvas state.
- */
 public class ContextMenu {
-
     private static final int ROW_HEIGHT = 14;
     private static final int H_PADDING = 6;
     private static final int V_PADDING = 2;
@@ -56,12 +45,6 @@ public class ContextMenu {
                 && mouseY >= this.y && mouseY < this.y + this.height;
     }
 
-    /**
-     * Forwarded from the parent widget on click. Returns true if the click
-     * landed on the menu (and an item action may have run); the caller is
-     * expected to dismiss the menu unconditionally afterwards — even an
-     * outside click should close it.
-     */
     public boolean mouseClicked(double mouseX, double mouseY) {
         if (!contains(mouseX, mouseY)) {
             return false;

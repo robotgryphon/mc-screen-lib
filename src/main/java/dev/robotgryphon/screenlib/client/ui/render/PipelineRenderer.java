@@ -11,12 +11,6 @@ import org.joml.Vector3f;
 import org.joml.Vector4f;
 
 public class PipelineRenderer {
-
-    /**
-     * A mesh whose vertex data is already on the GPU. Uploading is a buffer
-     * command, which the backend forbids while a render pass is open, so
-     * {@link #upload} must run before the pass and {@link #draw} inside it.
-     */
     public static final class UploadedMesh implements AutoCloseable {
         private final GpuBuffer vertices;
         private final int indexCount;
@@ -28,7 +22,6 @@ public class PipelineRenderer {
             this.indices = indices;
         }
 
-        /** Uploads and closes {@code mesh}. Quads expand via the shared sequential index buffer. */
         public static UploadedMesh upload(MeshData mesh) {
             try (mesh) {
                 GpuBuffer vertices = RenderSystem.getDevice()
@@ -40,7 +33,6 @@ public class PipelineRenderer {
             }
         }
 
-        /** The pipeline and uniforms must already be bound. */
         public void draw(RenderPass pass) {
             pass.setVertexBuffer(0, vertices.slice());
             pass.setIndexBuffer(indices.getBuffer(indexCount), indices.type());

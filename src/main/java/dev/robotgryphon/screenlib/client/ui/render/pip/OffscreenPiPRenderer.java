@@ -23,40 +23,23 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.Optional;
 
-/**
- * PiP renderer base for shaders that need their own render pass (custom
- * uniform buffers, hand-built vertex data) rather than the feature-submit
- * path vanilla PiP renderers use. The vanilla base class keeps its target
- * texture private and only opens a pass over it <em>after</em>
- * {@link #renderToTexture}, so this class owns the texture itself and
- * overrides {@link #prepare} to hand subclasses a pass already targeting it.
- */
 public abstract class OffscreenPiPRenderer<T extends PictureInPictureRenderState>
         extends PictureInPictureRenderer<T> {
-
     private @Nullable GpuTexture texture;
     private @Nullable GpuTextureView textureView;
     private final Projection projection = new Projection();
     private final ProjectionMatrixBuffer projectionMatrixBuffer =
             new ProjectionMatrixBuffer("PIP - " + this.getClass().getSimpleName());
 
-    /** Draw commands recorded inside the render pass;. */
     @FunctionalInterface
     protected interface DrawCall extends AutoCloseable {
         void record(RenderPass pass);
 
-        /** Release per-draw GPU resources once the pass is finished. */
         @Override
         default void close() {
         }
     }
 
-    /**
-     * Upload everything {@code state} needs (uniform buffers, vertex data)
-     * and return the commands to record. Runs <em>before</em> the render
-     * pass opens, because the backend rejects buffer writes while a pass is
-     * active. The texture is {@code width x height} pixels, origin top-left.
-     */
     protected abstract DrawCall prepareDraw(T state, int width, int height);
 
     @Override
@@ -95,7 +78,6 @@ public abstract class OffscreenPiPRenderer<T extends PictureInPictureRenderState
         blitTexture(state, guiRenderState);
     }
 
-    /** Unused: all drawing goes through {@link #draw}. */
     @Override
     protected final void renderToTexture(T state, PoseStack poseStack, SubmitNodeCollector collector) {
     }

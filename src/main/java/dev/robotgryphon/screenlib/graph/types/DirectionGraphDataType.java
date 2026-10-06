@@ -9,7 +9,6 @@ import java.util.Optional;
 import java.util.Set;
 
 public class DirectionGraphDataType implements GraphDataType<Direction> {
-
     private static final Set<Direction> ALLOWED = Set.of(Direction.values());
 
     @Override

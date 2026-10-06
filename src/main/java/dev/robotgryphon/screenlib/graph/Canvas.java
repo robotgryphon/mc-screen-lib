@@ -3,10 +3,14 @@ package dev.robotgryphon.screenlib.graph;
 import com.mojang.serialization.DataResult;
 import dev.robotgryphon.screenlib.client.ui.widget.Connection;
 import dev.robotgryphon.screenlib.client.ui.widget.NodeWidget;
-import dev.robotgryphon.screenlib.graph.types.SimpleGraphDataType;
+import dev.robotgryphon.screenlib.graph.nodes.Node;
+import dev.robotgryphon.screenlib.graph.nodes.NodeDefinition;
+import dev.robotgryphon.screenlib.graph.ports.*;
+import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.core.Holder;
-import net.minecraft.util.CommonColors;
+import net.minecraft.resources.ResourceKey;
 import org.joml.Vector2dc;
+import org.joml.Vector2i;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -18,65 +22,60 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 public class Canvas {
-
-    private static final int[] CONNECTION_PALETTE = {
-            CommonColors.GREEN,
-            CommonColors.RED,
-            CommonColors.YELLOW,
-            CommonColors.WHITE,
-            CommonColors.LIGHT_GRAY,
-    };
     public static final int IN_FLIGHT_COLOR = 0xFFFFD24A;
 
     private final List<NodeWidget> nodes = new ArrayList<>();
     private final List<Connection> connections = new ArrayList<>();
 
-    /**
-     * Current per-node validation status, keyed by reference. Entries
-     * are present only for nodes whose most recent {@link Node#validate()}
-     * call produced a failure — a missing key means "valid (or never
-     * checked)." Kept in identity-keyed form because two structurally
-     * equal Nodes on different canvases are still distinct entries to
-     * the validity log.
-     *
-     * <p>Pushed in via {@link #submitValidity(Node, DataResult)} from
-     * {@link Node#validate()} after every mutation that could change
-     * a node's status. Consumers query via {@link #isInvalid(Node)} or
-     * {@link #invalidNodes()} when they need to react (e.g., the widget
-     * layer turning on a glow color).
-     */
+    private final Map<Node, Vector2i> positions = new IdentityHashMap<>();
     private final Map<Node, DataResult<Node>> validationResults = new IdentityHashMap<>();
+    private final Map<ResourceKey<NodeDefinition>, Holder<NodeDefinition>> definitions = new IdentityHashMap<>();
 
-    /**
-     * Set while the user is mid-drag from a port. Carries the source
-     * port's type so any rendering pass can dim things of other types
-     * out of the way — making the legal drop targets visually pop. Null
-     * outside of a drag. Set/cleared by the canvas widget when the
-     * pending connection comes and goes.
-     *
-     * <p>Lives on the model rather than the widget because the widgets
-     * that consult it (the node widgets, drawing themselves) already
-     * have a back-reference to {@link Canvas} but not to the widget
-     * that owns the pending state.
-     */
-    private @Nullable Holder<SimpleGraphDataType<?>> activeDragType;
+    private @Nullable Holder<GraphDataType<?>> activeDragType;
 
-    /**
-     * Add a node to the canvas. Returns the node for chaining. Also
-     * wires both the widget's and the underlying {@link Node}'s
-     * back-references to {@code this}: the widget needs it for
-     * render-time connection lookups (property ports only appear
-     * when wired), and the node needs it so {@link Node#validate()}
-     * can submit its current validity back. The node's own validity
-     * isn't computed here — it gets checked on the next mutation
-     * that affects it, matching the canvas's "validate on change,
-     * not on add" policy.
-     */
-    public NodeWidget addNode(NodeWidget node) {
-        this.nodes.add(node);
-        node.setCanvas(this);
-        node.node().setCanvas(this);
-        return node;
+    public void place(Node node, int x, int y) {
+        this.positions.put(node, new Vector2i(x, y));
+    }
+
+    public int x(Node node) {
+        return this.positions.get(node).x;
+    }
+
+    public int y(Node node) {
+        return this.positions.get(node).y;
+    }
+
+    public void register(Holder<NodeDefinition> definition) {
+        this.definitions.put(definition.key(), definition);
+    }
+
+    public Holder<NodeDefinition> definitionHolder(Node node) {
+        Holder<NodeDefinition> holder = this.definitions.get(node);
+        if (holder == null) {
+            throw new IllegalArgumentException("Node is not registered on this canvas: " + node);
+        }
+        return holder;
+    }
+
+    public NodeDefinition definition(Node node) {
+        return this.definitionHolder(node).value();
+    }
+
+    public NodeWidget addNode(NodeWidget widget) {
+        if (widget.node().canvas != this) {
+            throw new IllegalArgumentException("Node belongs to a different canvas: " + widget.node());
+        }
+        this.nodes.add(widget);
+        return widget;
+    }
+
+    public NodeWidget widgetFor(Node node) {
+        for (NodeWidget widget : this.nodes) {
+            if (widget.node() == node) {
+                return widget;
+            }
+        }
+        throw new IllegalArgumentException("Node is not on this canvas: " + node);
     }
 
     public List<NodeWidget> nodes() {
@@ -87,38 +86,6 @@ public class Canvas {
         return Collections.unmodifiableList(this.connections);
     }
 
-    /**
-     * Remove all connections (e.g., for a "clear" action).
-     *
-     * <p>After the wires are gone, every node that had a wire targeting
-     * it re-validates so the canvas's invalid-node set reflects the
-     * fact that previously-wired required inputs are suddenly bare.
-     * Collected up front because by the time we revalidate the
-     * connection list is empty, so we won't be able to ask "who was
-     * a target."
-     */
-    public void clearConnections() {
-        Set<Node> targets = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (Connection c : this.connections) {
-            targets.add(c.target());
-        }
-        this.connections.clear();
-        for (Node target : targets) {
-            target.validate();
-            revalidateDownstreamOf(target);
-        }
-    }
-
-    // -- Validation status --------------------------------------------------
-
-    /**
-     * Stores {@code result} as {@code node}'s current validity. A
-     * successful result clears any prior failure entry — i.e., the
-     * map is the inventory of currently-failing nodes, not of every
-     * node we've ever checked. Called by {@link Node#validate()} after
-     * the node has finished re-evaluating itself; consumers shouldn't
-     * normally call this directly.
-     */
     public void submitValidity(Node node, DataResult<Node> result) {
         if (result.error().isPresent()) {
             this.validationResults.put(node, result);
@@ -127,53 +94,10 @@ public class Canvas {
         }
     }
 
-    /**
-     * Last-known validity for {@code node}. Returns a success result
-     * when nothing has been submitted yet — the canvas treats untouched
-     * nodes as valid until proven otherwise (matches the "only validate
-     * on mutations" policy: a freshly-added node has no entry).
-     */
-    public DataResult<Node> validity(Node node) {
-        DataResult<Node> stored = this.validationResults.get(node);
-        return stored != null ? stored : DataResult.success(node);
-    }
-
-    /** {@code true} when {@code node}'s most recent submission was a failure. */
     public boolean isInvalid(Node node) {
         return this.validationResults.containsKey(node);
     }
 
-    /** Live, unmodifiable view of every node currently flagged as invalid. */
-    public Set<Node> invalidNodes() {
-        return Collections.unmodifiableSet(this.validationResults.keySet());
-    }
-
-    /**
-     * Re-runs {@link Node#validate()} for every node currently on the
-     * canvas. Convenience for callers that want a fresh snapshot
-     * (e.g., right after a load) without manually iterating widgets.
-     */
-    public void revalidateAll() {
-        for (NodeWidget widget : this.nodes) {
-            widget.node().validate();
-        }
-    }
-
-    /**
-     * Re-validates every node transitively reachable through outbound
-     * wires from {@code source}. The starting node is NOT itself
-     * re-validated — callers should validate it directly before calling
-     * this so the chain begins from a known-current state. Used by the
-     * mutation paths (and {@link Node#setPropertyValue}) to push the
-     * effect of a change through to every downstream property port
-     * that resolves its incoming value through the chain.
-     *
-     * <p>The walk uses an identity-keyed visited set so accidental
-     * cycles in the connection graph (which {@link #resolveUpstreamValue}
-     * already tolerates) terminate cleanly here too — every node is
-     * validated at most once per call regardless of how many paths
-     * lead to it.
-     */
     public void revalidateDownstreamOf(Node source) {
         Set<Node> visited = Collections.newSetFromMap(new IdentityHashMap<>());
         visited.add(source);
@@ -190,17 +114,11 @@ public class Canvas {
         }
     }
 
-    /** The type currently being dragged from, or {@code null} when no drag is in flight. */
-    public @Nullable Holder<SimpleGraphDataType<?>> activeDragType() {
+    public @Nullable Holder<GraphDataType<?>> activeDragType() {
         return this.activeDragType;
     }
 
-    /**
-     * Sets the active drag type. Pass the source port's type when a
-     * pending connection starts; pass {@code null} when it ends (release
-     * or cancellation). Idempotent — repeated identical sets are a no-op.
-     */
-    public void setActiveDragType(@Nullable Holder<SimpleGraphDataType<?>> type) {
+    public void setActiveDragType(@Nullable Holder<GraphDataType<?>> type) {
         this.activeDragType = type;
     }
 
@@ -230,121 +148,46 @@ public class Canvas {
         return s.build();
     }
 
-    /**
-     * Add a connection between two ports. Returns {@code true} if the
-     * connection was added; {@code false} if it was rejected because
-     * the sides aren't a valid output→input pair or the port types
-     * differ.
-     *
-     * <p>Input ports accept exactly one inbound connection. If
-     * {@code to} already has a wire targeting it, that wire is
-     * dropped and the new one takes its place — the standard node
-     * graph UX where redirecting an input is a single drag, not a
-     * disconnect-then-reconnect dance. The replacement covers
-     * {@code (from, to)} exactly matching an existing connection too
-     * (that connection's removal and immediate re-add is a no-op
-     * net change but still reports {@code true} so the caller knows
-     * the wire is now live).
-     */
     public boolean connect(Port from, Port to, int color) {
         if (from.side() != PortSide.RIGHT || to.side() != PortSide.LEFT) {
             return false;
         }
-        // PropertyDefinition instances are registered singletons, so identity
-        // on the resolved value is the right notion of "same type" here.
         if (from.type().value() != to.type().value()) {
             return false;
         }
-        // Enforce single-inbound on the target input by dropping any
-        // existing wire that targets it before the new wire lands.
-        this.connections.removeIf(c -> c.targetPort().equals(to));
-        this.connections.add(new Connection(from.node(), from, to.node(), to, color));
-        // The target's required-inputs picture changed (and possibly
-        // its driven properties via captureUpstream below) — let it
-        // resubmit its validity to the canvas. The new wire can also
-        // change what downstream nodes resolve through this target's
-        // outputs, so propagate beyond the immediate target.
+        for (Connection existing : List.copyOf(this.connections)) {
+            if (existing.targetPort().equals(to)) {
+                detach(existing);
+            }
+        }
+        attach(new Connection(from.node(), from, to.node(), to, color));
         to.node().validate();
         revalidateDownstreamOf(to.node());
         return true;
     }
 
     public void removeConnection(Connection connection) {
-        // Latch the value the wire was delivering into the target's
-        // property slot before dropping the wire — the user's intent
-        // when they unplug a driven input is "keep what I last set,"
-        // not "fall back to whatever the schema default was." Done
-        // here so every disconnect path that comes through this
-        // method preserves the value uniformly.
         captureUpstreamIntoProperty(connection);
-        this.connections.remove(connection);
-        // The target just lost an inbound wire — its required-input
-        // tally may have flipped, and what downstream nodes resolve
-        // through this target's linked-property outputs may have
-        // changed (the wire's value is gone, the local property is
-        // back in charge). Revalidate after the connection is gone
-        // so every check sees the final state.
+        detach(connection);
         connection.target().validate();
         revalidateDownstreamOf(connection.target());
     }
 
-    /**
-     * If {@code connection}'s target is a property port, resolves the
-     * value the wire was last delivering and writes it into the
-     * target node's local property slot, gated by the property's
-     * declared {@code allowedValues} when present.
-     *
-     * <p>The capture-on-disconnect behavior makes a disconnect read
-     * like "freeze the value that was flowing in" rather than "snap
-     * back to the schema default" — so a Direction wired to a Side
-     * input that's been driven to {@code north} stays at {@code north}
-     * after the user unplugs it, instead of reverting to the default
-     * {@code up}. No-op for non-property targets (regular input ports
-     * have no local storage), for connections whose source can't
-     * supply a value (the {@link #resolveUpstreamValue} chain bottoms
-     * out at {@code null}), and for values rejected by an
-     * {@code allowedValues} membership check on the target's
-     * {@link SimpleGraphDataType}.
-     */
     private void captureUpstreamIntoProperty(Connection connection) {
-        Port targetPort = connection.targetPort();
-        if (!targetPort.isProperty()) return;
+        if (!(connection.targetPort() instanceof PropertyInputPort targetPort)) return;
         String propName = targetPort.propertyName();
-        if (propName == null) return;
 
         Object value = resolveUpstreamValue(connection);
         if (value == null) return;
 
-        SimpleGraphDataType<?> def = targetPort.type().value();
+        GraphDataType<?> def = targetPort.type().value();
         if (def.allowedValues().isPresent()
                 && !def.allowedValues().get().contains(value)) {
-            // The wire was delivering a value the target's property
-            // type wouldn't normally accept (a Direction outside the
-            // six-direction set, etc.). Drop it on the floor rather
-            // than corrupt the property with an unrepresentable
-            // entry.
             return;
         }
-        connection.target().setPropertyValue(propName, value);
+        connection.target().propertyManager().set(propName, value);
     }
 
-    /**
-     * Walks the wire chain backwards from {@code connection} to find
-     * the value flowing through it. Same algorithm the widget layer
-     * uses for driven-display rendering — at each hop, if the source
-     * node's linked property has its OWN inbound wire, recurse into
-     * that wire's source; otherwise return the source node's stored
-     * property value. A {@link java.util.HashSet} of visited source
-     * ports terminates any accidental cycle with a {@code null}
-     * result.
-     *
-     * <p>Returns {@code null} when the chain bottoms out at an output
-     * with no linked property, a node whose linked property is unset,
-     * or a cycle. Callers that need a typed fallback (the renderer
-     * uses a zero of the appropriate numeric type so a driven row
-     * always shows something) apply it on top of this method's
-     * return value.
-     */
     public @Nullable Object resolveUpstreamValue(Connection connection) {
         return resolveUpstreamValue(connection, new java.util.HashSet<>());
     }
@@ -355,69 +198,47 @@ public class Canvas {
         if (!visited.add(source)) {
             return null;
         }
-        String linkedProp = source.linkedPropertyName();
-        if (linkedProp == null) return null;
-        Node sourceNode = source.node();
-
-        Connection upstream = findInboundPropertyConnection(sourceNode, linkedProp);
-        if (upstream != null) {
-            return resolveUpstreamValue(upstream, visited);
-        }
-        return sourceNode.propertyValue(linkedProp);
-    }
-
-    /**
-     * Looks for an active connection whose target is the named
-     * property's input port on {@code node}. Returns {@code null}
-     * when no such wire exists. Used by {@link #resolveUpstreamValue}
-     * to detect when the source of a wire is itself driven, so the
-     * chain walk can recurse instead of reading a stale local
-     * property value.
-     */
-    private @Nullable Connection findInboundPropertyConnection(Node node, String propertyName) {
-        for (Connection connection : this.connections) {
-            Port target = connection.targetPort();
-            if (target.node() != node) continue;
-            if (!target.isProperty()) continue;
-            if (target.side() != PortSide.LEFT) continue;
-            if (propertyName.equals(target.propertyName())) {
-                return connection;
+        return switch (source) {
+            case PropertyOutputPort relay -> {
+                Node sourceNode = relay.node();
+                Connection upstream = findInboundPropertyConnection(sourceNode, relay.propertyName());
+                yield upstream != null
+                        ? resolveUpstreamValue(upstream, visited)
+                        : sourceNode.propertyManager().value(relay.propertyName());
             }
-        }
-        return null;
+            case ConstantOutputPort constant -> constant.value();
+            case StandardOutputPort ignored -> null;
+            case InputPort ignored -> null;
+        };
     }
 
-    /**
-     * Remove a node from the canvas, along with every connection that
-     * referenced it. Also clears the widget's back-reference so a
-     * subsequently rendered detached widget (e.g., during animation) no
-     * longer reads connection state off this canvas.
-     *
-     * <p>No-op when the widget isn't on the canvas — callers don't have to
-     * pre-check membership.
-     */
+    private @Nullable Connection findInboundPropertyConnection(Node node, String propertyName) {
+        return node.portManager().inboundForProperty(propertyName);
+    }
+
+    private void attach(Connection connection) {
+        this.connections.add(connection);
+        connection.source().portManager().attach(connection);
+        connection.target().portManager().attach(connection);
+    }
+
+    private void detach(Connection connection) {
+        this.connections.remove(connection);
+        unregisterWithPorts(connection);
+    }
+
+    private static void unregisterWithPorts(Connection connection) {
+        connection.source().portManager().detach(connection);
+        connection.target().portManager().detach(connection);
+    }
+
     public void removeNode(NodeWidget widget) {
         if (!this.nodes.remove(widget)) {
             return;
         }
         Node removed = widget.node();
-        // Collect the neighbor nodes that lose a wire because of this
-        // removal — those need to re-validate after the dust settles.
-        // The removed node itself doesn't get revalidated; its entry is
-        // dropped wholesale below.
         java.util.Set<Node> neighborsToRevalidate =
                 Collections.newSetFromMap(new IdentityHashMap<>());
-        // Drop any wires that touched this node on either side. Using the
-        // model-level Node identity (not the widget) so this works for
-        // both source and target sides — Connection records hold Nodes,
-        // not NodeWidgets.
-        //
-        // For wires whose SOURCE is the removed node, capture the last
-        // value into the downstream target's property before dropping
-        // the wire — same "freeze the value" intent the user gets when
-        // they unplug a wire manually. Wires whose TARGET is the
-        // removed node skip the capture (writing into a node that's
-        // about to disappear is pointless).
         var it = this.connections.iterator();
         while (it.hasNext()) {
             Connection c = it.next();
@@ -431,67 +252,30 @@ public class Canvas {
                 neighborsToRevalidate.add(c.source());
             }
             it.remove();
+            unregisterWithPorts(c);
         }
-        widget.setCanvas(null);
-        removed.setCanvas(null);
-        // Drop any cached validity for the removed node so a future
-        // {@link #invalidNodes} snapshot doesn't keep pointing at a
-        // node that's no longer on the canvas.
         this.validationResults.remove(removed);
-        // Revalidate every node that lost a wire. Done AFTER the
-        // canvas-side state is fully updated so each node's validate()
-        // sees the final connection list. Propagate further downstream
-        // from each neighbor — a neighbor whose linked-property output
-        // now resolves to a different value affects ITS downstream too.
+        this.definitions.remove(removed);
+        this.positions.remove(removed);
         for (Node neighbor : neighborsToRevalidate) {
             neighbor.validate();
             revalidateDownstreamOf(neighbor);
         }
     }
 
-    // -- Persistence hooks --------------------------------------------------
-    // Save / load themselves live in CanvasStateManager. The canvas only
-    // exposes the minimum surface that manager needs to do its job:
-    // wipe the live state and append a pre-built connection without going
-    // through connect()'s validation (which would re-reject anything the
-    // saved data had legitimately produced).
-
-    /**
-     * Empties the canvas — drops every node and every connection — and
-     * clears each node widget's canvas back-reference so a subsequently-
-     * rendered detached widget no longer reads connection state off
-     * {@code this}. Used by {@link CanvasStateManager#loadState} to wipe
-     * before rebuild.
-     */
     public void clear() {
-        for (NodeWidget widget : this.nodes) {
-            widget.setCanvas(null);
-            widget.node().setCanvas(null);
-        }
         this.nodes.clear();
+        this.definitions.clear();
+        this.positions.clear();
+        for (Connection c : this.connections) {
+            unregisterWithPorts(c);
+        }
         this.connections.clear();
-        // Wipe every node's cached validity along with the graph
-        // itself — those entries refer to nodes we just detached, and
-        // a subsequent {@link #invalidNodes} call should describe the
-        // empty canvas, not the previous one.
         this.validationResults.clear();
     }
 
-    /**
-     * Appends {@code connection} to the canvas without the validation
-     * {@link #connect} runs. Used when restoring a saved canvas — the
-     * persisted connection has already passed through {@code connect}
-     * once, so re-validating against the rebuilt graph (where the same
-     * ports may have shifted indices) would falsely reject legitimate
-     * wires.
-     */
     public void addConnection(Connection connection) {
-        this.connections.add(connection);
-        // The target's required-inputs picture just changed. Match the
-        // {@link #connect} mutation path so a load-rebuilt canvas
-        // reaches the same validity state a freshly-edited one would,
-        // including the downstream propagation for any wire that
-        // changes what a later property port resolves through.
+        attach(connection);
         connection.target().validate();
         revalidateDownstreamOf(connection.target());
     }
