@@ -1,7 +1,7 @@
 package dev.robotgryphon.screenlib.graph.ports;
 
 import dev.robotgryphon.screenlib.graph.nodes.Node;
-import dev.robotgryphon.screenlib.graph.properties.NodeProperty;
+import dev.robotgryphon.screenlib.graph.schema.node.NodeProperty;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.core.Holder;
 import net.minecraft.network.chat.Component;

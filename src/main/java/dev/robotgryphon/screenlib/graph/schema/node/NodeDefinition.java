@@ -1,10 +1,10 @@
-package dev.robotgryphon.screenlib.graph.nodes;
+package dev.robotgryphon.screenlib.graph.schema.node;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.robotgryphon.screenlib.ScreenLib;
-import dev.robotgryphon.screenlib.graph.ports.*;
-import dev.robotgryphon.screenlib.graph.properties.NodeProperty;
+import dev.robotgryphon.screenlib.graph.schema.port.InputPortDefinition;
+import dev.robotgryphon.screenlib.graph.schema.port.OutputPortDefinition;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.codec.RegistryFixedCodec;
@@ -15,7 +15,8 @@ import java.util.List;
 
 public record NodeDefinition(List<InputPortDefinition> inputs,
                              List<OutputPortDefinition> outputs,
-                             List<NodeProperty<?>> properties) {
+                             List<NodeProperty<?>> properties,
+                             List<ComputedPropertyDefinition> computed) {
     public static final ResourceKey<Registry<NodeDefinition>> REGISTRY_KEY =
             ResourceKey.createRegistryKey(ScreenLib.id("nodes"));
 
@@ -30,7 +31,11 @@ public record NodeDefinition(List<InputPortDefinition> inputs,
 
             NodeProperty.CODEC.listOf()
                     .optionalFieldOf("properties", List.of())
-                    .forGetter(def -> Collections.unmodifiableList(def.properties()))
+                    .forGetter(def -> Collections.unmodifiableList(def.properties())),
+
+            ComputedPropertyDefinition.CODEC.listOf()
+                    .optionalFieldOf("computed", List.of())
+                    .forGetter(def -> Collections.unmodifiableList(def.computed()))
     ).apply(i, NodeDefinition::new)));
 
     public static final Codec<Holder<NodeDefinition>> HOLDER_CODEC = RegistryFixedCodec.create(REGISTRY_KEY);

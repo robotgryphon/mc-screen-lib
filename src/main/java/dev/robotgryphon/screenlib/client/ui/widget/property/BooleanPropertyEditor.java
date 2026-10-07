@@ -1,7 +1,6 @@
 package dev.robotgryphon.screenlib.client.ui.widget.property;
 
 import dev.robotgryphon.screenlib.client.ui.widget.RoundedShapes;
-import dev.robotgryphon.screenlib.graph.nodes.Node;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.input.MouseButtonEvent;

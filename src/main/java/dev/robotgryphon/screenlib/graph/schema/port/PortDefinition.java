@@ -1,4 +1,4 @@
-package dev.robotgryphon.screenlib.graph.ports;
+package dev.robotgryphon.screenlib.graph.schema.port;
 
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.core.Holder;

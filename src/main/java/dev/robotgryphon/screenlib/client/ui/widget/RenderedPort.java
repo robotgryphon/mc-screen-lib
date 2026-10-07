@@ -8,7 +8,7 @@ import dev.robotgryphon.screenlib.graph.ports.InputPort;
 import dev.robotgryphon.screenlib.graph.ports.Port;
 import dev.robotgryphon.screenlib.client.PortLayout;
 import dev.robotgryphon.screenlib.graph.ports.PropertyInputPort;
-import dev.robotgryphon.screenlib.graph.properties.NodeProperty;
+import dev.robotgryphon.screenlib.graph.schema.node.NodeProperty;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;

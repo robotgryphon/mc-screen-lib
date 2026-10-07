@@ -1,10 +1,8 @@
 package dev.robotgryphon.screenlib.graph.nodes;
 
-import com.mojang.serialization.DataResult;
+import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
 import dev.robotgryphon.screenlib.graph.Canvas;
 import dev.robotgryphon.screenlib.graph.ports.*;
-import dev.robotgryphon.screenlib.graph.properties.PropertyManager;
-import dev.robotgryphon.screenlib.graph.validation.GraphValidator;
 import net.minecraft.core.Holder;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
@@ -24,7 +22,7 @@ public class Node {
 
         NodeDefinition definition = definitionHolder.value();
         this.portManager = new PortManager(this, definition);
-        this.propertyManager = new PropertyManager(this, definition.properties());
+        this.propertyManager = new PropertyManager(this, definition.properties(), definition.computed());
     }
 
     public PortManager portManager() {
@@ -33,12 +31,6 @@ public class Node {
 
     public PropertyManager propertyManager() {
         return this.propertyManager;
-    }
-
-    public DataResult<Node> validate() {
-        DataResult<Node> result = GraphValidator.validateNodeInGraph(this, this.canvas);
-        this.canvas.submitValidity(this, result);
-        return result;
     }
 
     public static Component defaultTitle(ResourceKey<NodeDefinition> type) {

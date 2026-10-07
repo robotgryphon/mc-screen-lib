@@ -27,6 +27,14 @@ public final class DropdownEditor extends PropertyEditor {
         this.onOpenRequested = onOpenRequested;
     }
 
+    public static int widthFor(Font font, java.util.Collection<?> options) {
+        int widest = 0;
+        for (Object option : options) {
+            widest = Math.max(widest, font.width(PropertyValues.display(option)));
+        }
+        return widest + 3 * H_PADDING + 2 * CHEVRON_HALF_WIDTH + 1;
+    }
+
     public Object getValue() {
         return this.value;
     }

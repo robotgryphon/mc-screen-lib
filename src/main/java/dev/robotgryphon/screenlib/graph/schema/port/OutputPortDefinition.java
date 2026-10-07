@@ -1,4 +1,4 @@
-package dev.robotgryphon.screenlib.graph.ports;
+package dev.robotgryphon.screenlib.graph.schema.port;
 
 import com.mojang.datafixers.util.Pair;
 import com.mojang.serialization.Codec;

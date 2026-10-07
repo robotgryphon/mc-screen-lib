@@ -1,6 +1,6 @@
 package dev.robotgryphon.screenlib.client;
 
-import dev.robotgryphon.screenlib.graph.properties.NodeProperty;
+import dev.robotgryphon.screenlib.graph.schema.node.NodeProperty;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
 
@@ -18,6 +18,7 @@ public final class NodeRenderer {
     public static final int PROPERTY_PADDING_X = 8;
     public static final int PROPERTY_REGION_PADDING_Y = PROPERTY_PADDING_X;
     public static final int PROPERTY_VALUE_MIN_WIDTH = 60;
+    public static final int COMPUTED_VALUE_WIDTH = 110;
     public static final int PROPERTY_LABEL_VALUE_GAP = 16;
 
     private static final int TITLE_PADDING = 8;
@@ -35,7 +36,8 @@ public final class NodeRenderer {
                         + (rowCount - 1) * PROPERTY_ROW_GAP;
     }
 
-    public static int computeWidth(Font font, Component title, PortLayout layout, List<NodeProperty<?>> properties) {
+    public static int computeWidth(Font font, Component title, PortLayout layout,
+                                   List<String> rowNames, List<Integer> valueWidths) {
         int titleNeed = font.width(title) + 2 * TITLE_PADDING;
 
         int maxLeft = maxPortLabelWidth(font, layout, PortLayout.Kind.INPUT);
@@ -46,10 +48,10 @@ public final class NodeRenderer {
         }
 
         int propsNeed = 0;
-        for (NodeProperty<?> prop : properties) {
-            int labelWidth = font.width(propertyLabel(prop));
+        for (int i = 0; i < rowNames.size(); i++) {
+            int labelWidth = font.width(Component.literal(rowNames.get(i)));
             int rowWidth = 2 * PROPERTY_PADDING_X
-                    + labelWidth + PROPERTY_LABEL_VALUE_GAP + PROPERTY_VALUE_MIN_WIDTH;
+                    + labelWidth + PROPERTY_LABEL_VALUE_GAP + valueWidths.get(i);
             propsNeed = Math.max(propsNeed, rowWidth);
         }
 

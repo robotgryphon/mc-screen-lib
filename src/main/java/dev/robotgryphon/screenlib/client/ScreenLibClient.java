@@ -1,6 +1,7 @@
 package dev.robotgryphon.screenlib.client;
 
 import dev.robotgryphon.screenlib.ScreenLib;
+import dev.robotgryphon.screenlib.client.ui.AddNodeScreen;
 import dev.robotgryphon.screenlib.client.ui.TestScreen;
 import dev.robotgryphon.screenlib.client.ui.render.ExRenderPipelines;
 import dev.robotgryphon.screenlib.client.ui.render.pip.BezierCurvePiPRenderer;
@@ -35,5 +36,6 @@ public class ScreenLibClient {
 
     private static void registerMenuScreens(RegisterMenuScreensEvent event) {
         event.register(ScreenLib.TEST_SCREEN_MENU.get(), TestScreen::new);
+        event.register(ScreenLib.ADD_NODE_MENU.get(), AddNodeScreen::new);
     }
 }

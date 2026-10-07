@@ -1,10 +1,10 @@
-package dev.robotgryphon.screenlib.graph.nodes;
+package dev.robotgryphon.screenlib.graph.schema.node;
 
-import dev.robotgryphon.screenlib.graph.ports.InputPortDefinition;
-import dev.robotgryphon.screenlib.graph.ports.OutputPortDefinition;
-import dev.robotgryphon.screenlib.graph.ports.PropertyOutputPortDefinition;
-import dev.robotgryphon.screenlib.graph.ports.StandardOutputPortDefinition;
-import dev.robotgryphon.screenlib.graph.properties.NodeProperty;
+import dev.robotgryphon.screenlib.graph.computed.ComputedProperty;
+import dev.robotgryphon.screenlib.graph.schema.port.InputPortDefinition;
+import dev.robotgryphon.screenlib.graph.schema.port.OutputPortDefinition;
+import dev.robotgryphon.screenlib.graph.schema.port.PropertyOutputPortDefinition;
+import dev.robotgryphon.screenlib.graph.schema.port.StandardOutputPortDefinition;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.core.Holder;
 
@@ -15,6 +15,7 @@ public class NodeBuilder {
     private final List<InputPortDefinition> inputs = new ArrayList<>();
     private final List<OutputPortDefinition> outputs = new ArrayList<>();
     private final List<NodeProperty<?>> properties = new ArrayList<>();
+    private final List<ComputedPropertyDefinition> computed = new ArrayList<>();
 
     public NodeBuilder() {}
 
@@ -50,10 +51,17 @@ public class NodeBuilder {
         return this;
     }
 
+    public NodeBuilder addComputedProperty(String name, Holder<GraphDataType<?>> type,
+                                           Holder<ComputedProperty<?>> computation) {
+        this.computed.add(new ComputedPropertyDefinition(name, type, computation));
+        return this;
+    }
+
     public NodeDefinition build() {
         return new NodeDefinition(
                 List.copyOf(this.inputs),
                 List.copyOf(this.outputs),
-                List.copyOf(this.properties));
+                List.copyOf(this.properties),
+                List.copyOf(this.computed));
     }
 }

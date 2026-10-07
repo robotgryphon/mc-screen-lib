@@ -1,6 +1,7 @@
 package dev.robotgryphon.screenlib.menu;
 
 import dev.robotgryphon.screenlib.graph.CanvasState;
+import dev.robotgryphon.screenlib.graph.schema.AllowedValuesSnapshot;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -26,5 +27,6 @@ public record TestScreenMenuProvider(Level level) implements MenuProvider {
         TestScreenMenu testMenu = (TestScreenMenu) menu;
         ByteBufCodecs.fromCodecWithRegistries(CanvasState.CODEC)
                 .encode(buffer, testMenu.state());
+        AllowedValuesSnapshot.STREAM_CODEC.encode(buffer, testMenu.allowedValues());
     }
 }

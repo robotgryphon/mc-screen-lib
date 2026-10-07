@@ -1,9 +1,14 @@
 package dev.robotgryphon.screenlib.graph.ports;
 
+import dev.robotgryphon.screenlib.graph.schema.port.InputPortDefinition;
+import dev.robotgryphon.screenlib.graph.schema.port.OutputPortDefinition;
+import dev.robotgryphon.screenlib.graph.schema.port.StandardOutputPortDefinition;
+import dev.robotgryphon.screenlib.graph.schema.port.PropertyOutputPortDefinition;
+import dev.robotgryphon.screenlib.graph.schema.port.ConstantOutputPortDefinition;
 import dev.robotgryphon.screenlib.graph.Connection;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
-import dev.robotgryphon.screenlib.graph.nodes.NodeDefinition;
-import dev.robotgryphon.screenlib.graph.properties.NodeProperty;
+import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
+import dev.robotgryphon.screenlib.graph.schema.node.NodeProperty;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 

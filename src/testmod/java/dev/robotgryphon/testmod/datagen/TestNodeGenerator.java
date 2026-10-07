@@ -1,11 +1,9 @@
 package dev.robotgryphon.testmod.datagen;
 
 import dev.robotgryphon.screenlib.ScreenLib;
-import dev.robotgryphon.screenlib.graph.nodes.NodeBuilder;
-import dev.robotgryphon.screenlib.graph.nodes.NodeDefinition;
-import dev.robotgryphon.screenlib.graph.types.GraphDataType;
+import dev.robotgryphon.screenlib.graph.schema.node.NodeBuilder;
+import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
 import dev.robotgryphon.testmod.TestMod;
-import net.minecraft.core.Holder;
 import net.minecraft.core.RegistrySetBuilder;
 import net.minecraft.data.worldgen.BootstrapContext;
 import net.minecraft.resources.Identifier;
@@ -28,7 +26,8 @@ public class TestNodeGenerator {
         ctx.register(nodeType("get_block"), new NodeBuilder()
                 .addInput("Position", blockPos)
                 .addInput("Level", level)
-                .addProperty("state", blockState)
+                .addOutput("State", blockState, "state")
+                .addComputedProperty("state", blockState, ScreenLib.BLOCK_STATE_AT)
                 .build());
     }
 }

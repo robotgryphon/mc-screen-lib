@@ -1,12 +1,12 @@
 package dev.robotgryphon.screenlib.graph;
 
 import dev.robotgryphon.screenlib.graph.nodes.Node;
-import dev.robotgryphon.screenlib.graph.nodes.NodeDefinition;
+import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
 import dev.robotgryphon.screenlib.graph.nodes.NodeState;
 import dev.robotgryphon.screenlib.graph.ports.Port;
 import dev.robotgryphon.screenlib.graph.ports.PortSide;
 import dev.robotgryphon.screenlib.graph.ports.PropertyInputPort;
-import dev.robotgryphon.screenlib.graph.properties.NodeProperty;
+import dev.robotgryphon.screenlib.graph.schema.node.NodeProperty;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.Dynamic;

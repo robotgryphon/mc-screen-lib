@@ -2,7 +2,7 @@ package dev.robotgryphon.screenlib.graph.validation;
 
 import dev.robotgryphon.screenlib.graph.ports.PropertyInputPort;
 import dev.robotgryphon.screenlib.graph.ports.StandardInputPort;
-import dev.robotgryphon.screenlib.graph.properties.NodeProperty;
+import dev.robotgryphon.screenlib.graph.schema.node.NodeProperty;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import dev.robotgryphon.screenlib.graph.Connection;
@@ -19,13 +19,26 @@ import java.util.List;
 public final class GraphValidator {
     private GraphValidator() {}
 
-    public static DataResult<Node> validateNodeInGraph(Node node, Canvas canvas) {
+    public static List<NodeValidity> validate(Canvas canvas) {
+        List<NodeValidity> results = new ArrayList<>();
+        List<Node> nodes = canvas.nodes();
+        for (int i = 0; i < nodes.size(); i++) {
+            List<String> errors = errors(nodes.get(i));
+            if (!errors.isEmpty()) {
+                results.add(new NodeValidity(i, errors));
+            }
+        }
+        return results;
+    }
+
+    public static List<String> errors(Node node) {
+        Canvas canvas = node.canvas;
         List<String> errors = new ArrayList<>();
         collectNodeErrors(node, errors);
         collectRequiredInputErrors(node, canvas.connections(), errors);
         collectRequiredPropertyErrors(node, canvas.connections(), errors);
         collectIncomingWireValueErrors(node, canvas, errors);
-        return buildResult(node, errors, "Node");
+        return errors;
     }
 
     private static void collectNodeErrors(Node node, List<String> errors) {
@@ -43,7 +56,7 @@ public final class GraphValidator {
                 continue;
             }
 
-            var allowed = def.allowedValues(node.canvas.registries());
+            var allowed = node.canvas.allowedValues(prop.anyType());
             if (allowed.isPresent() && !allowed.get().contains(value)) {
                 errors.add(nodeTag + " property '" + prop.name()
                         + "' value " + value
@@ -90,7 +103,7 @@ public final class GraphValidator {
         String nodeTag = nodeTag(node);
         for (NodeProperty<?> prop : node.propertyManager().properties()) {
             GraphDataType<?> def = prop.type().value();
-            var allowed = def.allowedValues(canvas.registries());
+            var allowed = canvas.allowedValues(prop.anyType());
             if (allowed.isEmpty()) continue;
 
             Connection inbound = null;
@@ -143,13 +156,5 @@ public final class GraphValidator {
 
     private static String nodeTag(Node node) {
         return "node '" + node.title.getString() + "'";
-    }
-
-    private static <T> DataResult<T> buildResult(T value, List<String> errors, String label) {
-        if (errors.isEmpty()) {
-            return DataResult.success(value);
-        }
-        String joined = String.join("; ", errors);
-        return DataResult.error(() -> label + " validation failed: " + joined, value);
     }
 }

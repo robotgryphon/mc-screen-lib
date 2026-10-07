@@ -1,5 +1,9 @@
 package dev.robotgryphon.screenlib.client.ui.widget;
 
+import java.util.List;
+import java.util.ArrayList;
+import dev.robotgryphon.screenlib.graph.schema.node.NodeProperty;
+import dev.robotgryphon.screenlib.client.ui.widget.property.DropdownEditor;
 import dev.robotgryphon.screenlib.client.NodeRenderer;
 import dev.robotgryphon.screenlib.client.PortLayout;
 import dev.robotgryphon.screenlib.client.ui.render.uniforms.NodeBackgroundUniform;
@@ -38,6 +42,7 @@ public class NodeWidget extends AbstractWidget {
 
     private final Node node;
     private final PortLayout layout;
+    private final List<Integer> valueWidths;
     private final DragState dragState;
     private final NodePortsWidget ports;
     private final NodePropertiesWidget properties;
@@ -50,26 +55,52 @@ public class NodeWidget extends AbstractWidget {
 
 
     public NodeWidget(Node node, DragState dragState) {
-        this(node, dragState, PortLayout.compile(node.portManager().ports(), Minecraft.getInstance().font));
+        this(node, dragState, PortLayout.compile(node.portManager().ports(), Minecraft.getInstance().font),
+                valueWidths(node));
     }
 
-    private NodeWidget(Node node, DragState dragState, PortLayout layout) {
-        super(node.canvas.x(node), node.canvas.y(node), width(node, layout), height(node, layout), node.title);
+    private NodeWidget(Node node, DragState dragState, PortLayout layout, List<Integer> valueWidths) {
+        super(node.canvas.x(node), node.canvas.y(node), width(node, layout, valueWidths), height(node, layout), node.title);
         this.node = node;
+        this.valueWidths = valueWidths;
         this.dragState = dragState;
         this.layout = layout;
         this.ports = new NodePortsWidget(this, node.portManager(), layout);
         this.properties = new NodePropertiesWidget(this, node.propertyManager());
     }
 
-    private static int width(Node node, PortLayout layout) {
+    private static List<Integer> valueWidths(Node node) {
+        Font font = Minecraft.getInstance().font;
+        List<Integer> widths = new ArrayList<>();
+        for (NodeProperty<?> prop : node.propertyManager().properties()) {
+            int width = NodeRenderer.PROPERTY_VALUE_MIN_WIDTH;
+            var allowed = node.canvas.allowedValues(prop.anyType());
+            if (allowed.isPresent()) {
+                width = Math.max(width, DropdownEditor.widthFor(font, allowed.get()));
+            }
+            widths.add(width);
+        }
+        for (int i = 0; i < node.propertyManager().computedProperties().size(); i++) {
+            widths.add(NodeRenderer.COMPUTED_VALUE_WIDTH);
+        }
+        return List.copyOf(widths);
+    }
+
+    private static int width(Node node, PortLayout layout, List<Integer> valueWidths) {
+        List<String> rowNames = new ArrayList<>();
+        node.propertyManager().properties().forEach(prop -> rowNames.add(prop.name()));
+        node.propertyManager().computedProperties().forEach(def -> rowNames.add(def.name()));
         return NodeRenderer.computeWidth(Minecraft.getInstance().font, node.title,
-                layout, node.propertyManager().properties());
+                layout, rowNames, valueWidths);
+    }
+
+    int valueWidth(int rowIndex) {
+        return this.valueWidths.get(rowIndex);
     }
 
     private static int height(Node node, PortLayout layout) {
         return NodeRenderer.TITLE_BAR_HEIGHT + layout.bandHeight()
-                + NodeRenderer.propertyRegionHeight(node.propertyManager().properties().size());
+                + NodeRenderer.propertyRegionHeight(node.propertyManager().rowCount());
     }
 
     @Override

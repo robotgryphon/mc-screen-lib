@@ -1,36 +1,41 @@
 package dev.robotgryphon.screenlib.graph;
 
-import com.mojang.serialization.DataResult;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.ports.*;
+import dev.robotgryphon.screenlib.graph.schema.AllowedValues;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
-import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.Holder;
+import net.minecraft.server.MinecraftServer;
 import org.joml.Vector2i;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.Optional;
 
 public class Canvas {
     private final List<Node> nodes = new ArrayList<>();
     private final List<Connection> connections = new ArrayList<>();
 
     private final Map<Node, Vector2i> positions = new IdentityHashMap<>();
-    private final Map<Node, DataResult<Node>> validationResults = new IdentityHashMap<>();
+    private final Map<Node, List<String>> validity = new IdentityHashMap<>();
     private final Map<Node, Integer> tints = new IdentityHashMap<>();
 
-    private final RegistryAccess registries;
+    private final AllowedValues allowedValues;
 
-    public Canvas(RegistryAccess registries) {
-        this.registries = registries;
+    private int revision;
+    private @Nullable MinecraftServer server;
+
+    public Canvas(AllowedValues allowedValues) {
+        this.allowedValues = allowedValues;
     }
 
-    public RegistryAccess registries() {
-        return this.registries;
+    public Optional<Collection<Object>> allowedValues(Holder<GraphDataType<?>> type) {
+        return this.allowedValues.of(type);
     }
 
     public void place(Node node, int x, int y) {
@@ -62,6 +67,7 @@ public class Canvas {
             throw new IllegalArgumentException("Node belongs to a different canvas: " + node);
         }
         this.nodes.add(node);
+        this.touch();
         return node;
     }
 
@@ -73,32 +79,33 @@ public class Canvas {
         return Collections.unmodifiableList(this.connections);
     }
 
-    public void submitValidity(Node node, DataResult<Node> result) {
-        if (result.error().isPresent()) {
-            this.validationResults.put(node, result);
-        } else {
-            this.validationResults.remove(node);
-        }
+    public @Nullable MinecraftServer server() {
+        return this.server;
+    }
+
+    public void attachServer(MinecraftServer server) {
+        this.server = server;
+    }
+
+    public int revision() {
+        return this.revision;
+    }
+
+    public void touch() {
+        this.revision++;
     }
 
     public boolean isInvalid(Node node) {
-        return this.validationResults.containsKey(node);
+        return this.validity.containsKey(node);
     }
 
-    public void revalidateDownstreamOf(Node source) {
-        Set<Node> visited = Collections.newSetFromMap(new IdentityHashMap<>());
-        visited.add(source);
-        revalidateDownstreamOfImpl(source, visited);
+    public List<String> errors(Node node) {
+        return this.validity.getOrDefault(node, List.of());
     }
 
-    private void revalidateDownstreamOfImpl(Node source, Set<Node> visited) {
-        for (Connection c : this.connections) {
-            if (c.source() != source) continue;
-            Node target = c.target();
-            if (!visited.add(target)) continue;
-            target.validate();
-            revalidateDownstreamOfImpl(target, visited);
-        }
+    public void setValidity(Map<Node, List<String>> results) {
+        this.validity.clear();
+        this.validity.putAll(results);
     }
 
     public boolean connect(Port from, Port to) {
@@ -114,16 +121,14 @@ public class Canvas {
             }
         }
         attach(new Connection(from.node(), from, to.node(), to));
-        to.node().validate();
-        revalidateDownstreamOf(to.node());
+        this.touch();
         return true;
     }
 
     public void removeConnection(Connection connection) {
         captureUpstreamIntoProperty(connection);
         detach(connection);
-        connection.target().validate();
-        revalidateDownstreamOf(connection.target());
+        this.touch();
     }
 
     private void captureUpstreamIntoProperty(Connection connection) {
@@ -133,8 +138,7 @@ public class Canvas {
         Object value = resolveUpstreamValue(connection);
         if (value == null) return;
 
-        GraphDataType<?> def = targetPort.type().value();
-        var allowed = def.allowedValues(this.registries);
+        var allowed = this.allowedValues(targetPort.type());
         if (allowed.isPresent() && !allowed.get().contains(value)) {
             return;
         }
@@ -189,8 +193,6 @@ public class Canvas {
         if (!this.nodes.remove(removed)) {
             return;
         }
-        java.util.Set<Node> neighborsToRevalidate =
-                Collections.newSetFromMap(new IdentityHashMap<>());
         var it = this.connections.iterator();
         while (it.hasNext()) {
             Connection c = it.next();
@@ -199,20 +201,14 @@ public class Canvas {
             if (!sourceMatch && !targetMatch) continue;
             if (sourceMatch && !targetMatch) {
                 captureUpstreamIntoProperty(c);
-                neighborsToRevalidate.add(c.target());
-            } else if (targetMatch && !sourceMatch) {
-                neighborsToRevalidate.add(c.source());
             }
             it.remove();
             unregisterWithPorts(c);
         }
-        this.validationResults.remove(removed);
+        this.validity.remove(removed);
         this.positions.remove(removed);
         this.tints.remove(removed);
-        for (Node neighbor : neighborsToRevalidate) {
-            neighbor.validate();
-            revalidateDownstreamOf(neighbor);
-        }
+        this.touch();
     }
 
     public void clear() {
@@ -223,12 +219,12 @@ public class Canvas {
             unregisterWithPorts(c);
         }
         this.connections.clear();
-        this.validationResults.clear();
+        this.validity.clear();
+        this.touch();
     }
 
     public void addConnection(Connection connection) {
         attach(connection);
-        connection.target().validate();
-        revalidateDownstreamOf(connection.target());
+        this.touch();
     }
 }

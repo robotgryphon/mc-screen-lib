@@ -9,7 +9,7 @@ import dev.robotgryphon.screenlib.client.ui.widget.DragState;
 import dev.robotgryphon.screenlib.client.ui.widget.NodeWidget;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.ports.Port;
-import dev.robotgryphon.screenlib.graph.nodes.NodeDefinition;
+import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
 import dev.robotgryphon.screenlib.graph.ports.StandardInputPort;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.client.Minecraft;
@@ -21,8 +21,15 @@ import net.minecraft.client.gui.layouts.GridLayout;
 import net.minecraft.client.gui.layouts.HeaderAndFooterLayout;
 import net.minecraft.client.gui.layouts.LinearLayout;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.MenuAccess;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.core.Holder;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.entity.player.Inventory;
+import net.neoforged.neoforge.client.network.ClientPacketDistributor;
+import dev.robotgryphon.screenlib.menu.AddNodeMenu;
+import dev.robotgryphon.screenlib.network.AddNodeResultPayload;
+import java.util.Optional;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
@@ -32,10 +39,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.stream.Stream;
 
-public class AddNodeDialog extends Screen {
+public class AddNodeScreen extends Screen implements MenuAccess<AddNodeMenu> {
     private static final int FILTER_INPUT_W = 300;
     private static final int HEADER_ROW_SPACING = 4;
     private static final int HEADER_HEIGHT = 60;
@@ -44,10 +50,10 @@ public class AddNodeDialog extends Screen {
     private static final int GRID_SPACING_X = 8;
     private static final int GRID_SPACING_Y = 4;
 
-    private final Screen parent;
+    private final AddNodeMenu menu;
     private final Canvas previewCanvas;
     private final List<Holder.Reference<NodeDefinition>> options;
-    private final Consumer<Holder.Reference<NodeDefinition>> onSubmit;
+    private boolean answered;
 
     private final List<PreviewTemplate> templates = new ArrayList<>();
     private final List<NodePreviewWidget> previewTiles = new ArrayList<>();
@@ -61,14 +67,20 @@ public class AddNodeDialog extends Screen {
     private ChipFilterInput<FilterMode> filterInput;
     private Button submitButton;
 
-    public AddNodeDialog(Screen parent,
-                         List<Holder.Reference<NodeDefinition>> options,
-                         Consumer<Holder.Reference<NodeDefinition>> onSubmit) {
+    public AddNodeScreen(AddNodeMenu menu, Inventory inventory, Component title) {
         super(Component.literal("Add Node"));
-        this.parent = parent;
-        this.options = List.copyOf(options);
-        this.onSubmit = onSubmit;
-        this.previewCanvas = new Canvas(minecraft.level.registryAccess());
+        this.menu = menu;
+        var registries = Minecraft.getInstance().level.registryAccess();
+        var definitions = registries.lookupOrThrow(NodeDefinition.REGISTRY_KEY);
+        this.options = menu.data().available().stream()
+                .flatMap(key -> definitions.get(key).stream())
+                .toList();
+        this.previewCanvas = new Canvas(menu.data().allowedValues().resolve(registries));
+    }
+
+    @Override
+    public AddNodeMenu getMenu() {
+        return this.menu;
     }
 
     @Override
@@ -296,13 +308,20 @@ public class AddNodeDialog extends Screen {
 
     private void submit() {
         if (this.selectedRef != null) {
-            this.onSubmit.accept(this.selectedRef);
+            this.answer(Optional.of(this.selectedRef.key()));
         }
-        this.close();
     }
 
     private void close() {
-        Minecraft.getInstance().setScreenAndShow(this.parent);
+        this.answer(Optional.empty());
+    }
+
+    private void answer(Optional<ResourceKey<NodeDefinition>> selected) {
+        if (this.answered) {
+            return;
+        }
+        this.answered = true;
+        ClientPacketDistributor.sendToServer(new AddNodeResultPayload(selected));
     }
 
     @Override

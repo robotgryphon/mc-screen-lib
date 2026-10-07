@@ -8,6 +8,7 @@ import net.minecraft.resources.Identifier;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Supplier;
 
 public final class GraphColors {
     public static final int DEFAULT = 0xFF8FA0FF;

@@ -7,7 +7,7 @@ import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 
-public record UpdateCanvasStatePayload(CanvasState state) implements CustomPacketPayload {
+public record UpdateCanvasStatePayload(CanvasState state, int sequence) implements CustomPacketPayload {
     public static final Type<UpdateCanvasStatePayload> TYPE =
             new Type<>(ScreenLib.id("update_canvas_state"));
 
@@ -15,6 +15,8 @@ public record UpdateCanvasStatePayload(CanvasState state) implements CustomPacke
             StreamCodec.composite(
                     ByteBufCodecs.fromCodecWithRegistries(CanvasState.CODEC),
                     UpdateCanvasStatePayload::state,
+                    ByteBufCodecs.VAR_INT,
+                    UpdateCanvasStatePayload::sequence,
                     UpdateCanvasStatePayload::new
             );
 

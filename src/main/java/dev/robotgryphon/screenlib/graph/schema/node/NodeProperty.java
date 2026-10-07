@@ -1,4 +1,4 @@
-package dev.robotgryphon.screenlib.graph.properties;
+package dev.robotgryphon.screenlib.graph.schema.node;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;

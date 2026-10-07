@@ -6,6 +6,9 @@ public final class PropertyValues {
     private PropertyValues() {}
 
     public static String display(Object value) {
+        if (value instanceof net.minecraft.world.level.block.state.BlockState state) {
+            return net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
+        }
         if (value instanceof ResourceKey<?> key) {
             return key.identifier().toString();
         }

@@ -1,5 +1,6 @@
 package dev.robotgryphon.screenlib.graph.nodes;
 
+import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.Dynamic;
 import com.mojang.serialization.codecs.RecordCodecBuilder;

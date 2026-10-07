@@ -1,8 +1,8 @@
 package dev.robotgryphon.screenlib.datagen;
 
 import dev.robotgryphon.screenlib.ScreenLib;
-import dev.robotgryphon.screenlib.graph.nodes.NodeBuilder;
-import dev.robotgryphon.screenlib.graph.nodes.NodeDefinition;
+import dev.robotgryphon.screenlib.graph.schema.node.NodeBuilder;
+import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.core.RegistrySetBuilder;
 import net.minecraft.data.worldgen.BootstrapContext;
@@ -45,10 +45,11 @@ public class NodeGenerator {
                 .build());
 
         ctx.register(nodeType("block_position"), new NodeBuilder()
-                .addOutput("Position", blockPos)
+                .addOutput("Position", blockPos, "position")
                 .addProperty("x", intType)
                 .addProperty("y", intType)
                 .addProperty("z", intType)
+                .addComputedProperty("position", blockPos, ScreenLib.BLOCK_POSITION_FROM_COORDINATES)
                 .build());
 
         ctx.register(nodeType("direction"), new NodeBuilder()
