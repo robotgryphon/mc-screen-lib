@@ -3,7 +3,6 @@
   "node.screenlib.direction": "Direction",
   "node.screenlib.level": "Level",
   "node.screenlib.resource_access_items": "Resource Access (Items)",
-
   "property_type.minecraft.block_pos": "Position",
   "property_type.minecraft.direction": "Direction",
   "property_type.minecraft.int": "Integer",
@@ -11,5 +10,15 @@
   "property_type.minecraft.double": "Double",
   "property_type.minecraft.string": "String",
   "property_type.minecraft.bool": "Boolean",
-  "property_type.screenlib.item_handler": "Item Handler"
+  "property_type.screenlib.item_handler": "Item Handler",
+  "node.screenlib.integer.value": "Integer",
+  "node.screenlib.float.value": "Float",
+  "node.screenlib.boolean.value": "Boolean",
+  "node.screenlib.block_position.position": "Position",
+  "node.screenlib.direction.value": "Direction",
+  "node.screenlib.level.value": "Level",
+  "node.screenlib.resource_access_items.storage": "Storage",
+  "node.screenlib.resource_access_items.position": "Position",
+  "node.screenlib.resource_access_items.level": "Level",
+  "node.screenlib.resource_access_items.side": "Side"
 }

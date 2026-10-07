@@ -1,9 +1,11 @@
 package dev.robotgryphon.screenlib.graph.schema.node;
 
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.DataResult;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.robotgryphon.screenlib.ScreenLib;
-import dev.robotgryphon.screenlib.graph.render.NodeRenderProvider;
+import dev.robotgryphon.screenlib.graph.computed.DataKey;
+import dev.robotgryphon.screenlib.graph.context.NodeContextSupplier;
 import dev.robotgryphon.screenlib.graph.schema.port.InputPortDefinition;
 import dev.robotgryphon.screenlib.graph.schema.port.OutputPortDefinition;
 import net.minecraft.core.Holder;
@@ -13,16 +15,17 @@ import net.minecraft.resources.ResourceKey;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 public record NodeDefinition(List<InputPortDefinition> inputs,
                              List<OutputPortDefinition> outputs,
-                             List<NodeProperty<?>> properties,
-                             List<ComputedPropertyDefinition> computed,
-                             List<Holder<NodeRenderProvider<?>>> renders) {
+                             List<PropertyDefinition> properties,
+                             List<WidgetDefinition> widgets,
+                             List<Holder<NodeContextSupplier>> context) {
     public static final ResourceKey<Registry<NodeDefinition>> REGISTRY_KEY =
             ResourceKey.createRegistryKey(ScreenLib.id("nodes"));
 
-    public static final Codec<NodeDefinition> CODEC = Codec.lazyInitialized(() -> RecordCodecBuilder.create(i -> i.group(
+    public static final Codec<NodeDefinition> CODEC = Codec.lazyInitialized(() -> RecordCodecBuilder.<NodeDefinition>create(i -> i.group(
             InputPortDefinition.CODEC.listOf()
                     .optionalFieldOf("inputs", List.of())
                     .forGetter(def -> Collections.unmodifiableList(def.inputs())),
@@ -31,18 +34,110 @@ public record NodeDefinition(List<InputPortDefinition> inputs,
                     .optionalFieldOf("outputs", List.of())
                     .forGetter(def -> Collections.unmodifiableList(def.outputs())),
 
-            NodeProperty.CODEC.listOf()
+            PropertyDefinition.CODEC.listOf()
                     .optionalFieldOf("properties", List.of())
                     .forGetter(def -> Collections.unmodifiableList(def.properties())),
 
-            ComputedPropertyDefinition.CODEC.listOf()
-                    .optionalFieldOf("computed", List.of())
-                    .forGetter(def -> Collections.unmodifiableList(def.computed())),
+            WidgetDefinition.CODEC.listOf()
+                    .optionalFieldOf("widgets", List.of())
+                    .forGetter(def -> Collections.unmodifiableList(def.widgets())),
 
-            NodeRenderProvider.HOLDER_CODEC.listOf()
-                    .optionalFieldOf("renders", List.of())
-                    .forGetter(def -> Collections.unmodifiableList(def.renders()))
-    ).apply(i, NodeDefinition::new)));
+            NodeContextSupplier.HOLDER_CODEC.listOf()
+                    .optionalFieldOf("context", List.of())
+                    .forGetter(def -> Collections.unmodifiableList(def.context()))
+    ).apply(i, NodeDefinition::new)).validate(NodeDefinition::validate));
+
+    private static DataResult<NodeDefinition> validate(NodeDefinition definition) {
+        for (InputPortDefinition input : definition.inputs()) {
+            var property = definition.property(input.property()).orElse(null);
+            if (!(property instanceof StoredPropertyDefinition<?>)) {
+                return DataResult.error(() -> "Input references '" + input.property()
+                        + "', which is not a stored property");
+            }
+        }
+        for (OutputPortDefinition output : definition.outputs()) {
+            if (definition.property(output.property()).isEmpty()) {
+                return DataResult.error(() -> "Output references unknown property '" + output.property() + "'");
+            }
+        }
+        for (ComputedPropertyDefinition computed : definition.computed()) {
+            var error = validateData(definition, computed);
+            if (error.isPresent()) {
+                return DataResult.error(error::get);
+            }
+        }
+        for (WidgetDefinition widget : definition.widgets()) {
+            if (!(definition.property(widget.property()).orElse(null) instanceof ComputedPropertyDefinition computed)) {
+                return DataResult.error(() -> "Widget references '" + widget.property() + "', which is not a computed property");
+            }
+            if (computed.computation().isBound() && computed.clientData().isEmpty()) {
+                return DataResult.error(() -> "Widget references '" + widget.property()
+                        + "', whose computation does not provide client data");
+            }
+        }
+        return DataResult.success(definition);
+    }
+
+    private static Optional<String> validateData(NodeDefinition definition, ComputedPropertyDefinition computed) {
+        String prefix = "Computed property '" + computed.name() + "'";
+        for (var entry : computed.data().entrySet()) {
+            if (definition.property(entry.getValue()).isEmpty()) {
+                return Optional.of(prefix + " maps '" + entry.getKey() + "' to unknown property '" + entry.getValue() + "'");
+            }
+        }
+        if (!computed.computation().isBound()) {
+            return Optional.empty();
+        }
+        List<DataKey<?>> requires = computed.computation().value().requires();
+        for (String key : computed.data().keySet()) {
+            if (requires.stream().noneMatch(required -> required.name().equals(key))) {
+                return Optional.of(prefix + " maps '" + key + "', which its computation does not use");
+            }
+        }
+        for (DataKey<?> key : requires) {
+            String mapped = computed.data().get(key.name());
+            if (mapped == null) {
+                if (!key.optional()) {
+                    return Optional.of(prefix + " does not map required data '" + key.name() + "'");
+                }
+                continue;
+            }
+            var property = definition.property(mapped).orElseThrow();
+            if (property.anyType().isBound() && key.type().isBound()
+                    && property.anyType().value() != key.type().value()) {
+                return Optional.of(prefix + " maps '" + key.name() + "' to '" + mapped + "', which has the wrong type");
+            }
+        }
+        return Optional.empty();
+    }
+
+    public Optional<PropertyDefinition> property(String name) {
+        return this.properties.stream().filter(property -> property.name().equals(name)).findFirst();
+    }
 
     public static final Codec<Holder<NodeDefinition>> HOLDER_CODEC = RegistryFixedCodec.create(REGISTRY_KEY);
+
+    public List<StoredPropertyDefinition<?>> stored() {
+        return this.properties.stream()
+                .<StoredPropertyDefinition<?>>mapMulti((property, out) -> {
+                    if (property instanceof StoredPropertyDefinition<?> stored) out.accept(stored);
+                })
+                .toList();
+    }
+
+    public List<ConstantPropertyDefinition> constants() {
+        return this.properties.stream()
+                .<ConstantPropertyDefinition>mapMulti((property, out) -> {
+                    if (property instanceof ConstantPropertyDefinition constant) out.accept(constant);
+                })
+                .toList();
+    }
+
+    public List<ComputedPropertyDefinition> computed() {
+        return this.properties.stream()
+                .<ComputedPropertyDefinition>mapMulti((property, out) -> {
+                    if (property instanceof ComputedPropertyDefinition computed) out.accept(computed);
+                })
+                .toList();
+    }
 }

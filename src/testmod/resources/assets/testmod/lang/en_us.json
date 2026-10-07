@@ -1,4 +1,10 @@
 {
+  "block.testmod.tree_harvester": "Tree Harvester",
   "node.testmod.get_block": "Get Block",
-  "node.testmod.tree_cutter_upgrade": "Tree Cutter Upgrade"
+  "node.testmod.tree_cutter_upgrade": "Tree Cutter Upgrade",
+  "node.testmod.get_block.state": "State",
+  "node.testmod.get_block.position": "Position",
+  "node.testmod.get_block.level": "Level",
+  "node.testmod.tree_cutter_upgrade.tools": "Tools",
+  "node.testmod.tree_cutter_upgrade.drops": "Drops"
 }

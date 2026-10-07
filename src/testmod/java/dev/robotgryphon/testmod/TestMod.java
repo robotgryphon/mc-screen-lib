@@ -1,10 +1,13 @@
 package dev.robotgryphon.testmod;
 
 import com.mojang.logging.LogUtils;
+import dev.robotgryphon.testmod.menu.LevelCanvasSource;
+import dev.robotgryphon.testmod.menu.TestScreenMenuProvider;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
@@ -15,8 +18,10 @@ public class TestMod {
     public static final String MOD_ID = "testmod";
     public static final Logger LOGGER = LogUtils.getLogger();
 
-    public TestMod() {
+    public TestMod(IEventBus modBus) {
         LOGGER.info("{} loaded", MOD_ID);
+        TestModBlocks.register(modBus);
+        TestModMenus.register(modBus);
         NeoForge.EVENT_BUS.addListener(TestMod::registerCommands);
     }
 
@@ -31,6 +36,13 @@ public class TestMod {
                             ChestFiller.fill(level, pos, level.getRandom());
                             context.getSource().sendSuccess(() -> Component.literal(
                                     "Filled chest at " + pos.getX() + ", " + pos.getY() + ", " + pos.getZ()), false);
+                            return 1;
+                        }))
+                .then(Commands.literal("screen")
+                        .requires(CommandSourceStack::isPlayer)
+                        .executes(context -> {
+                            var player = context.getSource().getPlayerOrException();
+                            player.openMenu(new TestScreenMenuProvider(new LevelCanvasSource(player.level())));
                             return 1;
                         })));
     }

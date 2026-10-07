@@ -1,6 +1,8 @@
 package dev.robotgryphon.testmod.datagen;
 
 import dev.robotgryphon.screenlib.ScreenLib;
+import dev.robotgryphon.screenlib.client.render.NodeWidgets;
+import dev.robotgryphon.screenlib.graph.computed.BlockStateAt;
 import dev.robotgryphon.screenlib.graph.schema.node.NodeBuilder;
 import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
 import dev.robotgryphon.testmod.TestMod;
@@ -25,16 +27,19 @@ public class TestNodeGenerator {
         var itemHandler = ScreenLib.ITEM_HANDLER_DATA_TYPE;
 
         ctx.register(nodeType("get_block"), new NodeBuilder()
-                .addInput("Position", blockPos)
-                .addInput("Level", level)
-                .addOutput("State", blockState, "state")
-                .addComputedProperty("state", blockState, ScreenLib.BLOCK_STATE_AT)
-                .addRender(ScreenLib.BLOCK_PREVIEW)
+                .addProperty("position", prop -> prop.type(blockPos).input())
+                .addProperty("level", prop -> prop.type(level).input())
+                .addProperty("state", prop -> prop.type(blockState)
+                        .output()
+                        .computed(ScreenLib.BLOCK_STATE_AT)
+                        .data(BlockStateAt.POSITION, "position")
+                        .data(BlockStateAt.LEVEL, "level"))
+                .addWidget(NodeWidgets.BLOCK_PREVIEW.key(), "state")
                 .build());
 
         ctx.register(nodeType("tree_cutter_upgrade"), new NodeBuilder()
-                .addInput("Tools", itemHandler)
-                .addInput("Drops", itemHandler)
+                .addProperty("tools", prop -> prop.type(itemHandler).input())
+                .addProperty("drops", prop -> prop.type(itemHandler).input())
                 .build());
     }
 }

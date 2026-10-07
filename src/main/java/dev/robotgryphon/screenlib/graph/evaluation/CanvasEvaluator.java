@@ -4,7 +4,6 @@ import com.mojang.serialization.Codec;
 import dev.robotgryphon.screenlib.graph.Canvas;
 import dev.robotgryphon.screenlib.graph.CanvasState;
 import dev.robotgryphon.screenlib.graph.CanvasStateManager;
-import dev.robotgryphon.screenlib.graph.computed.ComputeContext;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.nodes.PropertyManager;
 import dev.robotgryphon.screenlib.graph.schema.AllowedValues;
@@ -13,7 +12,6 @@ import dev.robotgryphon.screenlib.graph.validation.GraphValidator;
 import io.netty.buffer.Unpooled;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
@@ -45,34 +43,33 @@ public final class CanvasEvaluator {
         }
 
         public CanvasEvaluation evaluate() {
-            var transfer = this.canvas.transfer();
-            if (transfer != null) {
-                transfer.refresh();
-            }
             List<NodeComputed> computed = computeAll(this.canvas, this.registries);
-            List<NodeRendered> rendered = extractRenderStates(this.canvas, this.registries);
-            return new CanvasEvaluation(GraphValidator.validate(this.canvas), computed, rendered);
+            List<NodeClientData> clientData = extractClientData(this.canvas, this.registries);
+            return new CanvasEvaluation(GraphValidator.validate(this.canvas), computed, clientData);
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private static List<NodeRendered> extractRenderStates(Canvas canvas, RegistryAccess registries) {
-        List<NodeRendered> results = new ArrayList<>();
+    private static List<NodeClientData> extractClientData(Canvas canvas, RegistryAccess registries) {
+        List<NodeClientData> results = new ArrayList<>();
         List<Node> nodes = canvas.nodes();
         for (int i = 0; i < nodes.size(); i++) {
             Node node = nodes.get(i);
-            var providers = node.renderManager().providers();
-            for (int j = 0; j < providers.size(); j++) {
-                var provider = providers.get(j).value();
-                Optional<?> state = provider.extract(new ComputeContext(node));
-                if (state.isEmpty()) {
+            PropertyManager properties = node.propertyManager();
+            for (ComputedPropertyDefinition definition : properties.computedProperties()) {
+                var provider = definition.clientData();
+                Object value = properties.computedValue(definition.name());
+                if (!node.renderManager().displays(definition.name()) || provider.isEmpty() || value == null) {
+                    continue;
+                }
+                Optional<Object> data = provider.get().clientData(value, definition.context(node));
+                if (data.isEmpty()) {
                     continue;
                 }
                 var buffer = new RegistryFriendlyByteBuf(Unpooled.buffer(), registries);
-                ((StreamCodec<RegistryFriendlyByteBuf, Object>) provider.codec()).encode(buffer, state.get());
-                byte[] data = new byte[buffer.readableBytes()];
-                buffer.readBytes(data);
-                results.add(new NodeRendered(i, j, data));
+                provider.get().clientCodec().encode(buffer, data.get());
+                byte[] bytes = new byte[buffer.readableBytes()];
+                buffer.readBytes(bytes);
+                results.add(new NodeClientData(i, definition.name(), bytes));
             }
         }
         return results;
@@ -87,7 +84,7 @@ public final class CanvasEvaluator {
                 PropertyManager properties = node.propertyManager();
                 for (ComputedPropertyDefinition definition : properties.computedProperties()) {
                     Object next = definition.computation().value()
-                            .compute(new ComputeContext(node))
+                            .compute(definition.context(node))
                             .orElse(null);
                     if (!Objects.equals(properties.computedValue(definition.name()), next)) {
                         properties.setComputedValue(definition.name(), next);

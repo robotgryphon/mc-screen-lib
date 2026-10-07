@@ -6,9 +6,8 @@ import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.level.Level;
 
-public record AddNodeMenuProvider(Level level, AddNodeData data) implements MenuProvider {
+public record AddNodeMenuProvider(CanvasSource source, AddNodeData data) implements MenuProvider {
     @Override
     public Component getDisplayName() {
         return Component.literal("Add Node");
@@ -16,7 +15,7 @@ public record AddNodeMenuProvider(Level level, AddNodeData data) implements Menu
 
     @Override
     public AbstractContainerMenu createMenu(int containerId, Inventory inv, Player player) {
-        return new AddNodeMenu(containerId, inv, this.level, this.data);
+        return new AddNodeMenu(containerId, inv, this.source, this.data);
     }
 
     @Override

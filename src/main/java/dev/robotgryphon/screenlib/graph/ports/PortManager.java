@@ -2,13 +2,10 @@ package dev.robotgryphon.screenlib.graph.ports;
 
 import dev.robotgryphon.screenlib.graph.schema.port.InputPortDefinition;
 import dev.robotgryphon.screenlib.graph.schema.port.OutputPortDefinition;
-import dev.robotgryphon.screenlib.graph.schema.port.StandardOutputPortDefinition;
-import dev.robotgryphon.screenlib.graph.schema.port.PropertyOutputPortDefinition;
-import dev.robotgryphon.screenlib.graph.schema.port.ConstantOutputPortDefinition;
 import dev.robotgryphon.screenlib.graph.Connection;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
-import dev.robotgryphon.screenlib.graph.schema.node.NodeProperty;
+import dev.robotgryphon.screenlib.graph.schema.node.StoredPropertyDefinition;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
@@ -25,20 +22,15 @@ public final class PortManager {
     public PortManager(Node node, NodeDefinition def) {
         this.node = node;
 
-        List<Port> built = new ArrayList<>(def.inputs().size() + def.outputs().size() + def.properties().size());
+        List<Port> built = new ArrayList<>(def.inputs().size() + def.outputs().size());
         for (InputPortDefinition input : def.inputs()) {
-            built.add(new StandardInputPort(node, Component.literal(input.name()), input.type(), input.optional()));
+            if (def.property(input.property()).orElse(null) instanceof StoredPropertyDefinition<?> property) {
+                built.add(new PropertyInputPort(node, property));
+            }
         }
         for (OutputPortDefinition output : def.outputs()) {
-            Component title = Component.literal(output.name());
-            built.add(switch (output) {
-                case StandardOutputPortDefinition o -> new StandardOutputPort(node, title, o.type());
-                case PropertyOutputPortDefinition o -> new PropertyOutputPort(node, title, o.type(), o.linkedProperty());
-                case ConstantOutputPortDefinition o -> new ConstantOutputPort(node, title, o.type(), o.value());
-            });
-        }
-        for (NodeProperty<?> property : def.properties()) {
-            built.add(new PropertyInputPort(node, property));
+            def.property(output.property()).ifPresent(property -> built.add(new PropertyOutputPort(node,
+                    Node.propertyLabel(node.type(), property.name()), property.anyType(), property.name())));
         }
         this.ports = List.copyOf(built);
     }

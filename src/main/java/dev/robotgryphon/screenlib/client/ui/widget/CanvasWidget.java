@@ -406,8 +406,7 @@ public class CanvasWidget extends AbstractWidget {
             popupNode.properties().renderFocusedPropertyPopup(graphics, this.viewport, mouseX, mouseY);
         } else if (this.activeMenu == null && this.pending == null && !this.panning && this.canvasHasNoDraggedNode()) {
             this.findNodesNear(canvasMouse).findFirst()
-                    .flatMap(widget -> widget.renders().tooltip(canvasMouse.x(), canvasMouse.y()))
-                    .ifPresent(tooltip -> tooltip.show(graphics, Minecraft.getInstance().font, mouseX, mouseY));
+                    .ifPresent(widget -> widget.renders().tooltip(graphics, canvasMouse.x(), canvasMouse.y(), mouseX, mouseY));
         }
     }
 

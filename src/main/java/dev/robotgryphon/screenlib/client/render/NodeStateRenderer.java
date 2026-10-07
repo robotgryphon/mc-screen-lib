@@ -1,26 +1,29 @@
 package dev.robotgryphon.screenlib.client.render;
 
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.input.MouseButtonEvent;
 
-import java.util.Optional;
-
 public interface NodeStateRenderer<S> {
-    void render(GuiGraphicsExtractor graphics, S state, RenderArea area, int mouseX, int mouseY, float alpha);
+    int width();
 
-    default void mouseMoved(S state, RenderArea area, double mouseX, double mouseY) {
+    int height();
+
+    void render(GuiGraphicsExtractor graphics, S state, ScreenRectangle area, int mouseX, int mouseY, float alpha);
+
+    default void mouseMoved(S state, ScreenRectangle area, double mouseX, double mouseY) {
     }
 
-    default boolean mouseClicked(S state, RenderArea area, MouseButtonEvent event, boolean doubleClick) {
+    default boolean mouseClicked(S state, ScreenRectangle area, MouseButtonEvent event, boolean doubleClick) {
         return false;
     }
 
-    default boolean mouseScrolled(S state, RenderArea area, double mouseX, double mouseY,
+    default boolean mouseScrolled(S state, ScreenRectangle area, double mouseX, double mouseY,
                                   double scrollX, double scrollY) {
         return false;
     }
 
-    default Optional<NodeTooltip> tooltip(S state, RenderArea area, double mouseX, double mouseY) {
-        return Optional.empty();
+    default void tooltip(GuiGraphicsExtractor graphics, S state, ScreenRectangle area,
+                         int mouseX, int mouseY, int screenX, int screenY) {
     }
 }

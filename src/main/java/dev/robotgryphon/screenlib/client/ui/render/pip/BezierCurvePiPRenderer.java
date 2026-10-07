@@ -5,6 +5,7 @@ import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
 import dev.robotgryphon.screenlib.client.ui.render.ExRenderPipelines;
 import dev.robotgryphon.screenlib.client.ui.render.PipelineRenderer;
 import dev.robotgryphon.screenlib.client.ui.render.PipelineRenderer.UploadedMesh;
+import dev.robotgryphon.screenlib.client.ui.render.RenderHelper;
 import dev.robotgryphon.screenlib.client.ui.render.uniforms.BezierCurveUniform;
 import dev.robotgryphon.screenlib.client.math.BezierCurveCalculator;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -15,6 +16,7 @@ import org.jetbrains.annotations.NotNull;
 import org.joml.Vector2fc;
 import org.joml.Vector4f;
 import org.joml.Vector4fc;
+import org.jspecify.annotations.NonNull;
 
 public class BezierCurvePiPRenderer
         extends OffscreenPiPRenderer<BezierCurveRenderState> {
@@ -62,16 +64,7 @@ public class BezierCurvePiPRenderer
         var bezierSlice = storage.write(uniform);
         var transforms = PipelineRenderer.getDynamicTransforms(-1);
 
-        UploadedMesh mesh;
-        try (var byteBuffer = new ByteBufferBuilder(256)) {
-            var buffer = new BufferBuilder(byteBuffer, PrimitiveTopology.QUADS, DefaultVertexFormat.POSITION_COLOR);
-
-            buffer.addVertex(0f, 0f, 0f).setColor(color);
-            buffer.addVertex(0f, height, 0f).setColor(color);
-            buffer.addVertex(width, height, 0f).setColor(color);
-            buffer.addVertex(width, 0f, 0f).setColor(color);
-            mesh = UploadedMesh.upload(buffer.buildOrThrow());
-        }
+        UploadedMesh mesh = RenderHelper.createMesh(width, height, color);
 
         this.lastState = state;
         return new DrawCall() {

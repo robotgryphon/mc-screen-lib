@@ -2,7 +2,7 @@ package dev.robotgryphon.screenlib.client.ui.widget;
 
 import java.util.List;
 import java.util.ArrayList;
-import dev.robotgryphon.screenlib.graph.schema.node.NodeProperty;
+import dev.robotgryphon.screenlib.graph.schema.node.StoredPropertyDefinition;
 import dev.robotgryphon.screenlib.client.ui.widget.property.DropdownEditor;
 import dev.robotgryphon.screenlib.client.NodeRenderer;
 import dev.robotgryphon.screenlib.client.PortLayout;
@@ -74,7 +74,7 @@ public class NodeWidget extends AbstractWidget {
     private static List<Integer> valueWidths(Node node) {
         Font font = Minecraft.getInstance().font;
         List<Integer> widths = new ArrayList<>();
-        for (NodeProperty<?> prop : node.propertyManager().properties()) {
+        for (StoredPropertyDefinition<?> prop : node.propertyManager().stored()) {
             int width = NodeRenderer.PROPERTY_VALUE_MIN_WIDTH;
             var allowed = node.canvas.allowedValues(prop.anyType());
             if (allowed.isPresent()) {
@@ -90,8 +90,8 @@ public class NodeWidget extends AbstractWidget {
 
     private static int width(Node node, PortLayout layout, List<Integer> valueWidths) {
         List<String> rowNames = new ArrayList<>();
-        node.propertyManager().properties().forEach(prop -> rowNames.add(prop.name()));
-        NodePropertiesWidget.visibleComputed(node.propertyManager()).forEach(def -> rowNames.add(def.name()));
+        node.propertyManager().stored().forEach(prop -> rowNames.add(NodeRenderer.propertyLabel(node, prop.name()).getString()));
+        NodePropertiesWidget.visibleComputed(node.propertyManager()).forEach(def -> rowNames.add(NodeRenderer.propertyLabel(node, def.name()).getString()));
         int base = NodeRenderer.computeWidth(Minecraft.getInstance().font, node.title,
                 layout, rowNames, valueWidths);
         int renderWidth = NodeRenderWidget.maxWidth(node.renderManager());

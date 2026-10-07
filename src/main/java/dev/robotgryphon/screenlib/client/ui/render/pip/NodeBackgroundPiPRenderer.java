@@ -9,6 +9,7 @@ import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
 import dev.robotgryphon.screenlib.client.ui.render.ExRenderPipelines;
 import dev.robotgryphon.screenlib.client.ui.render.PipelineRenderer;
 import dev.robotgryphon.screenlib.client.ui.render.PipelineRenderer.UploadedMesh;
+import dev.robotgryphon.screenlib.client.ui.render.RenderHelper;
 import dev.robotgryphon.screenlib.client.ui.render.uniforms.NodeBackgroundUniform;
 import org.jetbrains.annotations.NotNull;
 
@@ -39,17 +40,8 @@ public class NodeBackgroundPiPRenderer
         var dynamicTransforms = PipelineRenderer.getDynamicTransforms(-1);
         var batchSlice = STORAGE.write(uniform);
 
-        UploadedMesh mesh;
-        try (var byteBuffer = new ByteBufferBuilder(256)) {
-            var buffer = new BufferBuilder(byteBuffer, PrimitiveTopology.QUADS, DefaultVertexFormat.POSITION_COLOR);
-
-            int color = 0xFFFFFFFF;
-            buffer.addVertex(0f, 0f, 0f).setColor(color);
-            buffer.addVertex(0f, height, 0f).setColor(color);
-            buffer.addVertex(width, height, 0f).setColor(color);
-            buffer.addVertex(width, 0f, 0f).setColor(color);
-            mesh = UploadedMesh.upload(buffer.buildOrThrow());
-        }
+        int color = 0xFFFFFFFF;
+        UploadedMesh mesh = RenderHelper.createMesh(width, height, color);
 
         this.lastState = state;
         return new DrawCall() {

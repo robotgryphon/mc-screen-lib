@@ -11,7 +11,7 @@ import dev.robotgryphon.screenlib.client.ui.widget.property.NumericPropertyEdito
 import dev.robotgryphon.screenlib.client.ui.widget.property.PropertyEditor;
 import dev.robotgryphon.screenlib.client.ui.widget.property.PropertyValues;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
-import dev.robotgryphon.screenlib.graph.schema.node.NodeProperty;
+import dev.robotgryphon.screenlib.graph.schema.node.StoredPropertyDefinition;
 import dev.robotgryphon.screenlib.graph.nodes.PropertyManager;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.client.Minecraft;
@@ -75,12 +75,12 @@ public class NodePropertiesWidget implements Renderable {
 
     public static List<ComputedPropertyDefinition> visibleComputed(PropertyManager propertyManager) {
         return propertyManager.computedProperties().stream()
-                .filter(definition -> !definition.hidden())
+                .filter(definition -> !definition.hideLabel())
                 .toList();
     }
 
     public static int rowCount(PropertyManager propertyManager) {
-        return propertyManager.properties().size() + visibleComputed(propertyManager).size();
+        return propertyManager.stored().size() + visibleComputed(propertyManager).size();
     }
 
     public int width() {
@@ -101,13 +101,13 @@ public class NodePropertiesWidget implements Renderable {
     }
 
     public boolean handleEditorClick(MouseButtonEvent event, boolean doubleClick) {
-        List<NodeProperty<?>> properties = this.propertyManager.properties();
+        List<StoredPropertyDefinition<?>> properties = this.propertyManager.stored();
         if (properties.isEmpty()) {
             return false;
         }
 
         for (int i = 0; i < properties.size(); i++) {
-            NodeProperty<?> prop = properties.get(i);
+            StoredPropertyDefinition<?> prop = properties.get(i);
             if (this.findInputConnection(prop.name()) != null) continue;
 
             PropertyEditor editor = this.propertyRows.get(i).editor();
@@ -122,7 +122,7 @@ public class NodePropertiesWidget implements Renderable {
         return false;
     }
 
-    private boolean isDropdownProperty(NodeProperty<?> prop) {
+    private boolean isDropdownProperty(StoredPropertyDefinition<?> prop) {
         return this.node.canvas.allowedValues(prop.anyType()).isPresent();
     }
 
@@ -163,9 +163,9 @@ public class NodePropertiesWidget implements Renderable {
         if (name == null) {
             return null;
         }
-        List<NodeProperty<?>> properties = this.propertyManager.properties();
+        List<StoredPropertyDefinition<?>> properties = this.propertyManager.stored();
         for (int i = 0; i < properties.size(); i++) {
-            NodeProperty<?> prop = properties.get(i);
+            StoredPropertyDefinition<?> prop = properties.get(i);
             if (prop.name().equals(name) && isDropdownProperty(prop)) {
                 return new FocusedRow(prop, i);
             }
@@ -173,14 +173,14 @@ public class NodePropertiesWidget implements Renderable {
         return null;
     }
 
-    private record FocusedRow(NodeProperty<?> prop, int rowIndex) {}
+    private record FocusedRow(StoredPropertyDefinition<?> prop, int rowIndex) {}
 
     private @Nullable DropdownPopup buildFocusedPropertyPopup(CanvasViewport viewport) {
         FocusedRow focused = resolveFocusedProperty();
         if (focused == null) {
             return null;
         }
-        NodeProperty<?> prop = focused.prop();
+        StoredPropertyDefinition<?> prop = focused.prop();
 
         GraphDataType<?> def = prop.type().value();
         List<Object> options = new ArrayList<>();
@@ -213,7 +213,7 @@ public class NodePropertiesWidget implements Renderable {
         return codec == Codec.INT || codec == Codec.FLOAT || codec == Codec.DOUBLE;
     }
 
-    private Number currentNumericValue(NodeProperty<?> prop) {
+    private Number currentNumericValue(StoredPropertyDefinition<?> prop) {
         Object current = this.propertyManager.value(prop.name());
         Codec<?> codec = prop.type().value().codec();
         if (codec == Codec.INT) return current instanceof Integer iv ? iv : 0;
@@ -239,11 +239,11 @@ public class NodePropertiesWidget implements Renderable {
                                    int rowIndex, int rowLeft, int rowTop,
                                    int rowWidth, int rowHeight,
                                    int mouseX, int mouseY) {
-        if (rowIndex >= this.propertyManager.properties().size()) {
+        if (rowIndex >= this.propertyManager.stored().size()) {
             this.renderComputedRow(graphics, font, rowIndex, rowLeft, rowTop, rowWidth, rowHeight);
             return;
         }
-        NodeProperty<?> prop = this.propertyManager.properties().get(rowIndex);
+        StoredPropertyDefinition<?> prop = this.propertyManager.stored().get(rowIndex);
 
         Connection inputConn = this.findInputConnection(prop.name());
         boolean driven = inputConn != null;
@@ -259,7 +259,7 @@ public class NodePropertiesWidget implements Renderable {
 
         int textY = rowTop + (rowHeight - font.lineHeight) / 2 + 1;
 
-        Component label = NodeRenderer.propertyLabel(prop);
+        Component label = NodeRenderer.propertyLabel(this.node, prop.name());
         graphics.text(font, label,
                 rowLeft + NodeRenderer.PROPERTY_PADDING_X,
                 textY,
@@ -297,11 +297,11 @@ public class NodePropertiesWidget implements Renderable {
     private void renderComputedRow(GuiGraphicsExtractor graphics, Font font,
                                    int rowIndex, int rowLeft, int rowTop, int rowWidth, int rowHeight) {
         var definition = visibleComputed(this.propertyManager)
-                .get(rowIndex - this.propertyManager.properties().size());
+                .get(rowIndex - this.propertyManager.stored().size());
         float alpha = this.owner.effectiveAlpha(definition.type());
         int textY = rowTop + (rowHeight - font.lineHeight) / 2 + 1;
 
-        graphics.text(font, Component.literal(definition.name()),
+        graphics.text(font, NodeRenderer.propertyLabel(this.node, definition.name()),
                 rowLeft + NodeRenderer.PROPERTY_PADDING_X, textY,
                 ARGB.multiply(PROPERTY_LABEL_DRIVEN_COLOR, ARGB.white(alpha)), false);
 
@@ -332,10 +332,10 @@ public class NodePropertiesWidget implements Renderable {
         }
 
         private @Nullable PropertyEditor buildEditor(int rowIndex) {
-            if (rowIndex >= NodePropertiesWidget.this.propertyManager.properties().size()) {
+            if (rowIndex >= NodePropertiesWidget.this.propertyManager.stored().size()) {
                 return null;
             }
-            NodeProperty<?> prop = NodePropertiesWidget.this.propertyManager.properties().get(rowIndex);
+            StoredPropertyDefinition<?> prop = NodePropertiesWidget.this.propertyManager.stored().get(rowIndex);
             Codec<?> codec = prop.type().value().codec();
             final String propName = prop.name();
             int editorW = NodePropertiesWidget.this.owner.valueWidth(rowIndex);
@@ -366,7 +366,7 @@ public class NodePropertiesWidget implements Renderable {
 
         void syncEditorValueFromNode() {
             if (this.editor == null) return;
-            NodeProperty<?> prop = NodePropertiesWidget.this.propertyManager.properties().get(this.rowIndex);
+            StoredPropertyDefinition<?> prop = NodePropertiesWidget.this.propertyManager.stored().get(this.rowIndex);
             Object current = NodePropertiesWidget.this.propertyManager.value(prop.name());
             if (this.editor instanceof NumericPropertyEditor n) {
                 n.setValue(NodePropertiesWidget.this.currentNumericValue(prop));

@@ -1,42 +1,56 @@
 package dev.robotgryphon.screenlib.client.render;
 
-import dev.robotgryphon.screenlib.graph.render.BlockPreviewState;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.state.BlockState;
 
-import java.util.Optional;
+import java.util.List;
 
-public class BlockPreviewRenderer implements NodeStateRenderer<BlockPreviewState> {
+public class BlockPreviewRenderer implements NodeStateRenderer<BlockState> {
     private static final int ITEM_SIZE = 16;
     private static final int HOVER_FILL = 0x30FFFFFF;
+    private static final int SIZE = 40;
 
     @Override
-    public void render(GuiGraphicsExtractor graphics, BlockPreviewState state,
-                       RenderArea area, int mouseX, int mouseY, float alpha) {
-        ItemStack stack = new ItemStack(state.state().getBlock());
+    public int width() {
+        return SIZE;
+    }
+
+    @Override
+    public int height() {
+        return SIZE;
+    }
+
+    @Override
+    public void render(GuiGraphicsExtractor graphics, BlockState state,
+                       ScreenRectangle area, int mouseX, int mouseY, float alpha) {
+        ItemStack stack = new ItemStack(state.getBlock());
         if (stack.isEmpty()) {
             return;
         }
-        if (area.contains(mouseX, mouseY)) {
-            graphics.fill(area.x(), area.y(), area.x() + area.width(), area.y() + area.height(), HOVER_FILL);
+        if (area.containsPoint(mouseX, mouseY)) {
+            graphics.fill(area.left(), area.top(), area.left() + area.width(), area.top() + area.height(), HOVER_FILL);
         }
         float scale = Math.min(area.width(), area.height()) / (float) ITEM_SIZE;
         graphics.pose().pushMatrix();
-        graphics.pose().translate(area.x() + (area.width() - ITEM_SIZE * scale) / 2f,
-                area.y() + (area.height() - ITEM_SIZE * scale) / 2f);
+        graphics.pose().translate(area.left() + (area.width() - ITEM_SIZE * scale) / 2f,
+                area.top() + (area.height() - ITEM_SIZE * scale) / 2f);
         graphics.pose().scale(scale, scale);
         graphics.item(stack, 0, 0);
         graphics.pose().popMatrix();
     }
 
     @Override
-    public Optional<NodeTooltip> tooltip(BlockPreviewState state, RenderArea area, double mouseX, double mouseY) {
-        var block = state.state().getBlock();
-        return Optional.of(NodeTooltip.of(
+    public void tooltip(GuiGraphicsExtractor graphics, BlockState state, ScreenRectangle area,
+                        int mouseX, int mouseY, int screenX, int screenY) {
+        var block = state.getBlock();
+        graphics.setComponentTooltipForNextFrame(Minecraft.getInstance().font, List.of(
                 block.getName(),
                 Component.literal(BuiltInRegistries.BLOCK.getKey(block).toString())
-                        .withStyle(net.minecraft.ChatFormatting.DARK_GRAY)));
+                        .withStyle(net.minecraft.ChatFormatting.DARK_GRAY)), screenX, screenY);
     }
 }

@@ -1,6 +1,9 @@
 package dev.robotgryphon.screenlib.datagen;
 
 import dev.robotgryphon.screenlib.ScreenLib;
+import dev.robotgryphon.screenlib.client.render.NodeWidgets;
+import dev.robotgryphon.screenlib.graph.computed.BlockPositionFromCoordinates;
+import dev.robotgryphon.screenlib.graph.computed.ItemHandlerAt;
 import dev.robotgryphon.screenlib.graph.schema.node.NodeBuilder;
 import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
@@ -30,45 +33,50 @@ public class NodeGenerator {
         var level = ScreenLib.LEVEL_DATA_TYPE;
 
         ctx.register(nodeType("integer"), new NodeBuilder()
-                .addOutput("INTEGER", intType, "value")
-                .addProperty("value", intType)
+                .addProperty("value", prop -> prop.type(intType).input().output())
                 .build());
 
         ctx.register(nodeType("float"), new NodeBuilder()
-                .addOutput("FLOAT", floatType, "value")
-                .addProperty("value", floatType)
+                .addProperty("value", prop -> prop.type(floatType).input().output())
                 .build());
 
         ctx.register(nodeType("boolean"), new NodeBuilder()
-                .addOutput("BOOLEAN", boolType, "value")
-                .addProperty("value", boolType)
+                .addProperty("value", prop -> prop.type(boolType).input().output())
                 .build());
 
         ctx.register(nodeType("block_position"), new NodeBuilder()
-                .addOutput("Position", blockPos, "position")
-                .addProperty("x", intType)
-                .addProperty("y", intType)
-                .addProperty("z", intType)
-                .addComputedProperty("position", blockPos, ScreenLib.BLOCK_POSITION_FROM_COORDINATES)
+                .addProperty("x", prop -> prop.type(intType).input())
+                .addProperty("y", prop -> prop.type(intType).input())
+                .addProperty("z", prop -> prop.type(intType).input())
+                .addProperty("position", prop -> prop.type(blockPos)
+                        .output()
+                        .computed(ScreenLib.BLOCK_POSITION_FROM_COORDINATES)
+                        .data(BlockPositionFromCoordinates.X, "x")
+                        .data(BlockPositionFromCoordinates.Y, "y")
+                        .data(BlockPositionFromCoordinates.Z, "z"))
+                .addContextSupplier(ScreenLib.PLAYER_POSITION)
                 .build());
 
         ctx.register(nodeType("direction"), new NodeBuilder()
-                .addOutput("direction", direction, "value")
-                .addProperty("value", direction)
+                .addProperty("value", prop -> prop.type(direction).input().output())
                 .build());
 
         ctx.register(nodeType("level"), new NodeBuilder()
-                .addOutput("Level", level, "value")
-                .addProperty("value", level)
+                .addProperty("value", prop -> prop.type(level).input().output())
                 .build());
 
         ctx.register(nodeType("resource_access_items"), new NodeBuilder()
-                .addInput("Position", blockPos)
-                .addInput("Level", level)
-                .addProperty("Side", direction, true)
-                .addComputedProperty("storage", itemHandler, ScreenLib.ITEM_HANDLER_AT, true)
-                .addOutput("Storage", itemHandler, "storage")
-                .addRender(ScreenLib.ITEM_HANDLER_PREVIEW)
+                .addProperty("position", prop -> prop.type(blockPos).input())
+                .addProperty("level", prop -> prop.type(level).input())
+                .addProperty("side", prop -> prop.type(direction).optional().input().output())
+                .addProperty("storage", prop -> prop.type(itemHandler)
+                        .output()
+                        .computed(ScreenLib.ITEM_HANDLER_AT)
+                        .data(ItemHandlerAt.POSITION, "position")
+                        .data(ItemHandlerAt.LEVEL, "level")
+                        .data(ItemHandlerAt.SIDE, "side")
+                        .hideLabel())
+                .addWidget(NodeWidgets.ITEM_HANDLER_PREVIEW.key(), "storage")
                 .build());
     }
 }

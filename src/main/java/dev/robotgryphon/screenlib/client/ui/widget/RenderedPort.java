@@ -8,7 +8,7 @@ import dev.robotgryphon.screenlib.graph.ports.InputPort;
 import dev.robotgryphon.screenlib.graph.ports.Port;
 import dev.robotgryphon.screenlib.client.PortLayout;
 import dev.robotgryphon.screenlib.graph.ports.PropertyInputPort;
-import dev.robotgryphon.screenlib.graph.schema.node.NodeProperty;
+import dev.robotgryphon.screenlib.graph.schema.node.StoredPropertyDefinition;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -158,7 +158,7 @@ public class RenderedPort implements Renderable {
     }
 
     private boolean isPropertyRowHovered(PropertyInputPort propertyPort, double canvasMouseX, double canvasMouseY) {
-        List<NodeProperty<?>> properties = this.node.propertyManager().properties();
+        List<StoredPropertyDefinition<?>> properties = this.node.propertyManager().stored();
         for (int i = 0; i < properties.size(); i++) {
             if (!properties.get(i).name().equals(propertyPort.propertyName())) continue;
             int rowTop = this.parent.propertyRowTop(i);

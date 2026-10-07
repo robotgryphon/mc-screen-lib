@@ -1,5 +1,6 @@
 package dev.robotgryphon.screenlib.client.ui.widget;
 
+import dev.robotgryphon.screenlib.graph.ViewportState;
 import org.joml.Matrix3x2fStack;
 import org.joml.Vector2d;
 import org.joml.Vector2dc;
@@ -21,6 +22,17 @@ public class CanvasViewport {
     public void pan(float x, float y) {
         this.panX += x;
         this.panY += y;
+    }
+
+    public ViewportState state(int screenWidth, int screenHeight) {
+        Vector2dc center = this.screenToCanvas(screenWidth / 2.0, screenHeight / 2.0);
+        return new ViewportState(center.x(), center.y(), this.zoom);
+    }
+
+    public void apply(ViewportState state, int screenWidth, int screenHeight) {
+        this.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, state.zoom()));
+        this.panX = (float) (screenWidth / 2.0 - state.centerX() * this.zoom);
+        this.panY = (float) (screenHeight / 2.0 - state.centerY() * this.zoom);
     }
 
     public float zoom() {

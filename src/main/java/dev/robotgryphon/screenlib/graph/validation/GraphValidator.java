@@ -1,8 +1,7 @@
 package dev.robotgryphon.screenlib.graph.validation;
 
 import dev.robotgryphon.screenlib.graph.ports.PropertyInputPort;
-import dev.robotgryphon.screenlib.graph.ports.StandardInputPort;
-import dev.robotgryphon.screenlib.graph.schema.node.NodeProperty;
+import dev.robotgryphon.screenlib.graph.schema.node.StoredPropertyDefinition;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import dev.robotgryphon.screenlib.graph.Connection;
@@ -35,7 +34,6 @@ public final class GraphValidator {
         Canvas canvas = node.canvas;
         List<String> errors = new ArrayList<>();
         collectNodeErrors(node, errors);
-        collectRequiredInputErrors(node, canvas.connections(), errors);
         collectRequiredPropertyErrors(node, canvas.connections(), errors);
         collectIncomingWireValueErrors(node, canvas, errors);
         return errors;
@@ -43,7 +41,7 @@ public final class GraphValidator {
 
     private static void collectNodeErrors(Node node, List<String> errors) {
         String nodeTag = nodeTag(node);
-        for (NodeProperty<?> prop : node.propertyManager().properties()) {
+        for (StoredPropertyDefinition<?> prop : node.propertyManager().stored()) {
             GraphDataType<?> def = prop.type().value();
             Object value = node.propertyManager().value(prop.name());
             if (value == null) continue;
@@ -76,32 +74,11 @@ public final class GraphValidator {
         }
     }
 
-    private static void collectRequiredInputErrors(Node node,
-                                                   List<Connection> connections,
-                                                   List<String> errors) {
-        String nodeTag = nodeTag(node);
-        for (Port port : node.portManager().ports()) {
-            if (!(port instanceof StandardInputPort input) || input.optional()) continue;
-
-            boolean wired = false;
-            for (Connection connection : connections) {
-                if (connection.targetPort() == port) {
-                    wired = true;
-                    break;
-                }
-            }
-            if (!wired) {
-                errors.add(nodeTag + " required input '"
-                        + port.title().getString() + "' has no inbound connection");
-            }
-        }
-    }
-
     private static void collectIncomingWireValueErrors(Node node,
                                                        Canvas canvas,
                                                        List<String> errors) {
         String nodeTag = nodeTag(node);
-        for (NodeProperty<?> prop : node.propertyManager().properties()) {
+        for (StoredPropertyDefinition<?> prop : node.propertyManager().stored()) {
             GraphDataType<?> def = prop.type().value();
             var allowed = canvas.allowedValues(prop.anyType());
             if (allowed.isEmpty()) continue;
@@ -134,7 +111,7 @@ public final class GraphValidator {
                                                       List<Connection> connections,
                                                       List<String> errors) {
         String nodeTag = nodeTag(node);
-        for (NodeProperty<?> prop : node.propertyManager().properties()) {
+        for (StoredPropertyDefinition<?> prop : node.propertyManager().stored()) {
             if (prop.optional()) continue;
             if (node.propertyManager().value(prop.name()) != null) continue;
 

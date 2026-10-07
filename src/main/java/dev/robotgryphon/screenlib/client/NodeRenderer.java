@@ -1,6 +1,6 @@
 package dev.robotgryphon.screenlib.client;
 
-import dev.robotgryphon.screenlib.graph.schema.node.NodeProperty;
+import dev.robotgryphon.screenlib.graph.nodes.Node;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
 
@@ -88,7 +88,7 @@ public final class NodeRenderer {
         return max;
     }
 
-    public static Component propertyLabel(NodeProperty<?> prop) {
-        return Component.literal(prop.name());
+    public static Component propertyLabel(Node node, String property) {
+        return Node.propertyLabel(node.type(), property);
     }
 }

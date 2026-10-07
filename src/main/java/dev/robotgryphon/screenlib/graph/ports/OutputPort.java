@@ -1,7 +1,7 @@
 package dev.robotgryphon.screenlib.graph.ports;
 
 public sealed interface OutputPort extends Port
-        permits StandardOutputPort, PropertyOutputPort, ConstantOutputPort {
+        permits PropertyOutputPort {
     @Override
     default PortSide side() {
         return PortSide.RIGHT;

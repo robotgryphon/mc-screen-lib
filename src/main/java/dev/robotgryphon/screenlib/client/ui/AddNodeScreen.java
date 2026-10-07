@@ -10,7 +10,7 @@ import dev.robotgryphon.screenlib.client.ui.widget.NodeWidget;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.ports.Port;
 import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
-import dev.robotgryphon.screenlib.graph.ports.StandardInputPort;
+import dev.robotgryphon.screenlib.graph.ports.InputPort;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -204,7 +204,7 @@ public class AddNodeScreen extends Screen implements MenuAccess<AddNodeMenu> {
         Set<Holder<GraphDataType<?>>> seen = new LinkedHashSet<>();
         for (PreviewTemplate t : this.templates) {
             for (Port port : t.node.portManager().ports()) {
-                if (port instanceof StandardInputPort) {
+                if (port instanceof InputPort) {
                     seen.add(port.type());
                 }
             }
@@ -371,7 +371,7 @@ public class AddNodeScreen extends Screen implements MenuAccess<AddNodeMenu> {
             @Override
             boolean matches(PreviewTemplate t, String needle) {
                 for (Port port : t.node().portManager().ports()) {
-                    if (port instanceof StandardInputPort
+                    if (port instanceof InputPort
                             && typeNameMatches(GraphDataType.displayName(port.type()), needle)) {
                         return true;
                     }
@@ -383,7 +383,7 @@ public class AddNodeScreen extends Screen implements MenuAccess<AddNodeMenu> {
             Set<Port> matchingPorts(PreviewTemplate t, String needle) {
                 Set<Port> hits = new HashSet<>();
                 for (Port port : t.node().portManager().ports()) {
-                    if (!(port instanceof StandardInputPort)) {
+                    if (!(port instanceof InputPort)) {
                         continue;
                     }
                     if (typeNameMatches(GraphDataType.displayName(port.type()), needle)) {

@@ -6,7 +6,8 @@ import dev.robotgryphon.screenlib.graph.nodes.NodeState;
 import dev.robotgryphon.screenlib.graph.ports.Port;
 import dev.robotgryphon.screenlib.graph.ports.PortSide;
 import dev.robotgryphon.screenlib.graph.ports.PropertyInputPort;
-import dev.robotgryphon.screenlib.graph.schema.node.NodeProperty;
+import dev.robotgryphon.screenlib.graph.ports.PropertyOutputPort;
+import dev.robotgryphon.screenlib.graph.schema.node.StoredPropertyDefinition;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.Dynamic;
@@ -25,7 +26,7 @@ import java.util.Optional;
 public final class CanvasStateManager {
     private CanvasStateManager() {}
 
-    public static CanvasState toState(Canvas canvas, RegistryAccess registryAccess) {
+    public static CanvasState toState(Canvas canvas, Optional<ViewportState> viewport, RegistryAccess registryAccess) {
         List<Node> nodes = canvas.nodes();
         List<NodeState> nodeStates = new ArrayList<>(nodes.size());
         Map<Node, Integer> indexOf = new IdentityHashMap<>(nodes.size());
@@ -59,12 +60,13 @@ public final class CanvasStateManager {
                     tgtIdx, tgtPortIdx, Optional.of(portLocalName(c.targetPort()))));
         }
 
-        return new CanvasState(nodeStates, connectionStates);
+        return new CanvasState(nodeStates, connectionStates, viewport);
     }
 
     private static String portLocalName(Port port) {
         return switch (port) {
             case PropertyInputPort p -> p.propertyName();
+            case PropertyOutputPort p -> p.propertyName();
             default -> port.title().getString();
         };
     }
@@ -86,39 +88,36 @@ public final class CanvasStateManager {
             Node srcNode = rebuilt.get(cs.sourceNodeIndex());
             Node tgtNode = rebuilt.get(cs.targetNodeIndex());
 
-            Port srcPort = resolvePort(srcNode, cs.sourcePortName(), cs.sourcePortIndex());
-            Port tgtPort = resolvePort(tgtNode, cs.targetPortName(), cs.targetPortIndex());
+            Port srcPort = resolvePort(srcNode, PortSide.RIGHT, cs.sourcePortName(), cs.sourcePortIndex());
+            Port tgtPort = resolvePort(tgtNode, PortSide.LEFT, cs.targetPortName(), cs.targetPortIndex());
             if (srcPort == null || tgtPort == null) continue;
-
-            if (srcPort.side() != PortSide.RIGHT) continue;
-            if (tgtPort.side() != PortSide.LEFT) continue;
             if (srcPort.type().value() != tgtPort.type().value()) continue;
 
             canvas.addConnection(new Connection(srcNode, srcPort, tgtNode, tgtPort));
         }
     }
 
-    private static @Nullable Port resolvePort(Node node,
+    private static @Nullable Port resolvePort(Node node, PortSide side,
                                               Optional<String> savedName,
                                               int savedIndex) {
+        List<Port> ports = node.portManager().ports();
         if (savedName.isPresent()) {
             String name = savedName.get();
-            for (Port port : node.portManager().ports()) {
-                String portName = portLocalName(port);
-                if (name.equals(portName)) {
+            for (Port port : ports) {
+                if (port.side() == side && name.equals(portLocalName(port))) {
                     return port;
                 }
             }
         }
-        if (isValidIndex(savedIndex, node.portManager().ports().size())) {
-            return node.portManager().ports().get(savedIndex);
+        if (isValidIndex(savedIndex, ports.size()) && ports.get(savedIndex).side() == side) {
+            return ports.get(savedIndex);
         }
         return null;
     }
 
     private static Map<String, Dynamic<?>> encodePropertyValues(Node node) {
         Map<String, Dynamic<?>> encoded = new HashMap<>();
-        for (NodeProperty<?> prop : node.propertyManager().properties()) {
+        for (StoredPropertyDefinition<?> prop : node.propertyManager().stored()) {
             Object value = node.propertyManager().value(prop.name());
             if (value == null) continue;
             @SuppressWarnings({"unchecked", "rawtypes"})
@@ -131,12 +130,12 @@ public final class CanvasStateManager {
 
     private static void applyPropertyValues(Node node, Map<String, Dynamic<?>> stored) {
         if (stored.isEmpty()) return;
-        Map<String, NodeProperty<?>> byName = new HashMap<>();
-        for (NodeProperty<?> prop : node.propertyManager().properties()) {
+        Map<String, StoredPropertyDefinition<?>> byName = new HashMap<>();
+        for (StoredPropertyDefinition<?> prop : node.propertyManager().stored()) {
             byName.put(prop.name(), prop);
         }
         for (Map.Entry<String, Dynamic<?>> entry : stored.entrySet()) {
-            NodeProperty<?> prop = byName.get(entry.getKey());
+            StoredPropertyDefinition<?> prop = byName.get(entry.getKey());
             if (prop == null) continue;
             @SuppressWarnings({"unchecked", "rawtypes"})
             DataResult<?> decoded = ((Codec) prop.type().value().codec())

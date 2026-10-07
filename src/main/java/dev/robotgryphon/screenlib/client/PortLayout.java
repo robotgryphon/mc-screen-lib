@@ -58,11 +58,11 @@ public final class PortLayout {
         List<Slot> slots = new ArrayList<>(ports.size());
         int inputIndex = 0;
         int outputIndex = 0;
-        int propertyIndex = 0;
         for (Port port : ports) {
             if (port instanceof PropertyInputPort property) {
+                int propertyIndex = property.node().propertyManager().stored().indexOf(property.property());
                 int rowTop = propertyRegionTop + NodeRenderer.PROPERTY_REGION_PADDING_Y
-                        + propertyIndex++ * (NodeRenderer.PROPERTY_PITCH + NodeRenderer.PROPERTY_ROW_GAP);
+                        + propertyIndex * (NodeRenderer.PROPERTY_PITCH + NodeRenderer.PROPERTY_ROW_GAP);
                 slots.add(new Slot(Kind.PROPERTY, PortSide.LEFT, property.propertyName(), property.type(),
                         rowTop + NodeRenderer.PROPERTY_PITCH / 2, true));
             } else if (port.side() == PortSide.LEFT) {

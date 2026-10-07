@@ -23,8 +23,8 @@ public class Node {
 
         NodeDefinition definition = definitionHolder.value();
         this.portManager = new PortManager(this, definition);
-        this.propertyManager = new PropertyManager(this, definition.properties(), definition.computed());
-        this.renderManager = new RenderManager(definition.renders());
+        this.propertyManager = new PropertyManager(this, definition);
+        this.renderManager = new RenderManager(definition.widgets());
     }
 
     public PortManager portManager() {
@@ -41,6 +41,10 @@ public class Node {
 
     public static Component defaultTitle(ResourceKey<NodeDefinition> type) {
         return Component.translatable(type.identifier().toLanguageKey("node"));
+    }
+
+    public static Component propertyLabel(ResourceKey<NodeDefinition> type, String property) {
+        return Component.translatableWithFallback(type.identifier().toLanguageKey("node", property), property);
     }
 
     public ResourceKey<NodeDefinition> type() {

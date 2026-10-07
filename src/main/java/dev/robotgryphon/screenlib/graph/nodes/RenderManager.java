@@ -1,7 +1,6 @@
 package dev.robotgryphon.screenlib.graph.nodes;
 
-import dev.robotgryphon.screenlib.graph.render.NodeRenderProvider;
-import net.minecraft.core.Holder;
+import dev.robotgryphon.screenlib.graph.schema.node.WidgetDefinition;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
@@ -9,26 +8,30 @@ import java.util.List;
 import java.util.Map;
 
 public final class RenderManager {
-    private final List<Holder<NodeRenderProvider<?>>> providers;
-    private final Map<Integer, Object> states = new HashMap<>();
+    private final List<WidgetDefinition> widgets;
+    private final Map<String, Object> states = new HashMap<>();
 
-    public RenderManager(List<Holder<NodeRenderProvider<?>>> providers) {
-        this.providers = List.copyOf(providers);
+    public RenderManager(List<WidgetDefinition> widgets) {
+        this.widgets = List.copyOf(widgets);
     }
 
-    public List<Holder<NodeRenderProvider<?>>> providers() {
-        return this.providers;
+    public List<WidgetDefinition> widgets() {
+        return this.widgets;
     }
 
-    public @Nullable Object state(int providerIndex) {
-        return this.states.get(providerIndex);
+    public boolean displays(String property) {
+        return this.widgets.stream().anyMatch(widget -> widget.property().equals(property));
     }
 
-    public void setState(int providerIndex, @Nullable Object state) {
+    public @Nullable Object state(String property) {
+        return this.states.get(property);
+    }
+
+    public void setState(String property, @Nullable Object state) {
         if (state == null) {
-            this.states.remove(providerIndex);
+            this.states.remove(property);
         } else {
-            this.states.put(providerIndex, state);
+            this.states.put(property, state);
         }
     }
 
