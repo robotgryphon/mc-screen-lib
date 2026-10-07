@@ -22,6 +22,7 @@ public class TestNodeGenerator {
         var blockPos = ScreenLib.BLOCK_POS_DATA_TYPE;
         var level = ScreenLib.LEVEL_DATA_TYPE;
         var blockState = ScreenLib.BLOCKSTATE_DATA_TYPE;
+        var itemHandler = ScreenLib.ITEM_HANDLER_DATA_TYPE;
 
         ctx.register(nodeType("get_block"), new NodeBuilder()
                 .addInput("Position", blockPos)
@@ -29,6 +30,11 @@ public class TestNodeGenerator {
                 .addOutput("State", blockState, "state")
                 .addComputedProperty("state", blockState, ScreenLib.BLOCK_STATE_AT)
                 .addRender(ScreenLib.BLOCK_PREVIEW)
+                .build());
+
+        ctx.register(nodeType("tree_cutter_upgrade"), new NodeBuilder()
+                .addInput("Tools", itemHandler)
+                .addInput("Drops", itemHandler)
                 .build());
     }
 }

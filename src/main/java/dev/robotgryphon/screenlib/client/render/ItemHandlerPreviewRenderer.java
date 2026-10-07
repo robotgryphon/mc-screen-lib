@@ -1,7 +1,7 @@
 package dev.robotgryphon.screenlib.client.render;
 
 import dev.robotgryphon.screenlib.graph.render.ItemHandlerPreviewProvider;
-import dev.robotgryphon.screenlib.graph.render.ItemHandlerPreviewState;
+import dev.robotgryphon.screenlib.transfer.ItemHandlerSnapshot;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -11,7 +11,7 @@ import net.minecraft.world.item.ItemStack;
 
 import java.util.Optional;
 
-public class ItemHandlerPreviewRenderer implements NodeStateRenderer<ItemHandlerPreviewState> {
+public class ItemHandlerPreviewRenderer implements NodeStateRenderer<ItemHandlerSnapshot> {
     private static final int SLOT_BACKGROUND = 0xFF2A2C33;
     private static final int SLOT_BORDER = 0xFF4A4D58;
     private static final int INFO_COLOR = 0xFFA0A4B3;
@@ -29,7 +29,7 @@ public class ItemHandlerPreviewRenderer implements NodeStateRenderer<ItemHandler
     }
 
     @Override
-    public Optional<NodeTooltip> tooltip(ItemHandlerPreviewState state, RenderArea area, double mouseX, double mouseY) {
+    public Optional<NodeTooltip> tooltip(ItemHandlerSnapshot state, RenderArea area, double mouseX, double mouseY) {
         int slot = slotAt(area, mouseX, mouseY);
         if (slot < 0 || slot >= state.slotCount()) {
             return Optional.empty();
@@ -42,7 +42,7 @@ public class ItemHandlerPreviewRenderer implements NodeStateRenderer<ItemHandler
     }
 
     @Override
-    public void render(GuiGraphicsExtractor graphics, ItemHandlerPreviewState state,
+    public void render(GuiGraphicsExtractor graphics, ItemHandlerSnapshot state,
                        RenderArea area, int mouseX, int mouseY, float alpha) {
         int x = area.x();
         int y = area.y();

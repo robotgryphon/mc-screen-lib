@@ -5,6 +5,7 @@ import dev.robotgryphon.screenlib.graph.ports.*;
 import dev.robotgryphon.screenlib.graph.schema.AllowedValues;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.core.Holder;
+import dev.robotgryphon.screenlib.transfer.ItemHandlerTracker;
 import net.minecraft.server.MinecraftServer;
 import org.joml.Vector2i;
 import org.jspecify.annotations.Nullable;
@@ -29,6 +30,7 @@ public class Canvas {
 
     private int revision;
     private @Nullable MinecraftServer server;
+    private @Nullable ItemHandlerTracker transfer;
 
     public Canvas(AllowedValues allowedValues) {
         this.allowedValues = allowedValues;
@@ -85,6 +87,11 @@ public class Canvas {
 
     public void attachServer(MinecraftServer server) {
         this.server = server;
+        this.transfer = new ItemHandlerTracker(server);
+    }
+
+    public @Nullable ItemHandlerTracker transfer() {
+        return this.transfer;
     }
 
     public int revision() {

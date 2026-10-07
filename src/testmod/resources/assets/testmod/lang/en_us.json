@@ -1,3 +1,4 @@
 {
-  "node.testmod.get_block": "Get Block"
+  "node.testmod.get_block": "Get Block",
+  "node.testmod.tree_cutter_upgrade": "Tree Cutter Upgrade"
 }

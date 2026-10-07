@@ -5,10 +5,10 @@ import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.ports.Port;
 import dev.robotgryphon.screenlib.graph.ports.PropertyInputPort;
 import dev.robotgryphon.screenlib.graph.ports.StandardInputPort;
-import dev.robotgryphon.screenlib.graph.types.BlockPositionGraphDataType;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
+import dev.robotgryphon.screenlib.graph.types.ItemHandlerAccess;
+import dev.robotgryphon.screenlib.transfer.ItemHandlerSnapshot;
 import net.minecraft.server.MinecraftServer;
-import net.neoforged.neoforge.registries.DeferredHolder;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Optional;
@@ -23,6 +23,11 @@ public final class ComputeContext {
 
     public @Nullable MinecraftServer server() {
         return this.node.canvas.server();
+    }
+
+    public Optional<ItemHandlerSnapshot> itemHandler(ItemHandlerAccess access, int visibleSlots) {
+        var tracker = this.node.canvas.transfer();
+        return tracker == null ? Optional.empty() : tracker.snapshot(access, visibleSlots);
     }
 
     public Optional<Object> value(String name) {

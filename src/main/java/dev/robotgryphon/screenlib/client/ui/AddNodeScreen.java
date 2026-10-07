@@ -79,6 +79,11 @@ public class AddNodeScreen extends Screen implements MenuAccess<AddNodeMenu> {
     }
 
     @Override
+    public boolean isPauseScreen() {
+        return false;
+    }
+
+    @Override
     public AddNodeMenu getMenu() {
         return this.menu;
     }

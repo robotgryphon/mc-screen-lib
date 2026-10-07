@@ -2,7 +2,6 @@ package dev.robotgryphon.screenlib.network;
 
 import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
 import dev.robotgryphon.screenlib.graph.schema.AllowedValuesSnapshot;
-import dev.robotgryphon.screenlib.graph.evaluation.CanvasEvaluator;
 import dev.robotgryphon.screenlib.menu.AddNodeData;
 import dev.robotgryphon.screenlib.menu.AddNodeMenu;
 import dev.robotgryphon.screenlib.menu.AddNodeMenuProvider;
@@ -17,11 +16,7 @@ public final class ServerPayloadHandler {
     public static void handleUpdate(UpdateCanvasStatePayload payload, IPayloadContext context) {
         Player player = context.player();
         if (player.containerMenu instanceof TestScreenMenu menu) {
-            menu.updateState(payload.state());
-            var evaluation = CanvasEvaluator.evaluate(payload.state(),
-                    player.level().registryAccess(), player.level().getServer());
-            context.reply(new CanvasEvaluationPayload(payload.sequence(),
-                    evaluation.validity(), evaluation.computed(), evaluation.rendered()));
+            menu.updateState(payload.state(), payload.sequence());
         }
     }
 

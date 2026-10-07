@@ -70,10 +70,5 @@ public class NodeGenerator {
                 .addOutput("Storage", itemHandler, "storage")
                 .addRender(ScreenLib.ITEM_HANDLER_PREVIEW)
                 .build());
-
-        ctx.register(nodeType("tree_cutter_upgrade"), new NodeBuilder()
-                .addInput("Tools", itemHandler)
-                .addInput("Drops", itemHandler)
-                .build());
     }
 }

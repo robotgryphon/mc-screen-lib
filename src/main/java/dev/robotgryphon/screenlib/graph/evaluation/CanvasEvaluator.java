@@ -28,14 +28,31 @@ import java.util.Optional;
 public final class CanvasEvaluator {
     private CanvasEvaluator() {}
 
-    public static CanvasEvaluation evaluate(CanvasState state, RegistryAccess registries, MinecraftServer server) {
+    public static Session open(CanvasState state, RegistryAccess registries, MinecraftServer server) {
         Canvas canvas = new Canvas(AllowedValues.live(registries));
         canvas.attachServer(server);
         CanvasStateManager.loadState(canvas, state);
+        return new Session(canvas, registries);
+    }
 
-        List<NodeComputed> computed = computeAll(canvas, registries);
-        List<NodeRendered> rendered = extractRenderStates(canvas, registries);
-        return new CanvasEvaluation(GraphValidator.validate(canvas), computed, rendered);
+    public static final class Session {
+        private final Canvas canvas;
+        private final RegistryAccess registries;
+
+        private Session(Canvas canvas, RegistryAccess registries) {
+            this.canvas = canvas;
+            this.registries = registries;
+        }
+
+        public CanvasEvaluation evaluate() {
+            var transfer = this.canvas.transfer();
+            if (transfer != null) {
+                transfer.refresh();
+            }
+            List<NodeComputed> computed = computeAll(this.canvas, this.registries);
+            List<NodeRendered> rendered = extractRenderStates(this.canvas, this.registries);
+            return new CanvasEvaluation(GraphValidator.validate(this.canvas), computed, rendered);
+        }
     }
 
     @SuppressWarnings("unchecked")

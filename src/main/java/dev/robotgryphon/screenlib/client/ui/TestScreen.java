@@ -65,6 +65,11 @@ public class TestScreen extends Screen implements MenuAccess<TestScreenMenu> {
     }
 
     @Override
+    public boolean isPauseScreen() {
+        return false;
+    }
+
+    @Override
     public void tick() {
         super.tick();
         if (this.canvas.revision() != this.sentRevision) {
