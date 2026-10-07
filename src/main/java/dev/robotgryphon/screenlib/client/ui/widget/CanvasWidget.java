@@ -1,5 +1,6 @@
 package dev.robotgryphon.screenlib.client.ui.widget;
 
+import net.minecraft.client.Minecraft;
 import dev.robotgryphon.screenlib.client.GraphColors;
 import java.util.stream.Stream;
 import java.util.IdentityHashMap;
@@ -289,7 +290,20 @@ public class CanvasWidget extends AbstractWidget {
     }
 
     @Override
+    public void mouseMoved(double mouseX, double mouseY) {
+        var canvasPos = this.viewport.screenToCanvas(mouseX, mouseY);
+        for (NodeWidget widget : this.nodeWidgets()) {
+            widget.renders().mouseMoved(canvasPos.x(), canvasPos.y());
+        }
+    }
+
+    @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        var canvasPos = this.viewport.screenToCanvas(mouseX, mouseY);
+        var hit = this.findNodesNear(canvasPos).findFirst().orElse(null);
+        if (hit != null && hit.renders().mouseScrolled(canvasPos.x(), canvasPos.y(), scrollX, scrollY)) {
+            return true;
+        }
         if (scrollY == 0) {
             return false;
         }
@@ -390,7 +404,20 @@ public class CanvasWidget extends AbstractWidget {
         if (popupNode != null) {
             graphics.nextStratum();
             popupNode.properties().renderFocusedPropertyPopup(graphics, this.viewport, mouseX, mouseY);
+        } else if (this.activeMenu == null && this.pending == null && !this.panning && this.canvasHasNoDraggedNode()) {
+            this.findNodesNear(canvasMouse).findFirst()
+                    .flatMap(widget -> widget.renders().tooltip(canvasMouse.x(), canvasMouse.y()))
+                    .ifPresent(tooltip -> tooltip.show(graphics, Minecraft.getInstance().font, mouseX, mouseY));
         }
+    }
+
+    private boolean canvasHasNoDraggedNode() {
+        for (NodeWidget widget : this.nodeWidgets()) {
+            if (widget.isDragging()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private @Nullable NodeWidget findPopupNode() {

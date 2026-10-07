@@ -262,6 +262,10 @@ public class NodeWidget extends AbstractWidget {
         return this.ports.portAt(mouseX, mouseY);
     }
 
+    public NodeRenderWidget renders() {
+        return this.renders;
+    }
+
     public NodePropertiesWidget properties() {
         return this.properties;
     }
@@ -281,6 +285,9 @@ public class NodeWidget extends AbstractWidget {
                 return false;
             }
             if (this.properties.handleEditorClick(event, doubleClick)) {
+                return true;
+            }
+            if (this.renders.mouseClicked(event, doubleClick)) {
                 return true;
             }
         }
