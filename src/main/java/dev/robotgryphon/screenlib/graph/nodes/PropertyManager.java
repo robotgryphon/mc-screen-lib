@@ -35,10 +35,6 @@ public final class PropertyManager {
         return this.computed;
     }
 
-    public int rowCount() {
-        return this.properties.size() + this.computed.size();
-    }
-
     public @Nullable Object value(String name) {
         Object stored = this.values.get(name);
         return stored != null ? stored : this.computedValues.get(name);

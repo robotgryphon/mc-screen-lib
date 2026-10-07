@@ -46,6 +46,7 @@ public class NodeWidget extends AbstractWidget {
     private final DragState dragState;
     private final NodePortsWidget ports;
     private final NodePropertiesWidget properties;
+    private final NodeRenderWidget renders;
 
     private boolean dragging;
     private double grabOffsetX;
@@ -67,6 +68,7 @@ public class NodeWidget extends AbstractWidget {
         this.layout = layout;
         this.ports = new NodePortsWidget(this, node.portManager(), layout);
         this.properties = new NodePropertiesWidget(this, node.propertyManager());
+        this.renders = new NodeRenderWidget(this, node.renderManager());
     }
 
     private static List<Integer> valueWidths(Node node) {
@@ -80,7 +82,7 @@ public class NodeWidget extends AbstractWidget {
             }
             widths.add(width);
         }
-        for (int i = 0; i < node.propertyManager().computedProperties().size(); i++) {
+        for (int i = 0; i < NodePropertiesWidget.visibleComputed(node.propertyManager()).size(); i++) {
             widths.add(NodeRenderer.COMPUTED_VALUE_WIDTH);
         }
         return List.copyOf(widths);
@@ -89,9 +91,11 @@ public class NodeWidget extends AbstractWidget {
     private static int width(Node node, PortLayout layout, List<Integer> valueWidths) {
         List<String> rowNames = new ArrayList<>();
         node.propertyManager().properties().forEach(prop -> rowNames.add(prop.name()));
-        node.propertyManager().computedProperties().forEach(def -> rowNames.add(def.name()));
-        return NodeRenderer.computeWidth(Minecraft.getInstance().font, node.title,
+        NodePropertiesWidget.visibleComputed(node.propertyManager()).forEach(def -> rowNames.add(def.name()));
+        int base = NodeRenderer.computeWidth(Minecraft.getInstance().font, node.title,
                 layout, rowNames, valueWidths);
+        int renderWidth = NodeRenderWidget.maxWidth(node.renderManager());
+        return renderWidth == 0 ? base : Math.max(base, renderWidth + 2 * NodeRenderer.PROPERTY_PADDING_X);
     }
 
     int valueWidth(int rowIndex) {
@@ -100,7 +104,8 @@ public class NodeWidget extends AbstractWidget {
 
     private static int height(Node node, PortLayout layout) {
         return NodeRenderer.TITLE_BAR_HEIGHT + layout.bandHeight()
-                + NodeRenderer.propertyRegionHeight(node.propertyManager().rowCount());
+                + NodeRenderer.propertyRegionHeight(NodePropertiesWidget.rowCount(node.propertyManager()))
+                + NodeRenderer.renderRegionHeight(NodeRenderWidget.heights(node.renderManager()));
     }
 
     @Override
@@ -316,6 +321,8 @@ public class NodeWidget extends AbstractWidget {
         graphics.centeredText(font, this.node.title, left + this.getWidth() / 2, top + 2, titleColor);
 
         this.properties.extractRenderState(graphics, mouseX, mouseY, partialTick);
+
+        this.renders.extractRenderState(graphics, mouseX, mouseY, partialTick);
 
         this.ports.extractRenderState(graphics, mouseX, mouseY, partialTick);
     }

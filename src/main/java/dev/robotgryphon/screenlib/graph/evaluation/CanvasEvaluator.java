@@ -10,7 +10,10 @@ import dev.robotgryphon.screenlib.graph.nodes.PropertyManager;
 import dev.robotgryphon.screenlib.graph.schema.AllowedValues;
 import dev.robotgryphon.screenlib.graph.schema.node.ComputedPropertyDefinition;
 import dev.robotgryphon.screenlib.graph.validation.GraphValidator;
+import io.netty.buffer.Unpooled;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
@@ -20,6 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 public final class CanvasEvaluator {
     private CanvasEvaluator() {}
@@ -30,7 +34,31 @@ public final class CanvasEvaluator {
         CanvasStateManager.loadState(canvas, state);
 
         List<NodeComputed> computed = computeAll(canvas, registries);
-        return new CanvasEvaluation(GraphValidator.validate(canvas), computed);
+        List<NodeRendered> rendered = extractRenderStates(canvas, registries);
+        return new CanvasEvaluation(GraphValidator.validate(canvas), computed, rendered);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<NodeRendered> extractRenderStates(Canvas canvas, RegistryAccess registries) {
+        List<NodeRendered> results = new ArrayList<>();
+        List<Node> nodes = canvas.nodes();
+        for (int i = 0; i < nodes.size(); i++) {
+            Node node = nodes.get(i);
+            var providers = node.renderManager().providers();
+            for (int j = 0; j < providers.size(); j++) {
+                var provider = providers.get(j).value();
+                Optional<?> state = provider.extract(new ComputeContext(node));
+                if (state.isEmpty()) {
+                    continue;
+                }
+                var buffer = new RegistryFriendlyByteBuf(Unpooled.buffer(), registries);
+                ((StreamCodec<RegistryFriendlyByteBuf, Object>) provider.codec()).encode(buffer, state.get());
+                byte[] data = new byte[buffer.readableBytes()];
+                buffer.readBytes(data);
+                results.add(new NodeRendered(i, j, data));
+            }
+        }
+        return results;
     }
 
     @SuppressWarnings("unchecked")

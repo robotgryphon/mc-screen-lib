@@ -13,6 +13,7 @@ public class Node {
     public final Component title;
     private final PortManager portManager;
     private final PropertyManager propertyManager;
+    private final RenderManager renderManager;
 
     public Node(Canvas canvas, Holder<NodeDefinition> definitionHolder, Component title, int x, int y) {
         this.type = definitionHolder.key();
@@ -23,10 +24,15 @@ public class Node {
         NodeDefinition definition = definitionHolder.value();
         this.portManager = new PortManager(this, definition);
         this.propertyManager = new PropertyManager(this, definition.properties(), definition.computed());
+        this.renderManager = new RenderManager(definition.renders());
     }
 
     public PortManager portManager() {
         return this.portManager;
+    }
+
+    public RenderManager renderManager() {
+        return this.renderManager;
     }
 
     public PropertyManager propertyManager() {

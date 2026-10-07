@@ -1,6 +1,9 @@
 package dev.robotgryphon.screenlib.client;
 
 import dev.robotgryphon.screenlib.ScreenLib;
+import dev.robotgryphon.screenlib.client.render.BlockPreviewRenderer;
+import dev.robotgryphon.screenlib.client.render.ItemHandlerPreviewRenderer;
+import dev.robotgryphon.screenlib.client.render.NodeRenderers;
 import dev.robotgryphon.screenlib.client.ui.AddNodeScreen;
 import dev.robotgryphon.screenlib.client.ui.TestScreen;
 import dev.robotgryphon.screenlib.client.ui.render.ExRenderPipelines;
@@ -22,6 +25,8 @@ public class ScreenLibClient {
         modEventBus.addListener(ScreenLibClient::registerPips);
         modEventBus.addListener(ScreenLibClient::registerRenderPipelines);
         modEventBus.addListener(ScreenLibClient::registerMenuScreens);
+        NodeRenderers.register(ScreenLib.BLOCK_PREVIEW, new BlockPreviewRenderer());
+        NodeRenderers.register(ScreenLib.ITEM_HANDLER_PREVIEW, new ItemHandlerPreviewRenderer());
     }
 
     private static void registerPips(RegisterPictureInPictureRenderersEvent pips) {

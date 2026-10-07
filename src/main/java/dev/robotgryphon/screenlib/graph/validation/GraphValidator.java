@@ -135,6 +135,7 @@ public final class GraphValidator {
                                                       List<String> errors) {
         String nodeTag = nodeTag(node);
         for (NodeProperty<?> prop : node.propertyManager().properties()) {
+            if (prop.optional()) continue;
             if (node.propertyManager().value(prop.name()) != null) continue;
 
             boolean wired = false;

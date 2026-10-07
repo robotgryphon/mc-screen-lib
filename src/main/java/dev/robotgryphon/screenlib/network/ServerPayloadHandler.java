@@ -21,7 +21,7 @@ public final class ServerPayloadHandler {
             var evaluation = CanvasEvaluator.evaluate(payload.state(),
                     player.level().registryAccess(), player.level().getServer());
             context.reply(new CanvasEvaluationPayload(payload.sequence(),
-                    evaluation.validity(), evaluation.computed()));
+                    evaluation.validity(), evaluation.computed(), evaluation.rendered()));
         }
     }
 

@@ -5,6 +5,10 @@ import dev.robotgryphon.screenlib.graph.CanvasState;
 import dev.robotgryphon.screenlib.graph.computed.BlockPositionFromCoordinates;
 import dev.robotgryphon.screenlib.graph.computed.BlockStateAt;
 import dev.robotgryphon.screenlib.graph.computed.ComputedProperty;
+import dev.robotgryphon.screenlib.graph.computed.ItemHandlerAt;
+import dev.robotgryphon.screenlib.graph.render.BlockPreviewProvider;
+import dev.robotgryphon.screenlib.graph.render.ItemHandlerPreviewProvider;
+import dev.robotgryphon.screenlib.graph.render.NodeRenderProvider;
 import dev.robotgryphon.screenlib.menu.AddNodeMenu;
 import dev.robotgryphon.screenlib.menu.TestScreenMenu;
 import dev.robotgryphon.screenlib.menu.TestScreenMenuProvider;
@@ -67,7 +71,11 @@ public class ScreenLib {
     public static final DeferredRegister<ComputedProperty<?>> COMPUTED_PROPERTIES =
             DeferredRegister.create(ComputedProperty.REGISTRY_KEY, MOD_ID);
 
+    public static final DeferredRegister<NodeRenderProvider<?>> RENDER_PROVIDERS =
+            DeferredRegister.create(NodeRenderProvider.REGISTRY_KEY, MOD_ID);
+
     static {
+        RENDER_PROVIDERS.makeRegistry(builder -> builder.sync(true));
         COMPUTED_PROPERTIES.makeRegistry(builder -> builder.sync(true));
         LIB_DATA_TYPES.makeRegistry(builder -> builder.sync(true));
     }
@@ -80,8 +88,8 @@ public class ScreenLib {
     public static final DeferredHolder<GraphDataType<?>, StringGraphDataType> STRING_DATA_TYPE = CORE_DATA_TYPES.register("string", StringGraphDataType::new);
     public static final DeferredHolder<GraphDataType<?>, BooleanGraphDataType> BOOLEAN_DATA_TYPE = CORE_DATA_TYPES.register("boolean", BooleanGraphDataType::new);
 
-    public static final DeferredHolder<GraphDataType<?>, SimpleGraphDataType<BlockPos>> ITEM_HANDLER_DATA_TYPE = LIB_DATA_TYPES.register("item_handler", ()
-            -> new SimpleGraphDataType<>(BlockPos.class, BlockPos.CODEC));
+    public static final DeferredHolder<GraphDataType<?>, ItemHandlerGraphDataType> ITEM_HANDLER_DATA_TYPE =
+            LIB_DATA_TYPES.register("item_handler", ItemHandlerGraphDataType::new);
 
     public static final DeferredHolder<GraphDataType<?>, LevelGraphDataType> LEVEL_DATA_TYPE = LIB_DATA_TYPES.register("level", LevelGraphDataType::new);
 
@@ -94,6 +102,15 @@ public class ScreenLib {
     public static final Holder<ComputedProperty<?>> BLOCK_POSITION_FROM_COORDINATES =
             COMPUTED_PROPERTIES.register("block_position_from_coordinates", BlockPositionFromCoordinates::new);
 
+    public static final DeferredHolder<NodeRenderProvider<?>, BlockPreviewProvider> BLOCK_PREVIEW =
+            RENDER_PROVIDERS.register("block_preview", BlockPreviewProvider::new);
+
+    public static final DeferredHolder<ComputedProperty<?>, ItemHandlerAt> ITEM_HANDLER_AT =
+            COMPUTED_PROPERTIES.register("item_handler_at", ItemHandlerAt::new);
+
+    public static final DeferredHolder<NodeRenderProvider<?>, ItemHandlerPreviewProvider> ITEM_HANDLER_PREVIEW =
+            RENDER_PROVIDERS.register("item_handler_preview", ItemHandlerPreviewProvider::new);
+
     public ScreenLib(IEventBus modBus) {
         modBus.addListener(ScreenLib::datapackRegistries);
         modBus.addListener(NetworkRegistration::register);
@@ -103,6 +120,7 @@ public class ScreenLib {
         CORE_DATA_TYPES.register(modBus);
         LIB_DATA_TYPES.register(modBus);
         COMPUTED_PROPERTIES.register(modBus);
+        RENDER_PROVIDERS.register(modBus);
         ATTACHMENT_TYPES.register(modBus);
         MENU_TYPES.register(modBus);
     }

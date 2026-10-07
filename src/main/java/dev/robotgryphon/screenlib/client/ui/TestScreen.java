@@ -5,6 +5,9 @@ import net.minecraft.nbt.NbtOps;
 import dev.robotgryphon.screenlib.graph.schema.node.ComputedPropertyDefinition;
 import dev.robotgryphon.screenlib.graph.nodes.PropertyManager;
 import dev.robotgryphon.screenlib.graph.evaluation.NodeComputed;
+import dev.robotgryphon.screenlib.graph.evaluation.NodeRendered;
+import io.netty.buffer.Unpooled;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import com.mojang.serialization.Codec;
 import java.util.Map;
 import java.util.List;
@@ -96,6 +99,21 @@ public class TestScreen extends Screen implements MenuAccess<TestScreenMenu> {
         var ops = Minecraft.getInstance().level.registryAccess().createSerializationContext(NbtOps.INSTANCE);
         for (Node node : nodes) {
             node.propertyManager().clearComputed();
+        }
+        for (Node node : nodes) {
+            node.renderManager().clear();
+        }
+        for (NodeRendered rendered : payload.rendered()) {
+            if (rendered.nodeIndex() < 0 || rendered.nodeIndex() >= nodes.size()) {
+                continue;
+            }
+            var manager = nodes.get(rendered.nodeIndex()).renderManager();
+            if (rendered.providerIndex() < 0 || rendered.providerIndex() >= manager.providers().size()) {
+                continue;
+            }
+            var buffer = new RegistryFriendlyByteBuf(Unpooled.wrappedBuffer(rendered.data()),
+                    Minecraft.getInstance().level.registryAccess());
+            manager.setState(rendered.providerIndex(), manager.providers().get(rendered.providerIndex()).value().codec().decode(buffer));
         }
         for (NodeComputed computed : payload.computed()) {
             if (computed.nodeIndex() < 0 || computed.nodeIndex() >= nodes.size()) {

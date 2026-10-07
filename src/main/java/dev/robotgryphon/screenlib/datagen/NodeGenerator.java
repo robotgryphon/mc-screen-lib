@@ -64,8 +64,11 @@ public class NodeGenerator {
 
         ctx.register(nodeType("resource_access_items"), new NodeBuilder()
                 .addInput("Position", blockPos)
-                .addProperty("Side", direction)
-                .addOutput("Storage", itemHandler)
+                .addInput("Level", level)
+                .addProperty("Side", direction, true)
+                .addComputedProperty("storage", itemHandler, ScreenLib.ITEM_HANDLER_AT, true)
+                .addOutput("Storage", itemHandler, "storage")
+                .addRender(ScreenLib.ITEM_HANDLER_PREVIEW)
                 .build());
 
         ctx.register(nodeType("tree_cutter_upgrade"), new NodeBuilder()

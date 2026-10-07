@@ -1,5 +1,6 @@
 package dev.robotgryphon.screenlib.client.ui.widget;
 
+import dev.robotgryphon.screenlib.graph.schema.node.ComputedPropertyDefinition;
 import dev.robotgryphon.screenlib.graph.Connection;
 import com.mojang.serialization.Codec;
 import dev.robotgryphon.screenlib.client.NodeRenderer;
@@ -51,11 +52,11 @@ public class NodePropertiesWidget implements Renderable {
         this.node = owner.node();
         this.propertyManager = propertyManager;
 
-        if (this.propertyManager.rowCount() == 0) {
+        if (rowCount(this.propertyManager) == 0) {
             this.propertiesLayout = null;
             this.propertyRows = List.of();
         } else {
-            int n = this.propertyManager.rowCount();
+            int n = rowCount(this.propertyManager);
             int contentHeight = n * NodeRenderer.PROPERTY_PITCH
                     + Math.max(0, n - 1) * NodeRenderer.PROPERTY_ROW_GAP;
             EqualSpacingLayout layout = new EqualSpacingLayout(
@@ -72,12 +73,22 @@ public class NodePropertiesWidget implements Renderable {
         }
     }
 
+    public static List<ComputedPropertyDefinition> visibleComputed(PropertyManager propertyManager) {
+        return propertyManager.computedProperties().stream()
+                .filter(definition -> !definition.hidden())
+                .toList();
+    }
+
+    public static int rowCount(PropertyManager propertyManager) {
+        return propertyManager.properties().size() + visibleComputed(propertyManager).size();
+    }
+
     public int width() {
         return this.owner.getWidth();
     }
 
     public int height() {
-        return NodeRenderer.propertyRegionHeight(this.propertyManager.rowCount());
+        return NodeRenderer.propertyRegionHeight(rowCount(this.propertyManager));
     }
 
     public int top() {
@@ -172,7 +183,9 @@ public class NodePropertiesWidget implements Renderable {
         NodeProperty<?> prop = focused.prop();
 
         GraphDataType<?> def = prop.type().value();
-        List<?> options = List.copyOf(this.node.canvas.allowedValues(prop.anyType()).orElseThrow());
+        List<Object> options = new ArrayList<>();
+        options.add(PropertyValues.CLEAR);
+        options.addAll(this.node.canvas.allowedValues(prop.anyType()).orElseThrow());
 
         String name = prop.name();
         Object currentValue = this.propertyManager.value(name);
@@ -191,7 +204,7 @@ public class NodePropertiesWidget implements Renderable {
         final String propName = name;
         return new DropdownPopup(popupX, popupY, popupWidth,
                 options, currentValue, picked -> {
-                    this.propertyManager.set(propName, picked);
+                    this.propertyManager.set(propName, picked == PropertyValues.CLEAR ? null : picked);
                     this.propertyManager.setFocusedName(null);
                 });
     }
@@ -283,7 +296,7 @@ public class NodePropertiesWidget implements Renderable {
 
     private void renderComputedRow(GuiGraphicsExtractor graphics, Font font,
                                    int rowIndex, int rowLeft, int rowTop, int rowWidth, int rowHeight) {
-        var definition = this.propertyManager.computedProperties()
+        var definition = visibleComputed(this.propertyManager)
                 .get(rowIndex - this.propertyManager.properties().size());
         float alpha = this.owner.effectiveAlpha(definition.type());
         int textY = rowTop + (rowHeight - font.lineHeight) / 2 + 1;

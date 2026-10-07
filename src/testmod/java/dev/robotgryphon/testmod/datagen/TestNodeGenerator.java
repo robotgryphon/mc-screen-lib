@@ -28,6 +28,7 @@ public class TestNodeGenerator {
                 .addInput("Level", level)
                 .addOutput("State", blockState, "state")
                 .addComputedProperty("state", blockState, ScreenLib.BLOCK_STATE_AT)
+                .addRender(ScreenLib.BLOCK_PREVIEW)
                 .build());
     }
 }

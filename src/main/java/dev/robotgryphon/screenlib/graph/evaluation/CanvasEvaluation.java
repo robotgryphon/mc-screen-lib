@@ -4,5 +4,6 @@ import dev.robotgryphon.screenlib.graph.validation.NodeValidity;
 
 import java.util.List;
 
-public record CanvasEvaluation(List<NodeValidity> validity, List<NodeComputed> computed) {
+public record CanvasEvaluation(List<NodeValidity> validity, List<NodeComputed> computed,
+                               List<NodeRendered> rendered) {
 }

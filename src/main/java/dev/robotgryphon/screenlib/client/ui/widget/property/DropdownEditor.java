@@ -46,7 +46,7 @@ public final class DropdownEditor extends PropertyEditor {
     @Override
     protected void extractWidgetRenderState(GuiGraphicsExtractor graphics,
                                             int mouseX, int mouseY, float partialTick) {
-        String display = this.value == null ? "" : PropertyValues.display(this.value);
+        String display = this.value == null ? "—" : PropertyValues.display(this.value);
         render(graphics, Minecraft.getInstance().font,
                 getX(), getY(), getWidth(), getHeight(),
                 mouseX, mouseY, display, getAlpha());

@@ -19,6 +19,18 @@ public final class NodeRenderer {
     public static final int PROPERTY_REGION_PADDING_Y = PROPERTY_PADDING_X;
     public static final int PROPERTY_VALUE_MIN_WIDTH = 60;
     public static final int COMPUTED_VALUE_WIDTH = 110;
+    public static final int RENDER_REGION_PADDING = 4;
+
+    public static int renderRegionHeight(List<Integer> heights) {
+        if (heights.isEmpty()) {
+            return 0;
+        }
+        int total = RENDER_REGION_PADDING;
+        for (int height : heights) {
+            total += height + RENDER_REGION_PADDING;
+        }
+        return total;
+    }
     public static final int PROPERTY_LABEL_VALUE_GAP = 16;
 
     private static final int TITLE_PADDING = 8;
