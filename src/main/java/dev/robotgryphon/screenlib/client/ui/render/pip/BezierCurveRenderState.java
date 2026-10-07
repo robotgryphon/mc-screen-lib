@@ -1,7 +1,7 @@
 package dev.robotgryphon.screenlib.client.ui.render.pip;
 
-import dev.robotgryphon.screenlib.geometry.BezierCurve;
-import dev.robotgryphon.screenlib.math.BezierCurveCalculator;
+import dev.robotgryphon.screenlib.client.geometry.BezierCurve;
+import dev.robotgryphon.screenlib.client.math.BezierCurveCalculator;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.renderer.state.gui.pip.PictureInPictureRenderState;

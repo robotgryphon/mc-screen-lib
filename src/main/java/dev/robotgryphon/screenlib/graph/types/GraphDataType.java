@@ -3,6 +3,7 @@ package dev.robotgryphon.screenlib.graph.types;
 import com.mojang.serialization.Codec;
 import dev.robotgryphon.screenlib.ScreenLib;
 import net.minecraft.core.Holder;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.chat.Component;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.codec.RegistryCodecs;
@@ -17,8 +18,6 @@ public interface GraphDataType<T> {
 
     Codec<Holder<GraphDataType<?>>> HOLDER_CODEC = RegistryCodecs.holder(REGISTRY_KEY);
 
-    int DEFAULT_COLOR = 0xFF8FA0FF;
-
     static Component displayName(Holder<GraphDataType<?>> type) {
         var id = type.unwrapKey().orElseThrow().identifier();
         return Component.translatableWithFallback(id.toLanguageKey("graph_type"), id.getPath());
@@ -26,17 +25,13 @@ public interface GraphDataType<T> {
 
     Class<T> dataType();
 
-    default int color() {
-        return DEFAULT_COLOR;
-    }
-
     Codec<T> codec();
 
     default Optional<T> defaultValueRaw() {
         return Optional.empty();
     }
 
-    default Optional<Collection<T>> allowedValues() {
+    default Optional<Collection<T>> allowedValues(RegistryAccess registries) {
         return Optional.empty();
     }
 }

@@ -6,7 +6,7 @@ import dev.robotgryphon.screenlib.client.ui.render.ExRenderPipelines;
 import dev.robotgryphon.screenlib.client.ui.render.PipelineRenderer;
 import dev.robotgryphon.screenlib.client.ui.render.PipelineRenderer.UploadedMesh;
 import dev.robotgryphon.screenlib.client.ui.render.uniforms.BezierCurveUniform;
-import dev.robotgryphon.screenlib.math.BezierCurveCalculator;
+import dev.robotgryphon.screenlib.client.math.BezierCurveCalculator;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
 import net.minecraft.client.Minecraft;

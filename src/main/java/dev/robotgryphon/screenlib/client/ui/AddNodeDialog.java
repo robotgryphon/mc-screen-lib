@@ -1,14 +1,15 @@
 package dev.robotgryphon.screenlib.client.ui;
 
+import dev.robotgryphon.screenlib.client.GraphColors;
 import dev.robotgryphon.screenlib.graph.Canvas;
 import dev.robotgryphon.screenlib.client.ui.widget.chips.ChipFilterInput;
 import dev.robotgryphon.screenlib.client.ui.widget.chips.ChipSuggestion;
 import dev.robotgryphon.screenlib.client.ui.widget.NodePreviewWidget;
+import dev.robotgryphon.screenlib.client.ui.widget.DragState;
 import dev.robotgryphon.screenlib.client.ui.widget.NodeWidget;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.ports.Port;
 import dev.robotgryphon.screenlib.graph.nodes.NodeDefinition;
-import dev.robotgryphon.screenlib.graph.ports.InputPortDefinition;
 import dev.robotgryphon.screenlib.graph.ports.StandardInputPort;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.client.Minecraft;
@@ -44,7 +45,7 @@ public class AddNodeDialog extends Screen {
     private static final int GRID_SPACING_Y = 4;
 
     private final Screen parent;
-    private final Canvas previewCanvas = new Canvas();
+    private final Canvas previewCanvas;
     private final List<Holder.Reference<NodeDefinition>> options;
     private final Consumer<Holder.Reference<NodeDefinition>> onSubmit;
 
@@ -67,6 +68,7 @@ public class AddNodeDialog extends Screen {
         this.parent = parent;
         this.options = List.copyOf(options);
         this.onSubmit = onSubmit;
+        this.previewCanvas = new Canvas(minecraft.level.registryAccess());
     }
 
     @Override
@@ -118,7 +120,7 @@ public class AddNodeDialog extends Screen {
         for (Holder.Reference<NodeDefinition> ref : this.options) {
             Component name = Component.translatable(ref.key().identifier().toLanguageKey("node"));
             Node node = new Node(this.previewCanvas, ref, name, 0, 0);
-            this.templates.add(new PreviewTemplate(ref, node, new NodeWidget(node), name));
+            this.templates.add(new PreviewTemplate(ref, node, new NodeWidget(node, new DragState()), name));
         }
     }
 
@@ -175,7 +177,7 @@ public class AddNodeDialog extends Screen {
                             .toLowerCase(Locale.ROOT).contains(needle))
                     .map(holder -> new ChipSuggestion(
                             GraphDataType.displayName(holder),
-                            holder.value().color(),
+                            GraphColors.of(holder),
                             GraphDataType.displayName(holder).getString()))
                     .toList();
         };
@@ -184,8 +186,10 @@ public class AddNodeDialog extends Screen {
     private Stream<Holder<GraphDataType<?>>> distinctInputTypes() {
         Set<Holder<GraphDataType<?>>> seen = new LinkedHashSet<>();
         for (PreviewTemplate t : this.templates) {
-            for (InputPortDefinition input : t.node.canvas.definition(t.node).inputs()) {
-                seen.add(input.type());
+            for (Port port : t.node.portManager().ports()) {
+                if (port instanceof StandardInputPort) {
+                    seen.add(port.type());
+                }
             }
         }
         return seen.stream();
@@ -342,8 +346,9 @@ public class AddNodeDialog extends Screen {
         INPUT(Component.literal("Input"), 0xFF6FA8FF) {
             @Override
             boolean matches(PreviewTemplate t, String needle) {
-                for (InputPortDefinition input : t.node().canvas.definition(t.node()).inputs()) {
-                    if (typeNameMatches(GraphDataType.displayName(input.type()), needle)) {
+                for (Port port : t.node().portManager().ports()) {
+                    if (port instanceof StandardInputPort
+                            && typeNameMatches(GraphDataType.displayName(port.type()), needle)) {
                         return true;
                     }
                 }

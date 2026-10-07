@@ -1,8 +1,8 @@
 package dev.robotgryphon.screenlib.graph.types;
 
 import com.mojang.serialization.Codec;
-import dev.robotgryphon.screenlib.graph.GraphTheme;
 import net.minecraft.core.Direction;
+import net.minecraft.core.RegistryAccess;
 
 import java.util.Collection;
 import java.util.Optional;
@@ -17,17 +17,12 @@ public class DirectionGraphDataType implements GraphDataType<Direction> {
     }
 
     @Override
-    public int color() {
-        return GraphTheme.COLOR_DIRECTION;
-    }
-
-    @Override
     public Codec<Direction> codec() {
         return Direction.CODEC;
     }
 
     @Override
-    public Optional<Collection<Direction>> allowedValues() {
+    public Optional<Collection<Direction>> allowedValues(RegistryAccess registries) {
         return Optional.of(ALLOWED);
     }
 }

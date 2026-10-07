@@ -1,9 +1,9 @@
 package dev.robotgryphon.screenlib.client.ui.widget;
 
 import dev.robotgryphon.screenlib.client.NodeRenderer;
+import dev.robotgryphon.screenlib.client.PortLayout;
 import dev.robotgryphon.screenlib.client.ui.render.uniforms.NodeBackgroundUniform;
 import dev.robotgryphon.screenlib.graph.Canvas;
-import dev.robotgryphon.screenlib.graph.CanvasViewport;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.ports.Port;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
@@ -37,6 +37,8 @@ public class NodeWidget extends AbstractWidget {
     private static final float MISMATCHED_TYPE_ALPHA = 0.3f;
 
     private final Node node;
+    private final PortLayout layout;
+    private final DragState dragState;
     private final NodePortsWidget ports;
     private final NodePropertiesWidget properties;
 
@@ -45,23 +47,28 @@ public class NodeWidget extends AbstractWidget {
     private double grabOffsetY;
 
     private @Nullable Integer glowColor;
-    private @Nullable Integer tintColor;
 
 
-    public NodeWidget(Node node) {
-        super(node.canvas.x(node), node.canvas.y(node), width(node), height(node), node.title);
+    public NodeWidget(Node node, DragState dragState) {
+        this(node, dragState, PortLayout.compile(node.portManager().ports(), Minecraft.getInstance().font));
+    }
+
+    private NodeWidget(Node node, DragState dragState, PortLayout layout) {
+        super(node.canvas.x(node), node.canvas.y(node), width(node, layout), height(node, layout), node.title);
         this.node = node;
-        this.ports = new NodePortsWidget(this, node.portManager());
+        this.dragState = dragState;
+        this.layout = layout;
+        this.ports = new NodePortsWidget(this, node.portManager(), layout);
         this.properties = new NodePropertiesWidget(this, node.propertyManager());
     }
 
-    private static int width(Node node) {
+    private static int width(Node node, PortLayout layout) {
         return NodeRenderer.computeWidth(Minecraft.getInstance().font, node.title,
-                node.portManager().layout(), node.propertyManager().properties());
+                layout, node.propertyManager().properties());
     }
 
-    private static int height(Node node) {
-        return NodeRenderer.TITLE_BAR_HEIGHT + node.portManager().layout().bandHeight()
+    private static int height(Node node, PortLayout layout) {
+        return NodeRenderer.TITLE_BAR_HEIGHT + layout.bandHeight()
                 + NodeRenderer.propertyRegionHeight(node.propertyManager().properties().size());
     }
 
@@ -83,6 +90,10 @@ public class NodeWidget extends AbstractWidget {
     @Override
     public void setY(int y) {
         this.node.canvas.place(this.node, this.getX(), y);
+    }
+
+    PortLayout layout() {
+        return this.layout;
     }
 
     public Node node() {
@@ -111,11 +122,11 @@ public class NodeWidget extends AbstractWidget {
 
 
     public @Nullable Integer tintColor() {
-        return this.tintColor;
+        return this.node.canvas.tint(this.node);
     }
 
     public void setTintColor(@Nullable Integer color) {
-        this.tintColor = color;
+        this.node.canvas.setTint(this.node, color);
     }
 
     public ScreenRectangle screenBounds(CanvasViewport viewport) {
@@ -157,7 +168,7 @@ public class NodeWidget extends AbstractWidget {
             borderArgb = BORDER_COLOR;
         }
 
-        Integer tint = this.tintColor;
+        Integer tint = this.tintColor();
         if (tint != null) {
             bodyArgb = blendTint(bodyArgb, tint);
             titleArgb = blendTint(titleArgb, tint);
@@ -280,7 +291,7 @@ public class NodeWidget extends AbstractWidget {
 
     float effectiveAlpha(Holder<GraphDataType<?>> type) {
         float base = this.getAlpha();
-        Holder<GraphDataType<?>> active = this.node.canvas.activeDragType();
+        Holder<GraphDataType<?>> active = this.dragState.type();
         if (active == null) {
             return base;
         }

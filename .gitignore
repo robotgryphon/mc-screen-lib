@@ -25,3 +25,6 @@ run-data
 
 repo
 src/generated/
+run-testmod
+run-testmod-server
+src/testmod/generated/

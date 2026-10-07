@@ -1,6 +1,7 @@
 package dev.robotgryphon.screenlib.graph;
 
 import dev.robotgryphon.screenlib.graph.nodes.Node;
+import dev.robotgryphon.screenlib.graph.nodes.NodeDefinition;
 import dev.robotgryphon.screenlib.graph.nodes.NodeState;
 import dev.robotgryphon.screenlib.graph.ports.Port;
 import dev.robotgryphon.screenlib.graph.ports.PortSide;
@@ -9,8 +10,7 @@ import dev.robotgryphon.screenlib.graph.properties.NodeProperty;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.Dynamic;
-import dev.robotgryphon.screenlib.client.ui.widget.Connection;
-import dev.robotgryphon.screenlib.client.ui.widget.NodeWidget;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import org.jspecify.annotations.Nullable;
@@ -21,23 +21,24 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.BiFunction;
 
 public final class CanvasStateManager {
     private CanvasStateManager() {}
 
-    public static CanvasState toState(Canvas canvas) {
-        List<NodeWidget> widgets = canvas.nodes();
-        List<NodeState> nodeStates = new ArrayList<>(widgets.size());
-        Map<Node, Integer> indexOf = new IdentityHashMap<>(widgets.size());
-        for (int i = 0; i < widgets.size(); i++) {
-            NodeWidget widget = widgets.get(i);
-            Node node = widget.node();
+    public static CanvasState toState(Canvas canvas, RegistryAccess registryAccess) {
+        List<Node> nodes = canvas.nodes();
+        List<NodeState> nodeStates = new ArrayList<>(nodes.size());
+        Map<Node, Integer> indexOf = new IdentityHashMap<>(nodes.size());
+
+        var nodeDefinitions = registryAccess.lookupOrThrow(NodeDefinition.REGISTRY_KEY);
+
+        for (int i = 0; i < nodes.size(); i++) {
+            Node node = nodes.get(i);
             indexOf.put(node, i);
             nodeStates.add(new NodeState(
-                    canvas.definitionHolder(node), canvas.x(node), canvas.y(node),
+                    nodeDefinitions.getOrThrow(node.type()), canvas.x(node), canvas.y(node),
                     encodePropertyValues(node),
-                    Optional.ofNullable(widget.tintColor())));
+                    Optional.ofNullable(canvas.tint(node))));
         }
 
         List<Connection> connections = canvas.connections();
@@ -55,8 +56,7 @@ public final class CanvasStateManager {
             }
             connectionStates.add(new ConnectionState(
                     srcIdx, srcPortIdx, Optional.of(portLocalName(c.sourcePort())),
-                    tgtIdx, tgtPortIdx, Optional.of(portLocalName(c.targetPort())),
-                    c.color()));
+                    tgtIdx, tgtPortIdx, Optional.of(portLocalName(c.targetPort()))));
         }
 
         return new CanvasState(nodeStates, connectionStates);
@@ -69,23 +69,22 @@ public final class CanvasStateManager {
         };
     }
 
-    public static void loadState(Canvas canvas, CanvasState state,
-                                 BiFunction<Canvas, NodeState, NodeWidget> nodeBuilder) {
+    public static void loadState(Canvas canvas, CanvasState state) {
         canvas.clear();
 
         for (NodeState ns : state.nodes()) {
-            NodeWidget widget = nodeBuilder.apply(canvas, ns);
-            applyPropertyValues(widget.node(), ns.propertyValues());
-            ns.tintColor().ifPresent(c -> widget.setTintColor(c));
-            canvas.addNode(widget);
+            Node node = new Node(canvas, ns.definition(), Node.defaultTitle(ns.definition().key()), ns.x(), ns.y());
+            applyPropertyValues(node, ns.propertyValues());
+            ns.tintColor().ifPresent(c -> canvas.setTint(node, c));
+            canvas.addNode(node);
         }
 
-        List<NodeWidget> rebuilt = canvas.nodes();
+        List<Node> rebuilt = canvas.nodes();
         for (ConnectionState cs : state.connections()) {
             if (!isValidIndex(cs.sourceNodeIndex(), rebuilt.size())) continue;
             if (!isValidIndex(cs.targetNodeIndex(), rebuilt.size())) continue;
-            Node srcNode = rebuilt.get(cs.sourceNodeIndex()).node();
-            Node tgtNode = rebuilt.get(cs.targetNodeIndex()).node();
+            Node srcNode = rebuilt.get(cs.sourceNodeIndex());
+            Node tgtNode = rebuilt.get(cs.targetNodeIndex());
 
             Port srcPort = resolvePort(srcNode, cs.sourcePortName(), cs.sourcePortIndex());
             Port tgtPort = resolvePort(tgtNode, cs.targetPortName(), cs.targetPortIndex());
@@ -95,7 +94,7 @@ public final class CanvasStateManager {
             if (tgtPort.side() != PortSide.LEFT) continue;
             if (srcPort.type().value() != tgtPort.type().value()) continue;
 
-            canvas.addConnection(new Connection(srcNode, srcPort, tgtNode, tgtPort, cs.color()));
+            canvas.addConnection(new Connection(srcNode, srcPort, tgtNode, tgtPort));
         }
     }
 

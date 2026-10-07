@@ -1,15 +1,10 @@
 package dev.robotgryphon.screenlib.graph;
 
 import com.mojang.serialization.DataResult;
-import dev.robotgryphon.screenlib.client.ui.widget.Connection;
-import dev.robotgryphon.screenlib.client.ui.widget.NodeWidget;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
-import dev.robotgryphon.screenlib.graph.nodes.NodeDefinition;
 import dev.robotgryphon.screenlib.graph.ports.*;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
-import net.minecraft.core.Holder;
-import net.minecraft.resources.ResourceKey;
-import org.joml.Vector2dc;
+import net.minecraft.core.RegistryAccess;
 import org.joml.Vector2i;
 import org.jspecify.annotations.Nullable;
 
@@ -19,19 +14,24 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Stream;
 
 public class Canvas {
-    public static final int IN_FLIGHT_COLOR = 0xFFFFD24A;
-
-    private final List<NodeWidget> nodes = new ArrayList<>();
+    private final List<Node> nodes = new ArrayList<>();
     private final List<Connection> connections = new ArrayList<>();
 
     private final Map<Node, Vector2i> positions = new IdentityHashMap<>();
     private final Map<Node, DataResult<Node>> validationResults = new IdentityHashMap<>();
-    private final Map<ResourceKey<NodeDefinition>, Holder<NodeDefinition>> definitions = new IdentityHashMap<>();
+    private final Map<Node, Integer> tints = new IdentityHashMap<>();
 
-    private @Nullable Holder<GraphDataType<?>> activeDragType;
+    private final RegistryAccess registries;
+
+    public Canvas(RegistryAccess registries) {
+        this.registries = registries;
+    }
+
+    public RegistryAccess registries() {
+        return this.registries;
+    }
 
     public void place(Node node, int x, int y) {
         this.positions.put(node, new Vector2i(x, y));
@@ -45,40 +45,27 @@ public class Canvas {
         return this.positions.get(node).y;
     }
 
-    public void register(Holder<NodeDefinition> definition) {
-        this.definitions.put(definition.key(), definition);
+    public @Nullable Integer tint(Node node) {
+        return this.tints.get(node);
     }
 
-    public Holder<NodeDefinition> definitionHolder(Node node) {
-        Holder<NodeDefinition> holder = this.definitions.get(node);
-        if (holder == null) {
-            throw new IllegalArgumentException("Node is not registered on this canvas: " + node);
+    public void setTint(Node node, @Nullable Integer tint) {
+        if (tint == null) {
+            this.tints.remove(node);
+        } else {
+            this.tints.put(node, tint);
         }
-        return holder;
     }
 
-    public NodeDefinition definition(Node node) {
-        return this.definitionHolder(node).value();
-    }
-
-    public NodeWidget addNode(NodeWidget widget) {
-        if (widget.node().canvas != this) {
-            throw new IllegalArgumentException("Node belongs to a different canvas: " + widget.node());
+    public Node addNode(Node node) {
+        if (node.canvas != this) {
+            throw new IllegalArgumentException("Node belongs to a different canvas: " + node);
         }
-        this.nodes.add(widget);
-        return widget;
+        this.nodes.add(node);
+        return node;
     }
 
-    public NodeWidget widgetFor(Node node) {
-        for (NodeWidget widget : this.nodes) {
-            if (widget.node() == node) {
-                return widget;
-            }
-        }
-        throw new IllegalArgumentException("Node is not on this canvas: " + node);
-    }
-
-    public List<NodeWidget> nodes() {
+    public List<Node> nodes() {
         return Collections.unmodifiableList(this.nodes);
     }
 
@@ -114,41 +101,7 @@ public class Canvas {
         }
     }
 
-    public @Nullable Holder<GraphDataType<?>> activeDragType() {
-        return this.activeDragType;
-    }
-
-    public void setActiveDragType(@Nullable Holder<GraphDataType<?>> type) {
-        this.activeDragType = type;
-    }
-
-    public Stream<Port> findPortsNear(Vector2dc point) {
-        var s = Stream.<Port>builder();
-        for (int i = this.nodes.size() - 1; i >= 0; i--) {
-            NodeWidget node = this.nodes.get(i);
-            Port port = node.portAt(point.x(), point.y());
-            if (port != null)
-                s.add(port);
-        }
-
-        return s.build();
-    }
-
-    public Stream<NodeWidget> findNodesNear(Vector2dc point) {
-        var s = Stream.<NodeWidget>builder();
-        for (int i = this.nodes.size() - 1; i >= 0; i--) {
-            NodeWidget node = this.nodes.get(i);
-            if (node.isMouseOver(point.x(), point.y())) {
-                final var maybePort = node.portAt(point.x(), point.y());
-                if(maybePort == null)
-                    s.add(node);
-            }
-        }
-
-        return s.build();
-    }
-
-    public boolean connect(Port from, Port to, int color) {
+    public boolean connect(Port from, Port to) {
         if (from.side() != PortSide.RIGHT || to.side() != PortSide.LEFT) {
             return false;
         }
@@ -160,7 +113,7 @@ public class Canvas {
                 detach(existing);
             }
         }
-        attach(new Connection(from.node(), from, to.node(), to, color));
+        attach(new Connection(from.node(), from, to.node(), to));
         to.node().validate();
         revalidateDownstreamOf(to.node());
         return true;
@@ -181,8 +134,8 @@ public class Canvas {
         if (value == null) return;
 
         GraphDataType<?> def = targetPort.type().value();
-        if (def.allowedValues().isPresent()
-                && !def.allowedValues().get().contains(value)) {
+        var allowed = def.allowedValues(this.registries);
+        if (allowed.isPresent() && !allowed.get().contains(value)) {
             return;
         }
         connection.target().propertyManager().set(propName, value);
@@ -232,11 +185,10 @@ public class Canvas {
         connection.target().portManager().detach(connection);
     }
 
-    public void removeNode(NodeWidget widget) {
-        if (!this.nodes.remove(widget)) {
+    public void removeNode(Node removed) {
+        if (!this.nodes.remove(removed)) {
             return;
         }
-        Node removed = widget.node();
         java.util.Set<Node> neighborsToRevalidate =
                 Collections.newSetFromMap(new IdentityHashMap<>());
         var it = this.connections.iterator();
@@ -255,8 +207,8 @@ public class Canvas {
             unregisterWithPorts(c);
         }
         this.validationResults.remove(removed);
-        this.definitions.remove(removed);
         this.positions.remove(removed);
+        this.tints.remove(removed);
         for (Node neighbor : neighborsToRevalidate) {
             neighbor.validate();
             revalidateDownstreamOf(neighbor);
@@ -265,8 +217,8 @@ public class Canvas {
 
     public void clear() {
         this.nodes.clear();
-        this.definitions.clear();
         this.positions.clear();
+        this.tints.clear();
         for (Connection c : this.connections) {
             unregisterWithPorts(c);
         }

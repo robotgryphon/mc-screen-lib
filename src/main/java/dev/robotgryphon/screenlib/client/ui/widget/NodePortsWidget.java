@@ -1,10 +1,9 @@
 package dev.robotgryphon.screenlib.client.ui.widget;
 
 import dev.robotgryphon.screenlib.client.ui.render.uniforms.NodeBackgroundUniform;
-import dev.robotgryphon.screenlib.graph.CanvasViewport;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.ports.Port;
-import dev.robotgryphon.screenlib.graph.ports.PortLayout;
+import dev.robotgryphon.screenlib.client.PortLayout;
 import dev.robotgryphon.screenlib.graph.ports.PortManager;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -15,6 +14,7 @@ import org.joml.Vector2f;
 import org.joml.Vector2fc;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class NodePortsWidget implements Renderable {
@@ -25,14 +25,16 @@ public class NodePortsWidget implements Renderable {
 
     private long lastAnimMillis;
 
-    public NodePortsWidget(NodeWidget owner, PortManager portManager) {
+    public NodePortsWidget(NodeWidget owner, PortManager portManager, PortLayout layout) {
         this.owner = owner;
         this.node = owner.node();
         this.portManager = portManager;
-        this.renderedPorts = portManager.ports()
-                .stream()
-                .map(port -> new RenderedPort(this, this.node, port))
-                .toList();
+        List<Port> ports = portManager.ports();
+        List<RenderedPort> rendered = new ArrayList<>(ports.size());
+        for (int i = 0; i < ports.size(); i++) {
+            rendered.add(new RenderedPort(this, this.node, ports.get(i), layout.slots().get(i)));
+        }
+        this.renderedPorts = List.copyOf(rendered);
     }
 
     NodeWidget owner() {
@@ -49,7 +51,7 @@ public class NodePortsWidget implements Renderable {
     }
 
     public Vector2fc portAttachment(Port port) {
-        PortLayout.Slot slot = portManager.slot(port);
+        PortLayout.Slot slot = this.renderedPort(port).slot();
         return new Vector2f(this.owner.getX(), this.owner.getY())
                 .add(slot.attachmentOffset(this.owner.getWidth()));
     }

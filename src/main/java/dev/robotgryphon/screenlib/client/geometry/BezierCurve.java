@@ -1,6 +1,6 @@
-package dev.robotgryphon.screenlib.geometry;
+package dev.robotgryphon.screenlib.client.geometry;
 
-import dev.robotgryphon.screenlib.math.BezierCurveCalculator;
+import dev.robotgryphon.screenlib.client.math.BezierCurveCalculator;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import org.joml.Matrix3x2f;

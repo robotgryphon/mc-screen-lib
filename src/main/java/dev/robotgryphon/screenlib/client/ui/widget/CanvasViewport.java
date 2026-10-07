@@ -1,4 +1,4 @@
-package dev.robotgryphon.screenlib.graph;
+package dev.robotgryphon.screenlib.client.ui.widget;
 
 import org.joml.Matrix3x2fStack;
 import org.joml.Vector2d;

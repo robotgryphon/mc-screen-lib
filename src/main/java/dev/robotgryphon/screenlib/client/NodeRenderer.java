@@ -1,6 +1,5 @@
 package dev.robotgryphon.screenlib.client;
 
-import dev.robotgryphon.screenlib.graph.ports.PortLayout;
 import dev.robotgryphon.screenlib.graph.properties.NodeProperty;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;

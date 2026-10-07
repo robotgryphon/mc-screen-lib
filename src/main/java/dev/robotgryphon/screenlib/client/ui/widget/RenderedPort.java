@@ -1,12 +1,12 @@
 package dev.robotgryphon.screenlib.client.ui.widget;
 
+import dev.robotgryphon.screenlib.client.GraphColors;
 import dev.robotgryphon.screenlib.client.NodeRenderer;
 import dev.robotgryphon.screenlib.client.ui.render.uniforms.NodeBackgroundUniform;
-import dev.robotgryphon.screenlib.graph.CanvasViewport;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.ports.InputPort;
 import dev.robotgryphon.screenlib.graph.ports.Port;
-import dev.robotgryphon.screenlib.graph.ports.PortLayout;
+import dev.robotgryphon.screenlib.client.PortLayout;
 import dev.robotgryphon.screenlib.graph.ports.PropertyInputPort;
 import dev.robotgryphon.screenlib.graph.properties.NodeProperty;
 import net.minecraft.client.Minecraft;
@@ -38,13 +38,15 @@ public class RenderedPort implements Renderable {
     private final NodePortsWidget parent;
     private final Node node;
     private final Port port;
+    private final PortLayout.Slot slot;
 
     private float hoverProgress;
 
-    public RenderedPort(NodePortsWidget parent, Node node, Port port) {
+    public RenderedPort(NodePortsWidget parent, Node node, Port port, PortLayout.Slot slot) {
         this.parent = parent;
         this.node = node;
         this.port = port;
+        this.slot = slot;
     }
 
     public Node node() {
@@ -61,7 +63,7 @@ public class RenderedPort implements Renderable {
     }
 
     public PortLayout.Slot slot() {
-        return this.node.portManager().slot(this.port);
+        return this.slot;
     }
 
     public boolean contains(double mouseX, double mouseY) {
@@ -111,7 +113,7 @@ public class RenderedPort implements Renderable {
                            boolean hovered,
                            double canvasMouseX, double canvasMouseY,
                            List<NodeBackgroundUniform.Entry> outEntries) {
-        int color = this.port.color();
+        int color = GraphColors.of(this.port);
         boolean ring = false;
 
         if (this.port instanceof PropertyInputPort propertyPort) {

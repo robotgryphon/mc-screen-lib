@@ -5,7 +5,7 @@ import dev.robotgryphon.screenlib.graph.ports.StandardInputPort;
 import dev.robotgryphon.screenlib.graph.properties.NodeProperty;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
-import dev.robotgryphon.screenlib.client.ui.widget.Connection;
+import dev.robotgryphon.screenlib.graph.Connection;
 import dev.robotgryphon.screenlib.graph.Canvas;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.ports.Port;
@@ -43,12 +43,12 @@ public final class GraphValidator {
                 continue;
             }
 
-            if (def.allowedValues().isPresent()
-                    && !def.allowedValues().get().contains(value)) {
+            var allowed = def.allowedValues(node.canvas.registries());
+            if (allowed.isPresent() && !allowed.get().contains(value)) {
                 errors.add(nodeTag + " property '" + prop.name()
                         + "' value " + value
                         + " is not one of the declared allowed values "
-                        + def.allowedValues().get());
+                        + allowed.get());
             }
         }
     }
@@ -90,7 +90,8 @@ public final class GraphValidator {
         String nodeTag = nodeTag(node);
         for (NodeProperty<?> prop : node.propertyManager().properties()) {
             GraphDataType<?> def = prop.type().value();
-            if (def.allowedValues().isEmpty()) continue;
+            var allowed = def.allowedValues(canvas.registries());
+            if (allowed.isEmpty()) continue;
 
             Connection inbound = null;
             for (Connection connection : canvas.connections()) {
@@ -107,11 +108,11 @@ public final class GraphValidator {
             Object delivered = canvas.resolveUpstreamValue(inbound);
             if (delivered == null) continue;
 
-            if (!def.allowedValues().get().contains(delivered)) {
+            if (!allowed.get().contains(delivered)) {
                 errors.add(nodeTag + " property '" + prop.name()
                         + "' is driven by a connection delivering "
                         + delivered + ", which is not one of the declared allowed values "
-                        + def.allowedValues().get());
+                        + allowed.get());
             }
         }
     }

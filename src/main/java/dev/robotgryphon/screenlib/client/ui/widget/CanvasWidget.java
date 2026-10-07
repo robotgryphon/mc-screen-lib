@@ -1,16 +1,20 @@
 package dev.robotgryphon.screenlib.client.ui.widget;
 
+import dev.robotgryphon.screenlib.client.GraphColors;
+import java.util.stream.Stream;
+import java.util.IdentityHashMap;
+import java.util.Map;
+import dev.robotgryphon.screenlib.graph.Connection;
 import dev.robotgryphon.screenlib.client.NodeRenderer;
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.robotgryphon.screenlib.client.ui.render.pip.BezierCurveRenderState;
 import dev.robotgryphon.screenlib.client.ui.render.pip.NodeBackgroundRenderState;
 import dev.robotgryphon.screenlib.client.ui.render.uniforms.NodeBackgroundUniform;
 import dev.robotgryphon.screenlib.client.ui.widget.property.NumericPropertyEditor;
-import dev.robotgryphon.screenlib.geometry.BezierCurve;
-import dev.robotgryphon.screenlib.geometry.CurveIndicator;
+import dev.robotgryphon.screenlib.client.geometry.BezierCurve;
+import dev.robotgryphon.screenlib.client.geometry.CurveIndicator;
 import dev.robotgryphon.screenlib.graph.Canvas;
 import dev.robotgryphon.screenlib.graph.ports.Port;
-import dev.robotgryphon.screenlib.graph.CanvasViewport;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.ports.PortSide;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
@@ -39,7 +43,15 @@ public class CanvasWidget extends AbstractWidget {
 
     private static final float MISMATCHED_TYPE_ALPHA = 0.3f;
 
+    private static final int IN_FLIGHT_COLOR = 0xFFFFD24A;
+
     public final Canvas canvas;
+
+    private final DragState dragState = new DragState();
+
+    private final Map<Node, NodeWidget> widgetsByNode = new IdentityHashMap<>();
+
+    private List<NodeWidget> widgets = List.of();
 
     private final CanvasViewport viewport = new CanvasViewport();
 
@@ -60,6 +72,66 @@ public class CanvasWidget extends AbstractWidget {
         super(x, y, width, height, Component.empty());
         this.canvas = canvas;
         this.onAddNodeRequested = onAddNodeRequested;
+    }
+
+    private List<NodeWidget> nodeWidgets() {
+        List<Node> nodes = this.canvas.nodes();
+        boolean current = nodes.size() == this.widgets.size();
+        for (int i = 0; current && i < nodes.size(); i++) {
+            current = this.widgets.get(i).node() == nodes.get(i);
+        }
+        if (current) {
+            return this.widgets;
+        }
+
+        List<NodeWidget> rebuilt = new ArrayList<>(nodes.size());
+        Map<Node, NodeWidget> kept = new IdentityHashMap<>();
+        for (Node node : nodes) {
+            NodeWidget widget = this.widgetsByNode.get(node);
+            if (widget == null) {
+                widget = new NodeWidget(node, this.dragState);
+            }
+            kept.put(node, widget);
+            rebuilt.add(widget);
+        }
+        this.layerIndices.keySet().removeIf(widget -> !kept.containsValue(widget));
+        this.widgetsByNode.clear();
+        this.widgetsByNode.putAll(kept);
+        this.widgets = List.copyOf(rebuilt);
+        return this.widgets;
+    }
+
+    private NodeWidget widgetFor(Node node) {
+        this.nodeWidgets();
+        NodeWidget widget = this.widgetsByNode.get(node);
+        if (widget == null) {
+            throw new IllegalArgumentException("Node is not on this canvas: " + node);
+        }
+        return widget;
+    }
+
+    private Stream<Port> findPortsNear(Vector2dc point) {
+        List<NodeWidget> all = this.nodeWidgets();
+        Stream.Builder<Port> found = Stream.builder();
+        for (int i = all.size() - 1; i >= 0; i--) {
+            Port port = all.get(i).portAt(point.x(), point.y());
+            if (port != null) {
+                found.add(port);
+            }
+        }
+        return found.build();
+    }
+
+    private Stream<NodeWidget> findNodesNear(Vector2dc point) {
+        List<NodeWidget> all = this.nodeWidgets();
+        Stream.Builder<NodeWidget> found = Stream.builder();
+        for (int i = all.size() - 1; i >= 0; i--) {
+            NodeWidget widget = all.get(i);
+            if (widget.isMouseOver(point.x(), point.y()) && widget.portAt(point.x(), point.y()) == null) {
+                found.add(widget);
+            }
+        }
+        return found.build();
     }
 
     public CanvasViewport viewport() {
@@ -108,14 +180,14 @@ public class CanvasWidget extends AbstractWidget {
 
         if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
             final Vector2dc canvasPos = this.viewport.screenToCanvas(event.x(), event.y());
-            final NodeWidget hitNode = canvas.findNodesNear(canvasPos).findFirst().orElse(null);
+            final NodeWidget hitNode = this.findNodesNear(canvasPos).findFirst().orElse(null);
 
             List<ContextMenu.Item> items;
             if (hitNode != null) {
                 items = List.of(new ContextMenu.Item(
                         Component.literal("Remove Node"),
                         () -> {
-                            canvas.removeNode(hitNode);
+                            canvas.removeNode(hitNode.node());
                             if (this.focusedNode == hitNode) {
                                 this.focusedNode = null;
                             }
@@ -141,19 +213,19 @@ public class CanvasWidget extends AbstractWidget {
             }
         }
 
-        var port = canvas.findPortsNear(clicked)
+        var port = this.findPortsNear(clicked)
                 .filter(p -> p.side().equals(PortSide.RIGHT))
                 .findFirst()
                 .orElse(null);
         if (port != null) {
             this.pending = new PendingConnection(port.node(), port);
-            this.canvas.setActiveDragType(port.type());
+            this.dragState.setType(port.type());
             this.focusedNode = null;
             this.panning = false;
             return true;
         }
 
-        var node = canvas.findNodesNear(clicked).findFirst().orElse(null);
+        var node = this.findNodesNear(clicked).findFirst().orElse(null);
         if (node != null && node.mouseClicked(canvasEvent, doubleClick)) {
             this.focusedNode = node;
             this.panning = false;
@@ -195,14 +267,14 @@ public class CanvasWidget extends AbstractWidget {
         if (this.pending != null) {
             PendingConnection p = this.pending;
             this.pending = null;
-            this.canvas.setActiveDragType(null);
+            this.dragState.setType(null);
             if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
-                final var port = canvas.findPortsNear(canvasSpace)
+                final var port = this.findPortsNear(canvasSpace)
                         .filter(p2 -> !p2.equals(p.sourcePort()))
                         .filter(p2 -> !p2.node().equals(p.source()))
                         .findFirst();
 
-                port.ifPresent(n -> canvas.connect(p.sourcePort(), n, p.sourcePort().color()));
+                port.ifPresent(n -> canvas.connect(p.sourcePort(), n));
             }
             return true;
         }
@@ -247,7 +319,7 @@ public class CanvasWidget extends AbstractWidget {
     }
 
     private @Nullable NumericPropertyEditor findEditingEditor() {
-        for (NodeWidget node : this.canvas.nodes()) {
+        for (NodeWidget node : this.nodeWidgets()) {
             NumericPropertyEditor editor = node.properties().activeNumericEditor();
             if (editor != null) {
                 return editor;
@@ -269,7 +341,7 @@ public class CanvasWidget extends AbstractWidget {
 
         extractConnections(graphics, canvasMouse, hovered);
 
-        var allNodes = canvas.nodes();
+        var allNodes = this.nodeWidgets();
         List<NodeWidget> staticNodes = new ArrayList<>(allNodes.size());
         List<NodeWidget> draggedNodes = new ArrayList<>();
         for (NodeWidget node : allNodes) {
@@ -322,7 +394,7 @@ public class CanvasWidget extends AbstractWidget {
     }
 
     private @Nullable NodeWidget findPopupNode() {
-        for (NodeWidget node : canvas.nodes()) {
+        for (NodeWidget node : this.nodeWidgets()) {
             if (node.properties().hasFocusedPropertyPopup()) {
                 return node;
             }
@@ -333,7 +405,7 @@ public class CanvasWidget extends AbstractWidget {
     private void extractConnections(GuiGraphicsExtractor graphics, Vector2dc mouseCanvas,
                                     @Nullable Connection hovered) {
         List<BezierCurve> curves = new ArrayList<>();
-        var dragType = this.canvas.activeDragType();
+        var dragType = this.dragState.type();
         for (Connection c : canvas.connections()) {
             Vector2fc start = this.portAttachment(c.source(), c.sourcePort());
             Vector2fc end = this.portAttachment(c.target(), c.targetPort());
@@ -341,7 +413,7 @@ public class CanvasWidget extends AbstractWidget {
                     ? new CurveIndicator(midpoint(start, end), DELETE_BUTTON_RADIUS,
                             isInDeleteButton(c, mouseCanvas))
                     : null;
-            int wireColor = c.color();
+            int wireColor = GraphColors.of(c.sourcePort());
             if (dragType != null && c.sourcePort().type().value() != dragType.value()) {
                 wireColor = scaleAlpha(wireColor, MISMATCHED_TYPE_ALPHA);
             }
@@ -352,7 +424,7 @@ public class CanvasWidget extends AbstractWidget {
             final var start = this.portAttachment(this.pending.source(), this.pending.sourcePort());
             final var end = new Vector2f(mouseCanvas);
 
-            final var pendingCurve = BezierCurve.from(graphics, start, end, Canvas.IN_FLIGHT_COLOR);
+            final var pendingCurve = BezierCurve.from(graphics, start, end, IN_FLIGHT_COLOR);
             curves.add(pendingCurve);
         }
 
@@ -495,7 +567,7 @@ public class CanvasWidget extends AbstractWidget {
                 && b.getY() < a.getY() + a.getHeight();
     }
     private Vector2fc portAttachment(Node node, Port port) {
-        return this.canvas.widgetFor(node).ports().portAttachment(port);
+        return this.widgetFor(node).ports().portAttachment(port);
     }
 
     private Vector2fc[] connectionEndpoints(Connection c) {

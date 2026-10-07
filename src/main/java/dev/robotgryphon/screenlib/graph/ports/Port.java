@@ -13,8 +13,4 @@ public sealed interface Port permits InputPort, OutputPort {
     Holder<GraphDataType<?>> type();
 
     PortSide side();
-
-    default int color() {
-        return this.type().value().color();
-    }
 }

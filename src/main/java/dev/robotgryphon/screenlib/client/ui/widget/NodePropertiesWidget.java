@@ -1,5 +1,6 @@
 package dev.robotgryphon.screenlib.client.ui.widget;
 
+import dev.robotgryphon.screenlib.graph.Connection;
 import com.mojang.serialization.Codec;
 import dev.robotgryphon.screenlib.client.NodeRenderer;
 import dev.robotgryphon.screenlib.client.ui.widget.property.BooleanPropertyEditor;
@@ -7,7 +8,7 @@ import dev.robotgryphon.screenlib.client.ui.widget.property.DropdownEditor;
 import dev.robotgryphon.screenlib.client.ui.widget.property.DropdownPopup;
 import dev.robotgryphon.screenlib.client.ui.widget.property.NumericPropertyEditor;
 import dev.robotgryphon.screenlib.client.ui.widget.property.PropertyEditor;
-import dev.robotgryphon.screenlib.graph.CanvasViewport;
+import dev.robotgryphon.screenlib.client.ui.widget.property.PropertyValues;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.properties.NodeProperty;
 import dev.robotgryphon.screenlib.graph.properties.PropertyManager;
@@ -81,9 +82,7 @@ public class NodePropertiesWidget implements Renderable {
     }
 
     public int top() {
-        return this.owner.getY() + NodeRenderer.TITLE_BAR_HEIGHT + this.node.portManager()
-                .layout()
-                .bandHeight();
+        return this.owner.getY() + NodeRenderer.TITLE_BAR_HEIGHT + this.owner.layout().bandHeight();
     }
 
     public int rowTop(int index) {
@@ -113,8 +112,8 @@ public class NodePropertiesWidget implements Renderable {
         return false;
     }
 
-    private static boolean isDropdownProperty(NodeProperty<?> prop) {
-        return prop.type().value().allowedValues().isPresent();
+    private boolean isDropdownProperty(NodeProperty<?> prop) {
+        return prop.type().value().allowedValues(this.node.canvas.registries()).isPresent();
     }
 
     public boolean hasFocusedPropertyPopup() {
@@ -174,7 +173,7 @@ public class NodePropertiesWidget implements Renderable {
         NodeProperty<?> prop = focused.prop();
 
         GraphDataType<?> def = prop.type().value();
-        List<?> options = List.copyOf(def.allowedValues().orElseThrow());
+        List<?> options = List.copyOf(def.allowedValues(this.node.canvas.registries()).orElseThrow());
 
         String name = prop.name();
         Object currentValue = this.propertyManager.value(name);
@@ -398,6 +397,6 @@ public class NodePropertiesWidget implements Renderable {
         if (value == null) {
             return PROPERTY_UNSET_PLACEHOLDER;
         }
-        return value.toString();
+        return PropertyValues.display(value);
     }
 }

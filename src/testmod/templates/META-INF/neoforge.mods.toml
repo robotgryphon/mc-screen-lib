@@ -1,0 +1,29 @@
+license="${mod_license}"
+
+[[mods]]
+modId="${testmod_id}"
+version="${testmod_version}"
+displayName="${testmod_name}"
+authors="${testmod_authors}"
+description='''${testmod_description}'''
+
+[[dependencies.${testmod_id}]]
+    modId="neoforge"
+    type="required"
+    versionRange="[${neo_version},)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${testmod_id}]]
+    modId="minecraft"
+    type="required"
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${testmod_id}]]
+    modId="${mod_id}"
+    type="required"
+    versionRange="[${mod_version},)"
+    ordering="AFTER"
+    side="BOTH"

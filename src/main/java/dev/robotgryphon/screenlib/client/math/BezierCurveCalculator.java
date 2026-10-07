@@ -1,4 +1,4 @@
-package dev.robotgryphon.screenlib.math;
+package dev.robotgryphon.screenlib.client.math;
 
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import org.joml.Matrix3x2fc;

@@ -27,6 +27,7 @@ public class NodeGenerator {
         var direction = ScreenLib.DIRECTION_DATA_TYPE;
 
         var itemHandler = ScreenLib.ITEM_HANDLER_DATA_TYPE;
+        var level = ScreenLib.LEVEL_DATA_TYPE;
 
         ctx.register(nodeType("integer"), new NodeBuilder()
                 .addOutput("INTEGER", intType, "value")
@@ -53,6 +54,11 @@ public class NodeGenerator {
         ctx.register(nodeType("direction"), new NodeBuilder()
                 .addOutput("direction", direction, "value")
                 .addProperty("value", direction)
+                .build());
+
+        ctx.register(nodeType("level"), new NodeBuilder()
+                .addOutput("Level", level, "value")
+                .addProperty("value", level)
                 .build());
 
         ctx.register(nodeType("resource_access_items"), new NodeBuilder()

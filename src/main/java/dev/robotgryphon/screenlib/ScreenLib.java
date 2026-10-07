@@ -2,7 +2,6 @@ package dev.robotgryphon.screenlib;
 
 import com.mojang.logging.LogUtils;
 import dev.robotgryphon.screenlib.graph.CanvasState;
-import dev.robotgryphon.screenlib.graph.GraphTheme;
 import dev.robotgryphon.screenlib.menu.TestScreenMenu;
 import dev.robotgryphon.screenlib.menu.TestScreenMenuProvider;
 import dev.robotgryphon.screenlib.network.NetworkRegistration;
@@ -15,6 +14,7 @@ import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.inventory.MenuType;
+import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.attachment.AttachmentType;
@@ -66,7 +66,12 @@ public class ScreenLib {
     public static final Holder<GraphDataType<?>> BOOLEAN_DATA_TYPE = CORE_DATA_TYPES.register("boolean", BooleanGraphDataType::new);
 
     public static final Holder<GraphDataType<?>> ITEM_HANDLER_DATA_TYPE = LIB_DATA_TYPES.register("item_handler", ()
-            -> new SimpleGraphDataType<>(BlockPos.class, BlockPos.CODEC, GraphTheme.COLOR_RESOURCE));
+            -> new SimpleGraphDataType<>(BlockPos.class, BlockPos.CODEC));
+
+    public static final Holder<GraphDataType<?>> LEVEL_DATA_TYPE = LIB_DATA_TYPES.register("level", LevelGraphDataType::new);
+
+    public static final Holder<GraphDataType<?>> BLOCKSTATE_DATA_TYPE = LIB_DATA_TYPES.register("blockstate", ()
+            -> new SimpleGraphDataType<>(BlockState.class, BlockState.CODEC));
 
     public ScreenLib(IEventBus modBus) {
         modBus.addListener(ScreenLib::datapackRegistries);

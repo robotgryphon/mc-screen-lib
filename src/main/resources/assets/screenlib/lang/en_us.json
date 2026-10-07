@@ -1,6 +1,7 @@
 {
   "node.screenlib.block_position": "Block Position",
   "node.screenlib.direction": "Direction",
+  "node.screenlib.level": "Level",
   "node.screenlib.resource_access_items": "Resource Access (Items)",
   "node.screenlib.tree_cutter_upgrade": "Tree Cutter Upgrade",
 

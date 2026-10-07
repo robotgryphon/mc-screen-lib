@@ -1,4 +1,4 @@
-package dev.robotgryphon.screenlib.geometry;
+package dev.robotgryphon.screenlib.client.geometry;
 
 import org.joml.Vector2fc;
 

@@ -37,7 +37,7 @@ public class DropdownPopup {
         Font font = Minecraft.getInstance().font;
         int widestOption = 0;
         for (Object opt : this.options) {
-            widestOption = Math.max(widestOption, font.width(opt.toString()));
+            widestOption = Math.max(widestOption, font.width(PropertyValues.display(opt)));
         }
         int minWidth = widestOption + 2 * H_PADDING;
 
@@ -79,7 +79,7 @@ public class DropdownPopup {
                 graphics.fill(this.x + 1, rowY, this.x + this.width - 1, rowY + ROW_HEIGHT, HOVER_COLOR);
             }
             int color = opt.equals(this.currentValue) ? CURRENT_TEXT_COLOR : TEXT_COLOR;
-            graphics.text(font, Component.literal(opt.toString()),
+            graphics.text(font, Component.literal(PropertyValues.display(opt)),
                     this.x + H_PADDING, rowY + textOffsetY, color, false);
         }
     }
