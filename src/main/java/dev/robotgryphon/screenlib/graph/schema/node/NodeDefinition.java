@@ -21,7 +21,8 @@ public record NodeDefinition(List<InputPortDefinition> inputs,
                              List<OutputPortDefinition> outputs,
                              List<PropertyDefinition> properties,
                              List<WidgetDefinition> widgets,
-                             List<Holder<NodeContextSupplier>> context) {
+                             List<Holder<NodeContextSupplier>> context,
+                             boolean hidden) {
     public static final ResourceKey<Registry<NodeDefinition>> REGISTRY_KEY =
             ResourceKey.createRegistryKey(ScreenLib.id("nodes"));
 
@@ -44,7 +45,10 @@ public record NodeDefinition(List<InputPortDefinition> inputs,
 
             NodeContextSupplier.HOLDER_CODEC.listOf()
                     .optionalFieldOf("context", List.of())
-                    .forGetter(def -> Collections.unmodifiableList(def.context()))
+                    .forGetter(def -> Collections.unmodifiableList(def.context())),
+
+            Codec.BOOL.optionalFieldOf("hidden", false)
+                    .forGetter(NodeDefinition::hidden)
     ).apply(i, NodeDefinition::new)).validate(NodeDefinition::validate));
 
     private static DataResult<NodeDefinition> validate(NodeDefinition definition) {

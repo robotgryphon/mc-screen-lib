@@ -1,9 +1,13 @@
 package dev.robotgryphon.screenlib.graph.schema.node;
 
+import dev.robotgryphon.screenlib.client.render.PropertyValueRenderer;
 import dev.robotgryphon.screenlib.graph.computed.ComputedProperty;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.core.Holder;
+import net.minecraft.resources.ResourceKey;
 import org.jspecify.annotations.Nullable;
+
+import java.util.Optional;
 
 public class PropertyBuilder {
     private final String name;
@@ -11,6 +15,8 @@ public class PropertyBuilder {
     private boolean optional;
     private boolean input;
     private boolean output;
+    private boolean hideLabel;
+    private @Nullable ResourceKey<PropertyValueRenderer<?>> renderer;
     private @Nullable ComputedPropertyBuilder computed;
 
     public PropertyBuilder(String name) {
@@ -37,6 +43,16 @@ public class PropertyBuilder {
         return this;
     }
 
+    public PropertyBuilder hideLabel() {
+        this.hideLabel = true;
+        return this;
+    }
+
+    public PropertyBuilder renderer(ResourceKey<PropertyValueRenderer<?>> renderer) {
+        this.renderer = renderer;
+        return this;
+    }
+
     public ComputedPropertyBuilder computed(Holder<ComputedProperty<?>> computation) {
         this.computed = new ComputedPropertyBuilder(computation);
         return this.computed;
@@ -57,11 +73,12 @@ public class PropertyBuilder {
     @SuppressWarnings({"unchecked", "rawtypes"})
     public PropertyDefinition build() {
         if (this.computed == null) {
-            return new StoredPropertyDefinition(this.name, this.type, this.optional);
+            return new StoredPropertyDefinition(this.name, this.type, this.optional, this.hideLabel,
+                    Optional.ofNullable(this.renderer));
         }
         if (this.input || this.optional) {
             throw new IllegalStateException("Computed property '" + this.name + "' cannot be an input or optional");
         }
-        return this.computed.build(this.name, this.type);
+        return this.computed.build(this.name, this.type, this.hideLabel, this.renderer);
     }
 }

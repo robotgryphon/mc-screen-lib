@@ -7,10 +7,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.transfer.item.ItemResource;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,11 +56,15 @@ public class ItemHandlerAt implements ComputedProperty<ItemHandlerAccess>, Clien
         if (handler == null) {
             return Optional.empty();
         }
-        List<ItemStack> stacks = new ArrayList<>(handler.size());
+        List<ItemHandlerContents.Entry> entries = new ArrayList<>(handler.size() + 2);
+        entries.add(new ItemHandlerContents.Entry(ItemResource.of(Items.DIAMOND), 999_900_000_000L));
+        entries.add(new ItemHandlerContents.Entry(ItemResource.of(Items.EMERALD), 99_900_000L));
         for (int slot = 0; slot < handler.size(); slot++) {
             var resource = handler.getResource(slot);
-            stacks.add(resource.isEmpty() ? ItemStack.EMPTY : resource.toStack(handler.getAmountAsInt(slot)));
+            entries.add(resource.isEmpty()
+                    ? ItemHandlerContents.Entry.EMPTY
+                    : new ItemHandlerContents.Entry(resource, handler.getAmountAsLong(slot)));
         }
-        return Optional.of(new ItemHandlerContents(stacks));
+        return Optional.of(new ItemHandlerContents(entries));
     }
 }

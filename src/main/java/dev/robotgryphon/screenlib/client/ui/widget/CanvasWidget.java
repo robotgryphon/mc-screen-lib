@@ -68,6 +68,8 @@ public class CanvasWidget extends AbstractWidget {
 
     private final Consumer<Vector2dc> onAddNodeRequested;
 
+    private final ViewportToolbar toolbar = new ViewportToolbar(this);
+
     public CanvasWidget(Canvas canvas, int x, int y, int width, int height,
                         Consumer<Vector2dc> onAddNodeRequested) {
         super(x, y, width, height, Component.empty());
@@ -75,7 +77,7 @@ public class CanvasWidget extends AbstractWidget {
         this.onAddNodeRequested = onAddNodeRequested;
     }
 
-    private List<NodeWidget> nodeWidgets() {
+    List<NodeWidget> nodeWidgets() {
         List<Node> nodes = this.canvas.nodes();
         boolean current = nodes.size() == this.widgets.size();
         for (int i = 0; current && i < nodes.size(); i++) {
@@ -139,6 +141,10 @@ public class CanvasWidget extends AbstractWidget {
         return this.viewport;
     }
 
+    void openMenu(ContextMenu menu) {
+        this.activeMenu = menu;
+    }
+
     @Override
     public boolean isValidClickButton(MouseButtonInfo info) {
         return info.button() == InputConstants.MOUSE_BUTTON_LEFT || info.button() == InputConstants.MOUSE_BUTTON_RIGHT;
@@ -162,6 +168,10 @@ public class CanvasWidget extends AbstractWidget {
             return true;
         }
 
+        if (this.toolbar.mouseClicked(event.x(), event.y(), event.button() == InputConstants.MOUSE_BUTTON_LEFT)) {
+            return true;
+        }
+
         NodeWidget popupNode = this.findPopupNode();
         if (popupNode != null) {
             if (popupNode.properties().handleFocusedPropertyPopupClick(this.viewport, event.x(), event.y())) {
@@ -182,6 +192,9 @@ public class CanvasWidget extends AbstractWidget {
         if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
             final Vector2dc canvasPos = this.viewport.screenToCanvas(event.x(), event.y());
             final NodeWidget hitNode = this.findNodesNear(canvasPos).findFirst().orElse(null);
+            if (hitNode != null && hitNode.node().isHosted()) {
+                return true;
+            }
 
             List<ContextMenu.Item> items;
             if (hitNode != null) {
@@ -241,6 +254,9 @@ public class CanvasWidget extends AbstractWidget {
     public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
         final var asCanvasEvent = convertMouseButtonEvent(event);
 
+        if (this.toolbar.mouseDragged(event.x(), event.y())) {
+            return true;
+        }
         if (this.panning) {
             this.viewport.pan((float) dx, (float) dy);
             return true;
@@ -260,6 +276,9 @@ public class CanvasWidget extends AbstractWidget {
         final var canvasSpace = this.viewport.screenToCanvas(event.x(), event.y());
         final var asCanvasEvent = convertMouseButtonEvent(event);
 
+        if (this.toolbar.mouseReleased()) {
+            return true;
+        }
         if (this.panning) {
             this.panning = false;
             return true;
@@ -299,6 +318,9 @@ public class CanvasWidget extends AbstractWidget {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (this.toolbar.contains(mouseX, mouseY)) {
+            return true;
+        }
         var canvasPos = this.viewport.screenToCanvas(mouseX, mouseY);
         var hit = this.findNodesNear(canvasPos).findFirst().orElse(null);
         if (hit != null && hit.renders().mouseScrolled(canvasPos.x(), canvasPos.y(), scrollX, scrollY)) {
@@ -395,6 +417,9 @@ public class CanvasWidget extends AbstractWidget {
 
         graphics.pose().popMatrix();
 
+        graphics.nextStratum();
+        this.toolbar.render(graphics, mouseX, mouseY);
+
         if (this.activeMenu != null) {
             graphics.nextStratum();
             this.activeMenu.render(graphics, mouseX, mouseY);
@@ -404,9 +429,14 @@ public class CanvasWidget extends AbstractWidget {
         if (popupNode != null) {
             graphics.nextStratum();
             popupNode.properties().renderFocusedPropertyPopup(graphics, this.viewport, mouseX, mouseY);
-        } else if (this.activeMenu == null && this.pending == null && !this.panning && this.canvasHasNoDraggedNode()) {
+        } else if (this.activeMenu == null && this.pending == null && !this.panning && this.canvasHasNoDraggedNode()
+                && !this.toolbar.contains(mouseX, mouseY)) {
             this.findNodesNear(canvasMouse).findFirst()
-                    .ifPresent(widget -> widget.renders().tooltip(graphics, canvasMouse.x(), canvasMouse.y(), mouseX, mouseY));
+                    .ifPresent(widget -> {
+                        if (!widget.properties().tooltip(graphics, canvasMouse.x(), canvasMouse.y(), mouseX, mouseY)) {
+                            widget.renders().tooltip(graphics, canvasMouse.x(), canvasMouse.y(), mouseX, mouseY);
+                        }
+                    });
         }
     }
 

@@ -2,10 +2,14 @@ package dev.robotgryphon.screenlib.graph.nodes;
 
 import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
 import dev.robotgryphon.screenlib.graph.Canvas;
+import dev.robotgryphon.screenlib.graph.Connection;
 import dev.robotgryphon.screenlib.graph.ports.*;
 import net.minecraft.core.Holder;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
+import org.jspecify.annotations.Nullable;
+
+import java.util.Optional;
 
 public class Node {
     private final ResourceKey<NodeDefinition> type;
@@ -14,6 +18,7 @@ public class Node {
     private final PortManager portManager;
     private final PropertyManager propertyManager;
     private final RenderManager renderManager;
+    private @Nullable String host;
 
     public Node(Canvas canvas, Holder<NodeDefinition> definitionHolder, Component title, int x, int y) {
         this.type = definitionHolder.key();
@@ -45,6 +50,27 @@ public class Node {
 
     public static Component propertyLabel(ResourceKey<NodeDefinition> type, String property) {
         return Component.translatableWithFallback(type.identifier().toLanguageKey("node", property), property);
+    }
+
+    public @Nullable String host() {
+        return this.host;
+    }
+
+    public void setHost(@Nullable String host) {
+        this.host = host;
+    }
+
+    public boolean isHosted() {
+        return this.host != null;
+    }
+
+    public Optional<Object> resolvedValue(String property) {
+        PropertyInputPort port = this.portManager.propertyPort(property);
+        Connection inbound = port == null ? null : this.portManager.inbound(port);
+        if (inbound != null) {
+            return Optional.ofNullable(this.canvas.resolveUpstreamValue(inbound));
+        }
+        return Optional.ofNullable(this.propertyManager.value(property));
     }
 
     public ResourceKey<NodeDefinition> type() {

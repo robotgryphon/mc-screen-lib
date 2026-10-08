@@ -39,7 +39,8 @@ public final class CanvasStateManager {
             nodeStates.add(new NodeState(
                     nodeDefinitions.getOrThrow(node.type()), canvas.x(node), canvas.y(node),
                     encodePropertyValues(node),
-                    Optional.ofNullable(canvas.tint(node))));
+                    Optional.ofNullable(canvas.tint(node)),
+                    Optional.ofNullable(node.host())));
         }
 
         List<Connection> connections = canvas.connections();
@@ -77,6 +78,7 @@ public final class CanvasStateManager {
         for (NodeState ns : state.nodes()) {
             Node node = new Node(canvas, ns.definition(), Node.defaultTitle(ns.definition().key()), ns.x(), ns.y());
             applyPropertyValues(node, ns.propertyValues());
+            node.setHost(ns.host().orElse(null));
             ns.tintColor().ifPresent(c -> canvas.setTint(node, c));
             canvas.addNode(node);
         }

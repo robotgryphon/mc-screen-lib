@@ -28,7 +28,10 @@ public final class ServerPayloadHandler {
         }
         var source = menu.source();
         var registries = source.level().registryAccess();
-        var available = registries.lookupOrThrow(NodeDefinition.REGISTRY_KEY).listElementIds().toList();
+        var available = registries.lookupOrThrow(NodeDefinition.REGISTRY_KEY).listElements()
+                .filter(definition -> !definition.value().hidden())
+                .map(definition -> definition.key())
+                .toList();
         player.openMenu(new AddNodeMenuProvider(source, new AddNodeData(available, payload.x(), payload.y(),
                 AllowedValuesSnapshot.capture(registries))));
     }

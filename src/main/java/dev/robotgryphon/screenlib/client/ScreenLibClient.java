@@ -2,6 +2,7 @@ package dev.robotgryphon.screenlib.client;
 
 import dev.robotgryphon.screenlib.ScreenLib;
 import dev.robotgryphon.screenlib.client.render.NodeWidgets;
+import dev.robotgryphon.screenlib.client.render.PropertyRenderers;
 import dev.robotgryphon.screenlib.client.ui.AddNodeScreen;
 import dev.robotgryphon.screenlib.client.ui.render.ExRenderPipelines;
 import dev.robotgryphon.screenlib.client.ui.render.pip.BezierCurvePiPRenderer;
@@ -24,6 +25,7 @@ public class ScreenLibClient {
         modEventBus.addListener(ScreenLibClient::registerRenderPipelines);
         modEventBus.addListener(ScreenLibClient::registerMenuScreens);
         NodeWidgets.RENDERERS.register(modEventBus);
+        PropertyRenderers.RENDERERS.register(modEventBus);
     }
 
     private static void registerPips(RegisterPictureInPictureRenderersEvent pips) {

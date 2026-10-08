@@ -4,6 +4,8 @@ import dev.robotgryphon.screenlib.graph.schema.node.ComputedPropertyDefinition;
 import dev.robotgryphon.screenlib.graph.Connection;
 import com.mojang.serialization.Codec;
 import dev.robotgryphon.screenlib.client.NodeRenderer;
+import dev.robotgryphon.screenlib.client.render.PropertyRenderers;
+import dev.robotgryphon.screenlib.client.render.PropertyValueRenderer;
 import dev.robotgryphon.screenlib.client.ui.widget.property.BooleanPropertyEditor;
 import dev.robotgryphon.screenlib.client.ui.widget.property.DropdownEditor;
 import dev.robotgryphon.screenlib.client.ui.widget.property.DropdownPopup;
@@ -11,6 +13,7 @@ import dev.robotgryphon.screenlib.client.ui.widget.property.NumericPropertyEdito
 import dev.robotgryphon.screenlib.client.ui.widget.property.PropertyEditor;
 import dev.robotgryphon.screenlib.client.ui.widget.property.PropertyValues;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
+import dev.robotgryphon.screenlib.graph.schema.node.PropertyDefinition;
 import dev.robotgryphon.screenlib.graph.schema.node.StoredPropertyDefinition;
 import dev.robotgryphon.screenlib.graph.nodes.PropertyManager;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
@@ -22,13 +25,16 @@ import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.layouts.EqualSpacingLayout;
 import net.minecraft.client.gui.layouts.LayoutElement;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.ARGB;
+import net.minecraft.util.Mth;
 import org.joml.Vector2dc;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 public class NodePropertiesWidget implements Renderable {
@@ -77,6 +83,10 @@ public class NodePropertiesWidget implements Renderable {
         return propertyManager.computedProperties().stream()
                 .filter(definition -> !definition.hideLabel())
                 .toList();
+    }
+
+    public static Optional<PropertyValueRenderer<Object>> valueRenderer(PropertyDefinition definition) {
+        return definition.renderer().map(PropertyRenderers::get);
     }
 
     public static int rowCount(PropertyManager propertyManager) {
@@ -259,12 +269,13 @@ public class NodePropertiesWidget implements Renderable {
 
         int textY = rowTop + (rowHeight - font.lineHeight) / 2 + 1;
 
-        Component label = NodeRenderer.propertyLabel(this.node, prop.name());
-        graphics.text(font, label,
-                rowLeft + NodeRenderer.PROPERTY_PADDING_X,
-                textY,
-                ARGB.multiply(labelColor, ARGB.white(alpha)),
-                false);
+        if (!prop.hideLabel()) {
+            graphics.text(font, NodeRenderer.propertyLabel(this.node, prop.name()),
+                    rowLeft + NodeRenderer.PROPERTY_PADDING_X,
+                    textY,
+                    ARGB.multiply(labelColor, ARGB.white(alpha)),
+                    false);
+        }
 
         PropertyRow row = this.propertyRows.get(rowIndex);
         PropertyEditor editor = row.editor();
@@ -273,7 +284,8 @@ public class NodePropertiesWidget implements Renderable {
             row.syncEditorValueFromNode();
             editor.setAlpha(alpha);
             editor.extractRenderState(graphics, mouseX, mouseY, 0f);
-        } else {
+        } else if (!this.renderValue(graphics, prop, undriven ? null : (driven ? upstreamValue : this.propertyManager.value(prop.name())),
+                rowLeft, rowTop, rowWidth, rowHeight, mouseX, mouseY, alpha)) {
             String valueText;
             if (undriven) {
                 valueText = "";
@@ -305,10 +317,71 @@ public class NodePropertiesWidget implements Renderable {
                 rowLeft + NodeRenderer.PROPERTY_PADDING_X, textY,
                 ARGB.multiply(PROPERTY_LABEL_DRIVEN_COLOR, ARGB.white(alpha)), false);
 
-        String valueText = formatPropertyValue(this.propertyManager.computedValue(definition.name()));
+        Object value = this.propertyManager.computedValue(definition.name());
+        if (this.renderValue(graphics, definition, value, rowLeft, rowTop, rowWidth, rowHeight, -1, -1, alpha)) {
+            return;
+        }
+        String valueText = formatPropertyValue(value);
         graphics.text(font, Component.literal(valueText),
                 rowLeft + rowWidth - NodeRenderer.PROPERTY_PADDING_X - font.width(valueText), textY,
                 ARGB.multiply(PROPERTY_VALUE_DRIVEN_COLOR, ARGB.white(alpha)), false);
+    }
+
+    private boolean renderValue(GuiGraphicsExtractor graphics, PropertyDefinition definition, @Nullable Object value,
+                                int rowLeft, int rowTop, int rowWidth, int rowHeight,
+                                int mouseX, int mouseY, float alpha) {
+        var renderer = valueRenderer(definition).orElse(null);
+        if (renderer == null || !renderer.valueType().isInstance(value)) {
+            return false;
+        }
+        return renderer.render(graphics, value, valueArea(renderer, rowLeft, rowTop, rowWidth, rowHeight),
+                mouseX, mouseY, alpha);
+    }
+
+    private static ScreenRectangle valueArea(PropertyValueRenderer<?> renderer,
+                                             int rowLeft, int rowTop, int rowWidth, int rowHeight) {
+        return new ScreenRectangle(rowLeft + rowWidth - NodeRenderer.PROPERTY_PADDING_X - renderer.width(),
+                rowTop, renderer.width(), rowHeight);
+    }
+
+    private @Nullable Object displayedValue(int rowIndex) {
+        List<StoredPropertyDefinition<?>> stored = this.propertyManager.stored();
+        if (rowIndex >= stored.size()) {
+            var definition = visibleComputed(this.propertyManager).get(rowIndex - stored.size());
+            return this.propertyManager.computedValue(definition.name());
+        }
+        StoredPropertyDefinition<?> prop = stored.get(rowIndex);
+        Connection inputConn = this.findInputConnection(prop.name());
+        if (inputConn != null) {
+            return this.resolveUpstreamValue(inputConn);
+        }
+        return this.propertyRows.get(rowIndex).editor() == null ? this.propertyManager.value(prop.name()) : null;
+    }
+
+    private PropertyDefinition definition(int rowIndex) {
+        List<StoredPropertyDefinition<?>> stored = this.propertyManager.stored();
+        return rowIndex < stored.size()
+                ? stored.get(rowIndex)
+                : visibleComputed(this.propertyManager).get(rowIndex - stored.size());
+    }
+
+    public boolean tooltip(GuiGraphicsExtractor graphics, double mouseX, double mouseY, int screenX, int screenY) {
+        int x = Mth.floor(mouseX);
+        int y = Mth.floor(mouseY);
+        for (PropertyRow row : this.propertyRows) {
+            var renderer = valueRenderer(this.definition(row.rowIndex)).orElse(null);
+            if (renderer == null) {
+                continue;
+            }
+            ScreenRectangle area = valueArea(renderer, row.getX(), row.getY(), row.getWidth(), row.getHeight());
+            if (!area.containsPoint(x, y)) {
+                continue;
+            }
+            Object value = this.displayedValue(row.rowIndex);
+            return renderer.valueType().isInstance(value)
+                    && renderer.tooltip(graphics, value, area, x, y, screenX, screenY);
+        }
+        return false;
     }
 
     private final class PropertyRow implements LayoutElement, Renderable {

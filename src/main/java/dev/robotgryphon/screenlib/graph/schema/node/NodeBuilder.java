@@ -18,6 +18,7 @@ public class NodeBuilder {
     private final List<PropertyDefinition> properties = new ArrayList<>();
     private final List<WidgetDefinition> widgets = new ArrayList<>();
     private final List<Holder<NodeContextSupplier>> context = new ArrayList<>();
+    private boolean hidden;
 
     public NodeBuilder() {}
 
@@ -52,12 +53,18 @@ public class NodeBuilder {
         return this;
     }
 
+    public NodeBuilder hidden() {
+        this.hidden = true;
+        return this;
+    }
+
     public NodeDefinition build() {
         return new NodeDefinition(
                 List.copyOf(this.inputs),
                 List.copyOf(this.outputs),
                 List.copyOf(this.properties),
                 List.copyOf(this.widgets),
-                List.copyOf(this.context));
+                List.copyOf(this.context),
+                this.hidden);
     }
 }

@@ -17,6 +17,9 @@ public final class PropertyValues {
         if (value instanceof net.minecraft.core.BlockPos pos) {
             return pos.getX() + ", " + pos.getY() + ", " + pos.getZ();
         }
+        if (value instanceof dev.robotgryphon.screenlib.graph.types.ItemHandlerAccess access) {
+            return display(access.pos());
+        }
         if (value instanceof ResourceKey<?> key) {
             return key.identifier().toString();
         }

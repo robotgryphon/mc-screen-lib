@@ -2,6 +2,7 @@ package dev.robotgryphon.testmod.datagen;
 
 import dev.robotgryphon.screenlib.ScreenLib;
 import dev.robotgryphon.screenlib.client.render.NodeWidgets;
+import dev.robotgryphon.screenlib.client.render.PropertyRenderers;
 import dev.robotgryphon.screenlib.graph.computed.BlockStateAt;
 import dev.robotgryphon.screenlib.graph.schema.node.NodeBuilder;
 import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
@@ -14,6 +15,8 @@ import net.minecraft.resources.ResourceKey;
 public class TestNodeGenerator {
     public static final RegistrySetBuilder BUILDER = new RegistrySetBuilder()
             .add(NodeDefinition.REGISTRY_KEY, TestNodeGenerator::addNodeTypes);
+
+    public static final ResourceKey<NodeDefinition> TREE_CUTTER_UPGRADE = nodeType("tree_cutter_upgrade");
 
     private static ResourceKey<NodeDefinition> nodeType(String name) {
         return ResourceKey.create(NodeDefinition.REGISTRY_KEY,
@@ -33,13 +36,17 @@ public class TestNodeGenerator {
                         .output()
                         .computed(ScreenLib.BLOCK_STATE_AT)
                         .data(BlockStateAt.POSITION, "position")
-                        .data(BlockStateAt.LEVEL, "level"))
+                        .data(BlockStateAt.LEVEL, "level")
+                        .hideLabel())
                 .addWidget(NodeWidgets.BLOCK_PREVIEW.key(), "state")
                 .build());
 
-        ctx.register(nodeType("tree_cutter_upgrade"), new NodeBuilder()
-                .addProperty("tools", prop -> prop.type(itemHandler).input())
-                .addProperty("drops", prop -> prop.type(itemHandler).input())
+        ctx.register(TREE_CUTTER_UPGRADE, new NodeBuilder()
+                .hidden()
+                .addProperty("tools", prop -> prop.type(itemHandler).input()
+                        .renderer(PropertyRenderers.ITEM_HANDLER_BLOCK.key()))
+                .addProperty("drops", prop -> prop.type(itemHandler).input()
+                        .renderer(PropertyRenderers.ITEM_HANDLER_BLOCK.key()))
                 .build());
     }
 }

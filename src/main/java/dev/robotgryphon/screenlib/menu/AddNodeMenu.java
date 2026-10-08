@@ -58,8 +58,9 @@ public class AddNodeMenu extends AbstractContainerMenu {
         CanvasState state = this.source.load();
         List<NodeState> nodes = new ArrayList<>(state.nodes());
         nodes.add(new NodeState(definition, this.data.x(), this.data.y(),
-                initialProperties(definition, new NodeCreationContext(player, this.source)), Optional.empty()));
+                initialProperties(definition, new NodeCreationContext(player, this.source)), Optional.empty(), Optional.empty()));
         this.source.save(new CanvasState(nodes, state.connections(), state.viewport()));
+        HostedNodes.publish(this.source);
 
         this.returnToCanvas(player);
     }

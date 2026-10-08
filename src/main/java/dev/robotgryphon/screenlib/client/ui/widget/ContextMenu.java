@@ -40,6 +40,10 @@ public class ContextMenu {
         this.height = this.items.size() * ROW_HEIGHT + 2 * V_PADDING;
     }
 
+    public static ContextMenu above(int x, int bottom, List<Item> items) {
+        return new ContextMenu(x, bottom - items.size() * ROW_HEIGHT - 2 * V_PADDING, items);
+    }
+
     public boolean contains(double mouseX, double mouseY) {
         return mouseX >= this.x && mouseX < this.x + this.width
                 && mouseY >= this.y && mouseY < this.y + this.height;

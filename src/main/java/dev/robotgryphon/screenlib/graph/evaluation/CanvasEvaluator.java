@@ -8,7 +8,9 @@ import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.nodes.PropertyManager;
 import dev.robotgryphon.screenlib.graph.schema.AllowedValues;
 import dev.robotgryphon.screenlib.graph.schema.node.ComputedPropertyDefinition;
+import dev.robotgryphon.screenlib.graph.schema.node.StoredPropertyDefinition;
 import dev.robotgryphon.screenlib.graph.validation.GraphValidator;
+import dev.robotgryphon.screenlib.menu.HostedInputs;
 import io.netty.buffer.Unpooled;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -46,6 +48,30 @@ public final class CanvasEvaluator {
             List<NodeComputed> computed = computeAll(this.canvas, this.registries);
             List<NodeClientData> clientData = extractClientData(this.canvas, this.registries);
             return new CanvasEvaluation(GraphValidator.validate(this.canvas), computed, clientData);
+        }
+
+        public Map<String, HostedInputs> hostedInputs() {
+            computeAll(this.canvas, this.registries);
+            Map<String, HostedInputs> results = new HashMap<>();
+            for (Node node : this.canvas.nodes()) {
+                if (node.host() != null && GraphValidator.errors(node).isEmpty()) {
+                    resolveInputs(node).ifPresent(values -> results.put(node.host(), new HostedInputs(values)));
+                }
+            }
+            return results;
+        }
+
+        private static Optional<Map<String, Object>> resolveInputs(Node node) {
+            Map<String, Object> values = new HashMap<>();
+            for (StoredPropertyDefinition<?> property : node.propertyManager().stored()) {
+                Optional<Object> value = node.resolvedValue(property.name());
+                if (value.isPresent()) {
+                    values.put(property.name(), value.get());
+                } else if (!property.optional()) {
+                    return Optional.empty();
+                }
+            }
+            return Optional.of(Map.copyOf(values));
         }
     }
 

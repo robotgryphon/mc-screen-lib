@@ -61,9 +61,9 @@ public final class NodeRenderer {
 
         int propsNeed = 0;
         for (int i = 0; i < rowNames.size(); i++) {
-            int labelWidth = font.width(Component.literal(rowNames.get(i)));
-            int rowWidth = 2 * PROPERTY_PADDING_X
-                    + labelWidth + PROPERTY_LABEL_VALUE_GAP + valueWidths.get(i);
+            String rowName = rowNames.get(i);
+            int labelWidth = rowName.isEmpty() ? 0 : font.width(Component.literal(rowName)) + PROPERTY_LABEL_VALUE_GAP;
+            int rowWidth = 2 * PROPERTY_PADDING_X + labelWidth + valueWidths.get(i);
             propsNeed = Math.max(propsNeed, rowWidth);
         }
 

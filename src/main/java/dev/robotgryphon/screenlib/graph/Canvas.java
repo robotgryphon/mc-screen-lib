@@ -188,7 +188,7 @@ public class Canvas {
     }
 
     public void removeNode(Node removed) {
-        if (!this.nodes.remove(removed)) {
+        if (removed.isHosted() || !this.nodes.remove(removed)) {
             return;
         }
         var it = this.connections.iterator();

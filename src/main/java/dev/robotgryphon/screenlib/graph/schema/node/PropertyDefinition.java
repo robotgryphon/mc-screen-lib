@@ -6,14 +6,24 @@ import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.MapLike;
 import com.mojang.serialization.RecordBuilder;
+import dev.robotgryphon.screenlib.ScreenLib;
+import dev.robotgryphon.screenlib.client.render.PropertyValueRenderer;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.core.Holder;
+import net.minecraft.core.Registry;
+import net.minecraft.resources.ResourceKey;
 
 import java.util.Locale;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 public sealed interface PropertyDefinition
         permits StoredPropertyDefinition, ConstantPropertyDefinition, ComputedPropertyDefinition {
+    ResourceKey<Registry<PropertyValueRenderer<?>>> RENDERER_REGISTRY =
+            ResourceKey.createRegistryKey(ScreenLib.id("property_renderers"));
+
+    Codec<ResourceKey<PropertyValueRenderer<?>>> RENDERER_CODEC = ResourceKey.codec(RENDERER_REGISTRY);
+
     Codec<PropertyDefinition> CODEC = Codec.lazyInitialized(() -> new MapCodec<PropertyDefinition>() {
         @Override
         public <T> Stream<T> keys(DynamicOps<T> ops) {
@@ -47,4 +57,12 @@ public sealed interface PropertyDefinition
     String name();
 
     Holder<GraphDataType<?>> anyType();
+
+    default boolean hideLabel() {
+        return false;
+    }
+
+    default Optional<ResourceKey<PropertyValueRenderer<?>>> renderer() {
+        return Optional.empty();
+    }
 }

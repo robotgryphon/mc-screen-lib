@@ -33,7 +33,11 @@ public abstract class CanvasMenu extends AbstractContainerMenu {
         super(type, containerId);
         this.source = source;
         this.player = inv.player instanceof ServerPlayer serverPlayer ? serverPlayer : null;
-        this.state = source.load();
+        CanvasState loaded = source.load();
+        this.state = HostedNodes.reconcile(loaded, source.hostedNodes(), source.level().registryAccess());
+        if (!this.state.equals(loaded)) {
+            source.save(this.state);
+        }
         this.allowedValues = AllowedValuesSnapshot.capture(source.level().registryAccess());
     }
 
@@ -64,14 +68,17 @@ public abstract class CanvasMenu extends AbstractContainerMenu {
     }
 
     public void updateState(CanvasState newState, int sequence) {
-        this.state = newState;
         this.sequence = sequence;
-        if (this.source != null) {
-            this.source.save(newState);
-            var level = this.source.level();
-            this.session = CanvasEvaluator.open(newState, level.registryAccess(), level.getServer());
-            this.push(true);
+        if (this.source == null) {
+            this.state = newState;
+            return;
         }
+        var level = this.source.level();
+        this.state = HostedNodes.reconcile(newState, this.source.hostedNodes(), level.registryAccess());
+        this.source.save(this.state);
+        HostedNodes.publish(this.source);
+        this.session = CanvasEvaluator.open(this.state, level.registryAccess(), level.getServer());
+        this.push(true);
     }
 
     @Override

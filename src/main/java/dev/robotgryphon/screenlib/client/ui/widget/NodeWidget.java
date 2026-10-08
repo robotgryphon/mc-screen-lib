@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import dev.robotgryphon.screenlib.graph.schema.node.StoredPropertyDefinition;
 import dev.robotgryphon.screenlib.client.ui.widget.property.DropdownEditor;
 import dev.robotgryphon.screenlib.client.NodeRenderer;
+import dev.robotgryphon.screenlib.client.render.PropertyValueRenderer;
 import dev.robotgryphon.screenlib.client.PortLayout;
 import dev.robotgryphon.screenlib.client.ui.render.uniforms.NodeBackgroundUniform;
 import dev.robotgryphon.screenlib.graph.Canvas;
@@ -80,17 +81,18 @@ public class NodeWidget extends AbstractWidget {
             if (allowed.isPresent()) {
                 width = Math.max(width, DropdownEditor.widthFor(font, allowed.get()));
             }
-            widths.add(width);
+            widths.add(NodePropertiesWidget.valueRenderer(prop).map(PropertyValueRenderer::width).orElse(width));
         }
-        for (int i = 0; i < NodePropertiesWidget.visibleComputed(node.propertyManager()).size(); i++) {
-            widths.add(NodeRenderer.COMPUTED_VALUE_WIDTH);
+        for (var definition : NodePropertiesWidget.visibleComputed(node.propertyManager())) {
+            widths.add(NodePropertiesWidget.valueRenderer(definition).map(PropertyValueRenderer::width)
+                    .orElse(NodeRenderer.COMPUTED_VALUE_WIDTH));
         }
         return List.copyOf(widths);
     }
 
     private static int width(Node node, PortLayout layout, List<Integer> valueWidths) {
         List<String> rowNames = new ArrayList<>();
-        node.propertyManager().stored().forEach(prop -> rowNames.add(NodeRenderer.propertyLabel(node, prop.name()).getString()));
+        node.propertyManager().stored().forEach(prop -> rowNames.add(prop.hideLabel() ? "" : NodeRenderer.propertyLabel(node, prop.name()).getString()));
         NodePropertiesWidget.visibleComputed(node.propertyManager()).forEach(def -> rowNames.add(NodeRenderer.propertyLabel(node, def.name()).getString()));
         int base = NodeRenderer.computeWidth(Minecraft.getInstance().font, node.title,
                 layout, rowNames, valueWidths);
