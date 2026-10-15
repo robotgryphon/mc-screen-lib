@@ -1,7 +1,6 @@
 package dev.robotgryphon.screenlib.client.render;
 
 import dev.robotgryphon.screenlib.ScreenLib;
-import dev.robotgryphon.screenlib.graph.schema.node.WidgetDefinition;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
 import net.neoforged.neoforge.registries.DeferredHolder;
@@ -11,8 +10,11 @@ import org.jspecify.annotations.Nullable;
 public final class NodeWidgets {
     private NodeWidgets() {}
 
+    public static final ResourceKey<Registry<NodeStateRenderer<?>>> REGISTRY_KEY =
+            ResourceKey.createRegistryKey(ScreenLib.id("node_renderers"));
+
     public static final DeferredRegister<NodeStateRenderer<?>> RENDERERS =
-            DeferredRegister.create(WidgetDefinition.RENDERER_REGISTRY, ScreenLib.MOD_ID);
+            DeferredRegister.create(REGISTRY_KEY, ScreenLib.MOD_ID);
 
     public static final Registry<NodeStateRenderer<?>> REGISTRY = RENDERERS.makeRegistry(builder -> {});
 

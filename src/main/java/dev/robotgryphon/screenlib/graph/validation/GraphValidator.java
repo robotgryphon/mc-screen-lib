@@ -1,13 +1,12 @@
 package dev.robotgryphon.screenlib.graph.validation;
 
-import dev.robotgryphon.screenlib.graph.ports.PropertyInputPort;
-import dev.robotgryphon.screenlib.graph.schema.node.StoredPropertyDefinition;
+import dev.robotgryphon.screenlib.graph.sync.NodeValidity;
+
+import dev.robotgryphon.screenlib.graph.nodes.properties.schema.StoredPropertyDefinition;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
-import dev.robotgryphon.screenlib.graph.Connection;
-import dev.robotgryphon.screenlib.graph.Canvas;
+import dev.robotgryphon.screenlib.graph.canvas.CanvasGraph;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
-import dev.robotgryphon.screenlib.graph.ports.Port;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
@@ -18,7 +17,7 @@ import java.util.List;
 public final class GraphValidator {
     private GraphValidator() {}
 
-    public static List<NodeValidity> validate(Canvas canvas) {
+    public static List<NodeValidity> validate(CanvasGraph canvas) {
         List<NodeValidity> results = new ArrayList<>();
         List<Node> nodes = canvas.nodes();
         for (int i = 0; i < nodes.size(); i++) {
@@ -31,10 +30,10 @@ public final class GraphValidator {
     }
 
     public static List<String> errors(Node node) {
-        Canvas canvas = node.canvas;
+        CanvasGraph canvas = node.canvas;
         List<String> errors = new ArrayList<>();
         collectNodeErrors(node, errors);
-        collectRequiredPropertyErrors(node, canvas.connections(), errors);
+        collectRequiredPropertyErrors(node, errors);
         collectIncomingWireValueErrors(node, canvas, errors);
         return errors;
     }
@@ -75,7 +74,7 @@ public final class GraphValidator {
     }
 
     private static void collectIncomingWireValueErrors(Node node,
-                                                       Canvas canvas,
+                                                       CanvasGraph canvas,
                                                        List<String> errors) {
         String nodeTag = nodeTag(node);
         for (StoredPropertyDefinition<?> prop : node.propertyManager().stored()) {
@@ -83,19 +82,9 @@ public final class GraphValidator {
             var allowed = canvas.allowedValues(prop.anyType());
             if (allowed.isEmpty()) continue;
 
-            Connection inbound = null;
-            for (Connection connection : canvas.connections()) {
-                Port target = connection.targetPort();
-                if (target.node() != node) continue;
-                if (!(target instanceof PropertyInputPort propertyPort)) continue;
-                if (prop.name().equals(propertyPort.propertyName())) {
-                    inbound = connection;
-                    break;
-                }
-            }
-            if (inbound == null) continue;
+            if (!node.propertyManager().isDriven(prop.name())) continue;
 
-            Object delivered = canvas.resolveUpstreamValue(inbound);
+            Object delivered = node.propertyManager().resolve(prop.name()).orElse(null);
             if (delivered == null) continue;
 
             if (!allowed.get().contains(delivered)) {
@@ -107,25 +96,13 @@ public final class GraphValidator {
         }
     }
 
-    private static void collectRequiredPropertyErrors(Node node,
-                                                      List<Connection> connections,
-                                                      List<String> errors) {
+    private static void collectRequiredPropertyErrors(Node node, List<String> errors) {
         String nodeTag = nodeTag(node);
         for (StoredPropertyDefinition<?> prop : node.propertyManager().stored()) {
             if (prop.optional()) continue;
             if (node.propertyManager().value(prop.name()) != null) continue;
 
-            boolean wired = false;
-            for (Connection connection : connections) {
-                Port target = connection.targetPort();
-                if (target.node() != node) continue;
-                if (!(target instanceof PropertyInputPort propertyPort)) continue;
-                if (prop.name().equals(propertyPort.propertyName())) {
-                    wired = true;
-                    break;
-                }
-            }
-            if (!wired) {
+            if (!node.propertyManager().isDriven(prop.name())) {
                 errors.add(nodeTag + " required property '"
                         + prop.name() + "' has no value and no inbound wire");
             }

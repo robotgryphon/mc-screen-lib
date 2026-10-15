@@ -1,16 +1,21 @@
 package dev.robotgryphon.screenlib.graph.evaluation;
 
+import dev.robotgryphon.screenlib.graph.sync.CanvasEvaluation;
+import dev.robotgryphon.screenlib.graph.sync.ClientDataSubscription;
+import dev.robotgryphon.screenlib.graph.sync.NodeClientData;
+import dev.robotgryphon.screenlib.graph.sync.NodeComputed;
+
 import com.mojang.serialization.Codec;
-import dev.robotgryphon.screenlib.graph.Canvas;
-import dev.robotgryphon.screenlib.graph.CanvasState;
-import dev.robotgryphon.screenlib.graph.CanvasStateManager;
+import dev.robotgryphon.screenlib.graph.nodes.NodeReference;
+import dev.robotgryphon.screenlib.graph.canvas.CanvasGraph;
+import dev.robotgryphon.screenlib.graph.state.CanvasState;
+import dev.robotgryphon.screenlib.graph.sync.CanvasStateManager;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
-import dev.robotgryphon.screenlib.graph.nodes.PropertyManager;
-import dev.robotgryphon.screenlib.graph.schema.AllowedValues;
-import dev.robotgryphon.screenlib.graph.schema.node.ComputedPropertyDefinition;
-import dev.robotgryphon.screenlib.graph.schema.node.StoredPropertyDefinition;
+import dev.robotgryphon.screenlib.graph.nodes.properties.PropertyManager;
+import dev.robotgryphon.screenlib.graph.nodes.properties.AllowedValues;
+import dev.robotgryphon.screenlib.graph.nodes.properties.schema.ComputedPropertyDefinition;
+import dev.robotgryphon.screenlib.graph.nodes.properties.schema.StoredPropertyDefinition;
 import dev.robotgryphon.screenlib.graph.validation.GraphValidator;
-import dev.robotgryphon.screenlib.menu.HostedInputs;
 import io.netty.buffer.Unpooled;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -24,58 +29,61 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 public final class CanvasEvaluator {
     private CanvasEvaluator() {}
 
     public static Session open(CanvasState state, RegistryAccess registries, MinecraftServer server) {
-        Canvas canvas = new Canvas(AllowedValues.live(registries));
-        canvas.attachServer(server);
+        CanvasGraph canvas = new CanvasGraph(AllowedValues.live(registries));
         CanvasStateManager.loadState(canvas, state);
-        return new Session(canvas, registries);
+        return new Session(canvas, registries, server);
     }
 
     public static final class Session {
-        private final Canvas canvas;
+        private final CanvasGraph canvas;
         private final RegistryAccess registries;
+        private final MinecraftServer server;
 
-        private Session(Canvas canvas, RegistryAccess registries) {
+        private Session(CanvasGraph canvas, RegistryAccess registries, MinecraftServer server) {
             this.canvas = canvas;
             this.registries = registries;
+            this.server = server;
         }
 
-        public CanvasEvaluation evaluate() {
-            List<NodeComputed> computed = computeAll(this.canvas, this.registries);
-            List<NodeClientData> clientData = extractClientData(this.canvas, this.registries);
+        public CanvasEvaluation evaluate(Set<ClientDataSubscription> subscriptions) {
+            List<NodeComputed> computed = computeAll(this.canvas, this.registries, this.server);
+            List<NodeClientData> clientData = extractClientData(this.canvas, this.registries, this.server, subscriptions);
             return new CanvasEvaluation(GraphValidator.validate(this.canvas), computed, clientData);
         }
 
-        public Map<String, HostedInputs> hostedInputs() {
-            computeAll(this.canvas, this.registries);
-            Map<String, HostedInputs> results = new HashMap<>();
-            for (Node node : this.canvas.nodes()) {
-                if (node.host() != null && GraphValidator.errors(node).isEmpty()) {
-                    resolveInputs(node).ifPresent(values -> results.put(node.host(), new HostedInputs(values)));
-                }
-            }
-            return results;
+        public void compute() {
+            computeAll(this.canvas, this.registries, this.server);
         }
 
-        private static Optional<Map<String, Object>> resolveInputs(Node node) {
+        public Optional<NodeSnapshot> snapshot(NodeReference reference) {
+            return this.canvas.node(reference).map(node -> new NodeSnapshot(GraphValidator.errors(node), values(node)));
+        }
+
+        private static Map<String, Object> values(Node node) {
             Map<String, Object> values = new HashMap<>();
-            for (StoredPropertyDefinition<?> property : node.propertyManager().stored()) {
-                Optional<Object> value = node.resolvedValue(property.name());
-                if (value.isPresent()) {
-                    values.put(property.name(), value.get());
-                } else if (!property.optional()) {
-                    return Optional.empty();
+            PropertyManager properties = node.propertyManager();
+            for (StoredPropertyDefinition<?> property : properties.stored()) {
+                properties.resolve(property.name()).ifPresent(value -> values.put(property.name(), value));
+            }
+            for (ComputedPropertyDefinition property : properties.computedProperties()) {
+                Object value = properties.computedValue(property.name());
+                if (value != null) {
+                    values.put(property.name(), value);
                 }
             }
-            return Optional.of(Map.copyOf(values));
+            return values;
         }
     }
 
-    private static List<NodeClientData> extractClientData(Canvas canvas, RegistryAccess registries) {
+    private static List<NodeClientData> extractClientData(CanvasGraph canvas, RegistryAccess registries,
+                                                          MinecraftServer server,
+                                                          Set<ClientDataSubscription> subscriptions) {
         List<NodeClientData> results = new ArrayList<>();
         List<Node> nodes = canvas.nodes();
         for (int i = 0; i < nodes.size(); i++) {
@@ -84,10 +92,11 @@ public final class CanvasEvaluator {
             for (ComputedPropertyDefinition definition : properties.computedProperties()) {
                 var provider = definition.clientData();
                 Object value = properties.computedValue(definition.name());
-                if (!node.renderManager().displays(definition.name()) || provider.isEmpty() || value == null) {
+                if (provider.isEmpty() || value == null
+                        || !subscriptions.contains(new ClientDataSubscription(node.type(), definition.name()))) {
                     continue;
                 }
-                Optional<Object> data = provider.get().clientData(value, definition.context(node));
+                Optional<Object> data = provider.get().clientData(value, definition.context(node, server));
                 if (data.isEmpty()) {
                     continue;
                 }
@@ -102,7 +111,7 @@ public final class CanvasEvaluator {
     }
 
     @SuppressWarnings("unchecked")
-    private static List<NodeComputed> computeAll(Canvas canvas, RegistryAccess registries) {
+    private static List<NodeComputed> computeAll(CanvasGraph canvas, RegistryAccess registries, MinecraftServer server) {
         List<Node> nodes = canvas.nodes();
         for (int pass = 0; pass <= nodes.size(); pass++) {
             boolean changed = false;
@@ -110,7 +119,7 @@ public final class CanvasEvaluator {
                 PropertyManager properties = node.propertyManager();
                 for (ComputedPropertyDefinition definition : properties.computedProperties()) {
                     Object next = definition.computation().value()
-                            .compute(definition.context(node))
+                            .compute(definition.context(node, server))
                             .orElse(null);
                     if (!Objects.equals(properties.computedValue(definition.name()), next)) {
                         properties.setComputedValue(definition.name(), next);

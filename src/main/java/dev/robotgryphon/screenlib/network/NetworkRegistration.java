@@ -16,6 +16,12 @@ public final class NetworkRegistration {
                 ServerPayloadHandler::handleUpdate
         );
 
+        registrar.playToServer(
+                SubscribeClientDataPayload.TYPE,
+                SubscribeClientDataPayload.STREAM_CODEC,
+                ServerPayloadHandler::handleSubscribeClientData
+        );
+
         registrar.playToClient(
                 CanvasEvaluationPayload.TYPE,
                 CanvasEvaluationPayload.STREAM_CODEC,

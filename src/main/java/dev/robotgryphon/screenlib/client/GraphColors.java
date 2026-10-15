@@ -1,7 +1,7 @@
 package dev.robotgryphon.screenlib.client;
 
 import dev.robotgryphon.screenlib.ScreenLib;
-import dev.robotgryphon.screenlib.graph.ports.Port;
+import dev.robotgryphon.screenlib.graph.nodes.ports.Port;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.Identifier;

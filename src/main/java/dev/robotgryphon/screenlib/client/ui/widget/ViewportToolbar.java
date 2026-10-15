@@ -1,6 +1,9 @@
 package dev.robotgryphon.screenlib.client.ui.widget;
 
-import dev.robotgryphon.screenlib.graph.ViewportState;
+import dev.robotgryphon.screenlib.graph.canvas.client.CanvasViewport;
+
+import dev.robotgryphon.screenlib.client.ui.widget.node.NodeWidget;
+import dev.robotgryphon.screenlib.graph.canvas.client.ViewportState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;

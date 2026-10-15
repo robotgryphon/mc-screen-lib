@@ -1,7 +1,7 @@
 package dev.robotgryphon.screenlib.menu;
 
-import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
-import dev.robotgryphon.screenlib.graph.schema.AllowedValuesSnapshot;
+import dev.robotgryphon.screenlib.graph.nodes.schema.NodeDefinition;
+import dev.robotgryphon.screenlib.graph.sync.AllowedValuesSnapshot;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;

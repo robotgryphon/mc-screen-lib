@@ -54,7 +54,7 @@ public final class TestModBlocks {
     }
 
     private static void registerCapabilities(RegisterCapabilitiesEvent event) {
-        event.registerBlockEntity(ScreenLibCapabilities.CANVAS_SOURCE, TREE_HARVESTER_ENTITY.get(),
+        event.registerBlockEntity(ScreenLibCapabilities.CANVAS, TREE_HARVESTER_ENTITY.get(),
                 (harvester, context) -> harvester.getCanvas());
     }
 }

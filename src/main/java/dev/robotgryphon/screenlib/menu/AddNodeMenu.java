@@ -4,11 +4,11 @@ import dev.robotgryphon.screenlib.ScreenLib;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.Dynamic;
-import dev.robotgryphon.screenlib.graph.CanvasState;
-import dev.robotgryphon.screenlib.graph.context.NodeCreationContext;
-import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
-import dev.robotgryphon.screenlib.graph.nodes.NodeState;
-import dev.robotgryphon.screenlib.graph.schema.node.StoredPropertyDefinition;
+import dev.robotgryphon.screenlib.graph.state.CanvasState;
+import dev.robotgryphon.screenlib.graph.nodes.context.NodeCreationContext;
+import dev.robotgryphon.screenlib.graph.nodes.schema.NodeDefinition;
+import dev.robotgryphon.screenlib.graph.state.NodeState;
+import dev.robotgryphon.screenlib.graph.nodes.properties.schema.StoredPropertyDefinition;
 import net.minecraft.core.Holder;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
@@ -19,27 +19,28 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
+import org.joml.Vector2i;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.UUID;
 
 public class AddNodeMenu extends AbstractContainerMenu {
-    private final @Nullable CanvasSource source;
+    private final @Nullable CanvasMenu parent;
     private final AddNodeData data;
 
-    public AddNodeMenu(int containerId, Inventory inv, CanvasSource source, AddNodeData data) {
+    public AddNodeMenu(int containerId, Inventory inv, CanvasMenu parent, AddNodeData data) {
         super(ScreenLib.ADD_NODE_MENU.get(), containerId);
-        this.source = source;
+        this.parent = parent;
         this.data = data;
     }
 
     public AddNodeMenu(int containerId, Inventory inv, RegistryFriendlyByteBuf buffer) {
         super(ScreenLib.ADD_NODE_MENU.get(), containerId);
-        this.source = null;
+        this.parent = null;
         this.data = AddNodeData.STREAM_CODEC.decode(buffer);
     }
 
@@ -48,19 +49,19 @@ public class AddNodeMenu extends AbstractContainerMenu {
     }
 
     public void submit(ServerPlayer player, ResourceKey<NodeDefinition> type) {
-        if (this.source == null || !this.data.available().contains(type)) {
+        var source = this.parent == null ? null : this.parent.source();
+        if (source == null || !this.data.available().contains(type)) {
             return;
         }
-        var definition = this.source.level().registryAccess()
+        var definition = player.registryAccess()
                 .lookupOrThrow(NodeDefinition.REGISTRY_KEY)
                 .getOrThrow(type);
 
-        CanvasState state = this.source.load();
+        CanvasState state = source.canvas().state();
         List<NodeState> nodes = new ArrayList<>(state.nodes());
-        nodes.add(new NodeState(definition, this.data.x(), this.data.y(),
-                initialProperties(definition, new NodeCreationContext(player, this.source)), Optional.empty(), Optional.empty()));
-        this.source.save(new CanvasState(nodes, state.connections(), state.viewport()));
-        HostedNodes.publish(this.source);
+        nodes.add(new NodeState(UUID.randomUUID(), definition, new Vector2i(this.data.x(), this.data.y()),
+                initialProperties(definition, new NodeCreationContext(player, source))));
+        source.update(state.withContents(nodes, state.connections()), player.level().getServer());
 
         this.returnToCanvas(player);
     }
@@ -87,8 +88,8 @@ public class AddNodeMenu extends AbstractContainerMenu {
     }
 
     private void returnToCanvas(ServerPlayer player) {
-        if (this.source != null) {
-            player.openMenu(this.source.menu());
+        if (this.parent != null && this.parent.provider() != null) {
+            player.openMenu(this.parent.provider());
         }
     }
 
@@ -99,6 +100,6 @@ public class AddNodeMenu extends AbstractContainerMenu {
 
     @Override
     public boolean stillValid(Player player) {
-        return this.source == null || this.source.stillValid(player);
+        return this.parent == null || this.parent.stillValid(player);
     }
 }

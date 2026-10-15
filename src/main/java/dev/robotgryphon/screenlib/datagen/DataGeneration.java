@@ -13,5 +13,6 @@ public class DataGeneration {
     @SubscribeEvent
     public static void gatherData(GatherDataEvent.Client event) {
         event.createWorldRegistryObjects(NodeGenerator.BUILDER, Set.of(ScreenLib.MOD_ID));
+        event.createProvider(NodeAppearanceGenerator::new);
     }
 }

@@ -1,43 +1,37 @@
 package dev.robotgryphon.screenlib.graph.nodes;
 
-import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
-import dev.robotgryphon.screenlib.graph.Canvas;
-import dev.robotgryphon.screenlib.graph.Connection;
-import dev.robotgryphon.screenlib.graph.ports.*;
+import dev.robotgryphon.screenlib.graph.nodes.properties.PropertyManager;
+
+import dev.robotgryphon.screenlib.graph.nodes.schema.NodeDefinition;
+import dev.robotgryphon.screenlib.graph.canvas.CanvasGraph;
+import dev.robotgryphon.screenlib.graph.nodes.ports.*;
 import net.minecraft.core.Holder;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
-import org.jspecify.annotations.Nullable;
 
-import java.util.Optional;
+import java.util.UUID;
 
-public class Node {
-    private final ResourceKey<NodeDefinition> type;
-    public final Canvas canvas;
+public class Node implements NodeReference {
+    private final UUID id;
+    private final Holder<NodeDefinition> definition;
+    public final CanvasGraph canvas;
     public final Component title;
     private final PortManager portManager;
     private final PropertyManager propertyManager;
-    private final RenderManager renderManager;
-    private @Nullable String host;
 
-    public Node(Canvas canvas, Holder<NodeDefinition> definitionHolder, Component title, int x, int y) {
-        this.type = definitionHolder.key();
+    public Node(CanvasGraph canvas, UUID id, Holder<NodeDefinition> definitionHolder, Component title) {
+        this.id = id;
+        this.definition = definitionHolder;
         this.canvas = canvas;
         this.title = title;
-        canvas.place(this, x, y);
 
         NodeDefinition definition = definitionHolder.value();
         this.portManager = new PortManager(this, definition);
         this.propertyManager = new PropertyManager(this, definition);
-        this.renderManager = new RenderManager(definition.widgets());
     }
 
     public PortManager portManager() {
         return this.portManager;
-    }
-
-    public RenderManager renderManager() {
-        return this.renderManager;
     }
 
     public PropertyManager propertyManager() {
@@ -52,28 +46,17 @@ public class Node {
         return Component.translatableWithFallback(type.identifier().toLanguageKey("node", property), property);
     }
 
-    public @Nullable String host() {
-        return this.host;
+    @Override
+    public UUID id() {
+        return this.id;
     }
 
-    public void setHost(@Nullable String host) {
-        this.host = host;
-    }
-
-    public boolean isHosted() {
-        return this.host != null;
-    }
-
-    public Optional<Object> resolvedValue(String property) {
-        PropertyInputPort port = this.portManager.propertyPort(property);
-        Connection inbound = port == null ? null : this.portManager.inbound(port);
-        if (inbound != null) {
-            return Optional.ofNullable(this.canvas.resolveUpstreamValue(inbound));
-        }
-        return Optional.ofNullable(this.propertyManager.value(property));
-    }
-
+    @Override
     public ResourceKey<NodeDefinition> type() {
-        return type;
+        return this.definition.key();
+    }
+
+    public Holder<NodeDefinition> definition() {
+        return this.definition;
     }
 }

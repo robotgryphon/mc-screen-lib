@@ -1,7 +1,7 @@
 package dev.robotgryphon.screenlib.network;
 
 import dev.robotgryphon.screenlib.ScreenLib;
-import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
+import dev.robotgryphon.screenlib.graph.nodes.schema.NodeDefinition;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;

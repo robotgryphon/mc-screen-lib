@@ -1,7 +1,7 @@
 package dev.robotgryphon.screenlib.network;
 
 import dev.robotgryphon.screenlib.ScreenLib;
-import dev.robotgryphon.screenlib.graph.CanvasState;
+import dev.robotgryphon.screenlib.graph.state.CanvasState;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -13,7 +13,7 @@ public record UpdateCanvasStatePayload(CanvasState state, int sequence) implemen
 
     public static final StreamCodec<RegistryFriendlyByteBuf, UpdateCanvasStatePayload> STREAM_CODEC =
             StreamCodec.composite(
-                    ByteBufCodecs.fromCodecWithRegistries(CanvasState.CODEC),
+                    CanvasState.STREAM_CODEC,
                     UpdateCanvasStatePayload::state,
                     ByteBufCodecs.VAR_INT,
                     UpdateCanvasStatePayload::sequence,

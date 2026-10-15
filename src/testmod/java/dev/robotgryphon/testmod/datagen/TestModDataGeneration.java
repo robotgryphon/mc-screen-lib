@@ -12,5 +12,6 @@ public class TestModDataGeneration {
     @SubscribeEvent
     public static void gatherData(GatherDataEvent.Client event) {
         event.createWorldRegistryObjects(TestNodeGenerator.BUILDER, Set.of(TestMod.MOD_ID));
+        event.createProvider(TestNodeAppearanceGenerator::new);
     }
 }

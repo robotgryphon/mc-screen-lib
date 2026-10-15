@@ -1,12 +1,11 @@
 package dev.robotgryphon.testmod.datagen;
 
 import dev.robotgryphon.screenlib.ScreenLib;
-import dev.robotgryphon.screenlib.client.render.NodeWidgets;
-import dev.robotgryphon.screenlib.client.render.PropertyRenderers;
-import dev.robotgryphon.screenlib.graph.computed.BlockStateAt;
-import dev.robotgryphon.screenlib.graph.schema.node.NodeBuilder;
-import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
+import dev.robotgryphon.screenlib.graph.nodes.properties.computed.BlockStateAt;
+import dev.robotgryphon.screenlib.graph.nodes.schema.NodeDefinitionBuilder;
+import dev.robotgryphon.screenlib.graph.nodes.schema.NodeDefinition;
 import dev.robotgryphon.testmod.TestMod;
+import dev.robotgryphon.testmod.nodes.TreeCutterUpgradeNode;
 import net.minecraft.core.RegistrySetBuilder;
 import net.minecraft.data.worldgen.BootstrapContext;
 import net.minecraft.resources.Identifier;
@@ -16,7 +15,7 @@ public class TestNodeGenerator {
     public static final RegistrySetBuilder BUILDER = new RegistrySetBuilder()
             .add(NodeDefinition.REGISTRY_KEY, TestNodeGenerator::addNodeTypes);
 
-    public static final ResourceKey<NodeDefinition> TREE_CUTTER_UPGRADE = nodeType("tree_cutter_upgrade");
+    public static final ResourceKey<NodeDefinition> GET_BLOCK = nodeType("get_block");
 
     private static ResourceKey<NodeDefinition> nodeType(String name) {
         return ResourceKey.create(NodeDefinition.REGISTRY_KEY,
@@ -27,26 +26,17 @@ public class TestNodeGenerator {
         var blockPos = ScreenLib.BLOCK_POS_DATA_TYPE;
         var level = ScreenLib.LEVEL_DATA_TYPE;
         var blockState = ScreenLib.BLOCKSTATE_DATA_TYPE;
-        var itemHandler = ScreenLib.ITEM_HANDLER_DATA_TYPE;
 
-        ctx.register(nodeType("get_block"), new NodeBuilder()
+        ctx.register(GET_BLOCK, new NodeDefinitionBuilder()
                 .addProperty("position", prop -> prop.type(blockPos).input())
                 .addProperty("level", prop -> prop.type(level).input())
                 .addProperty("state", prop -> prop.type(blockState)
                         .output()
                         .computed(ScreenLib.BLOCK_STATE_AT)
                         .data(BlockStateAt.POSITION, "position")
-                        .data(BlockStateAt.LEVEL, "level")
-                        .hideLabel())
-                .addWidget(NodeWidgets.BLOCK_PREVIEW.key(), "state")
+                        .data(BlockStateAt.LEVEL, "level"))
                 .build());
 
-        ctx.register(TREE_CUTTER_UPGRADE, new NodeBuilder()
-                .hidden()
-                .addProperty("tools", prop -> prop.type(itemHandler).input()
-                        .renderer(PropertyRenderers.ITEM_HANDLER_BLOCK.key()))
-                .addProperty("drops", prop -> prop.type(itemHandler).input()
-                        .renderer(PropertyRenderers.ITEM_HANDLER_BLOCK.key()))
-                .build());
+        ctx.register(TreeCutterUpgradeNode.KEY, TreeCutterUpgradeNode.definition());
     }
 }

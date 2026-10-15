@@ -1,15 +1,12 @@
 package dev.robotgryphon.testmod.block;
 
-import dev.robotgryphon.screenlib.ScreenLib;
-import dev.robotgryphon.screenlib.graph.computed.DataKey;
+import dev.robotgryphon.screenlib.graph.canvas.CanvasDefinition;
+import dev.robotgryphon.screenlib.graph.canvas.CanvasSupplier;
+import dev.robotgryphon.screenlib.graph.nodes.RequiredNodeReference;
+import dev.robotgryphon.screenlib.graph.state.CanvasState;
 import dev.robotgryphon.screenlib.graph.types.ItemHandlerAccess;
-import dev.robotgryphon.screenlib.menu.CanvasSource;
-import dev.robotgryphon.screenlib.menu.HostedInputs;
-import dev.robotgryphon.screenlib.menu.HostedNode;
-import dev.robotgryphon.screenlib.menu.HostedNodes;
 import dev.robotgryphon.testmod.TestModBlocks;
-import dev.robotgryphon.testmod.datagen.TestNodeGenerator;
-import dev.robotgryphon.testmod.menu.BlockEntityCanvasSource;
+import dev.robotgryphon.testmod.nodes.TreeCutterUpgradeNode;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.BlockPos;
@@ -42,11 +39,6 @@ import java.util.Optional;
 
 public class TreeHarvesterBlockEntity extends BlockEntity {
 
-    public static final String TREE_CUTTER = "tree_cutter";
-
-    public static final DataKey<ItemHandlerAccess> TOOLS = DataKey.required("tools", ScreenLib.ITEM_HANDLER_DATA_TYPE);
-    public static final DataKey<ItemHandlerAccess> DROPS = DataKey.required("drops", ScreenLib.ITEM_HANDLER_DATA_TYPE);
-
     public static final int SCAN_TICKS = 100;
     public static final int MAX_SAPLINGS = 10;
     public static final int SAPLING_BUFFER = 500;
@@ -56,8 +48,14 @@ public class TreeHarvesterBlockEntity extends BlockEntity {
     private static final int SCAN_VOLUME = SCAN_SIZE * SCAN_SIZE * SCAN_SIZE;
     private static final int SCAN_PER_TICK = (SCAN_VOLUME + SCAN_TICKS - 1) / SCAN_TICKS;
 
-    private final CanvasSource canvas = new BlockEntityCanvasSource(this,
-            List.of(new HostedNode(TREE_CUTTER, TestNodeGenerator.TREE_CUTTER_UPGRADE, 0, 0, this::onTreeCutterChanged)));
+    private final CanvasDefinition canvas = new CanvasDefinition();
+
+    private final RequiredNodeReference treeCutter = this.canvas.require(TreeCutterUpgradeNode.KEY);
+
+    private final CanvasSupplier canvasSupplier = CanvasSupplier.of(this.canvas)
+            .watch(this.treeCutter, TreeCutterUpgradeNode.TOOLS, this::onToolsStorageChanged)
+            .watch(this.treeCutter, TreeCutterUpgradeNode.DROPS, this::onDropsStorageChanged)
+            .onChanged(this::setChanged);
 
     private @Nullable BlockCapabilityCache<ResourceHandler<ItemResource>, @Nullable Direction> tools;
     private @Nullable BlockCapabilityCache<ResourceHandler<ItemResource>, @Nullable Direction> drops;
@@ -106,8 +104,8 @@ public class TreeHarvesterBlockEntity extends BlockEntity {
         super(TestModBlocks.TREE_HARVESTER_ENTITY.get(), pos, state);
     }
 
-    public CanvasSource getCanvas() {
-        return canvas;
+    public CanvasSupplier getCanvas() {
+        return this.canvasSupplier;
     }
 
     public @Nullable ResourceHandler<ItemResource> getTools() {
@@ -325,6 +323,7 @@ public class TreeHarvesterBlockEntity extends BlockEntity {
         super.loadAdditional(input);
         this.axe.deserialize(input.childOrEmpty("axe"));
         this.saplings.deserialize(input.childOrEmpty("saplings"));
+        input.read("canvas", CanvasState.CODEC).ifPresent(this.canvas::setState);
     }
 
     @Override
@@ -332,6 +331,7 @@ public class TreeHarvesterBlockEntity extends BlockEntity {
         super.saveAdditional(output);
         this.axe.serialize(output.child("axe"));
         this.saplings.serialize(output.child("saplings"));
+        output.store("canvas", CanvasState.CODEC, this.canvas.state());
     }
 
     @Override
@@ -359,15 +359,18 @@ public class TreeHarvesterBlockEntity extends BlockEntity {
             var server = serverLevel.getServer();
             server.schedule(server.wrapRunnable(() -> {
                 if (!this.isRemoved()) {
-                    HostedNodes.publish(this.canvas);
+                    this.canvasSupplier.refresh(server);
                 }
             }));
         }
     }
 
-    private void onTreeCutterChanged(Optional<HostedInputs> inputs) {
-        this.tools = inputs.flatMap(values -> values.get(TOOLS)).map(this::cache).orElse(null);
-        this.drops = inputs.flatMap(values -> values.get(DROPS)).map(this::cache).orElse(null);
+    private void onToolsStorageChanged(Optional<ItemHandlerAccess> access) {
+        this.tools = access.map(this::cache).orElse(null);
+    }
+
+    private void onDropsStorageChanged(Optional<ItemHandlerAccess> access) {
+        this.drops = access.map(this::cache).orElse(null);
     }
 
     private @Nullable BlockCapabilityCache<ResourceHandler<ItemResource>, @Nullable Direction> cache(ItemHandlerAccess access) {

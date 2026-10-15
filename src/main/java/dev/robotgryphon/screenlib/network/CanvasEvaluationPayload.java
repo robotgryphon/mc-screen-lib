@@ -1,9 +1,9 @@
 package dev.robotgryphon.screenlib.network;
 
 import dev.robotgryphon.screenlib.ScreenLib;
-import dev.robotgryphon.screenlib.graph.evaluation.NodeComputed;
-import dev.robotgryphon.screenlib.graph.evaluation.NodeClientData;
-import dev.robotgryphon.screenlib.graph.validation.NodeValidity;
+import dev.robotgryphon.screenlib.graph.sync.NodeComputed;
+import dev.robotgryphon.screenlib.graph.sync.NodeClientData;
+import dev.robotgryphon.screenlib.graph.sync.NodeValidity;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;

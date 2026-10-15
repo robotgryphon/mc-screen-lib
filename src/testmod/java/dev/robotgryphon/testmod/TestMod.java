@@ -1,7 +1,6 @@
 package dev.robotgryphon.testmod;
 
 import com.mojang.logging.LogUtils;
-import dev.robotgryphon.testmod.menu.LevelCanvasSource;
 import dev.robotgryphon.testmod.menu.TestScreenMenuProvider;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -42,7 +41,7 @@ public class TestMod {
                         .requires(CommandSourceStack::isPlayer)
                         .executes(context -> {
                             var player = context.getSource().getPlayerOrException();
-                            player.openMenu(new TestScreenMenuProvider(new LevelCanvasSource(player.level())));
+                            player.openMenu(new TestScreenMenuProvider(TestModMenus.levelCanvas(player.level())));
                             return 1;
                         })));
     }

@@ -1,16 +1,16 @@
 package dev.robotgryphon.screenlib.client.ui;
 
 import dev.robotgryphon.screenlib.client.GraphColors;
-import dev.robotgryphon.screenlib.graph.Canvas;
+import dev.robotgryphon.screenlib.graph.canvas.client.ClientCanvasState;
 import dev.robotgryphon.screenlib.client.ui.widget.chips.ChipFilterInput;
 import dev.robotgryphon.screenlib.client.ui.widget.chips.ChipSuggestion;
-import dev.robotgryphon.screenlib.client.ui.widget.NodePreviewWidget;
-import dev.robotgryphon.screenlib.client.ui.widget.DragState;
-import dev.robotgryphon.screenlib.client.ui.widget.NodeWidget;
+import dev.robotgryphon.screenlib.client.ui.widget.node.NodePreviewWidget;
+import dev.robotgryphon.screenlib.client.ui.state.DragState;
+import dev.robotgryphon.screenlib.client.ui.widget.node.NodeWidget;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
-import dev.robotgryphon.screenlib.graph.ports.Port;
-import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
-import dev.robotgryphon.screenlib.graph.ports.InputPort;
+import dev.robotgryphon.screenlib.graph.nodes.ports.Port;
+import dev.robotgryphon.screenlib.graph.nodes.schema.NodeDefinition;
+import dev.robotgryphon.screenlib.graph.nodes.ports.InputPort;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -39,6 +39,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 public class AddNodeScreen extends Screen implements MenuAccess<AddNodeMenu> {
@@ -51,7 +52,7 @@ public class AddNodeScreen extends Screen implements MenuAccess<AddNodeMenu> {
     private static final int GRID_SPACING_Y = 4;
 
     private final AddNodeMenu menu;
-    private final Canvas previewCanvas;
+    private final ClientCanvasState previewCanvas;
     private final List<Holder.Reference<NodeDefinition>> options;
     private boolean answered;
 
@@ -75,7 +76,7 @@ public class AddNodeScreen extends Screen implements MenuAccess<AddNodeMenu> {
         this.options = menu.data().available().stream()
                 .flatMap(key -> definitions.get(key).stream())
                 .toList();
-        this.previewCanvas = new Canvas(menu.data().allowedValues().resolve(registries));
+        this.previewCanvas = new ClientCanvasState(menu.data().allowedValues().resolve(registries));
     }
 
     @Override
@@ -136,8 +137,8 @@ public class AddNodeScreen extends Screen implements MenuAccess<AddNodeMenu> {
         this.templates.clear();
         for (Holder.Reference<NodeDefinition> ref : this.options) {
             Component name = Component.translatable(ref.key().identifier().toLanguageKey("node"));
-            Node node = new Node(this.previewCanvas, ref, name, 0, 0);
-            this.templates.add(new PreviewTemplate(ref, node, new NodeWidget(node, new DragState()), name));
+            Node node = new Node(this.previewCanvas.graph(), UUID.randomUUID(), ref, name);
+            this.templates.add(new PreviewTemplate(ref, node, new NodeWidget(node, this.previewCanvas, new DragState()), name));
         }
     }
 

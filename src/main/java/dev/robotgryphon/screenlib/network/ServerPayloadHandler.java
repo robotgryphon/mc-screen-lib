@@ -1,7 +1,7 @@
 package dev.robotgryphon.screenlib.network;
 
-import dev.robotgryphon.screenlib.graph.schema.node.NodeDefinition;
-import dev.robotgryphon.screenlib.graph.schema.AllowedValuesSnapshot;
+import dev.robotgryphon.screenlib.graph.nodes.schema.NodeDefinition;
+import dev.robotgryphon.screenlib.graph.sync.AllowedValuesSnapshot;
 import dev.robotgryphon.screenlib.menu.AddNodeData;
 import dev.robotgryphon.screenlib.menu.AddNodeMenu;
 import dev.robotgryphon.screenlib.menu.AddNodeMenuProvider;
@@ -20,19 +20,24 @@ public final class ServerPayloadHandler {
         }
     }
 
+    public static void handleSubscribeClientData(SubscribeClientDataPayload payload, IPayloadContext context) {
+        if (context.player().containerMenu instanceof CanvasMenu menu) {
+            menu.subscribe(payload.subscriptions());
+        }
+    }
+
     public static void handleRequestAddNode(RequestAddNodePayload payload, IPayloadContext context) {
         if (!(context.player() instanceof ServerPlayer player)
                 || !(player.containerMenu instanceof CanvasMenu menu)
                 || menu.source() == null) {
             return;
         }
-        var source = menu.source();
-        var registries = source.level().registryAccess();
+        var registries = player.registryAccess();
         var available = registries.lookupOrThrow(NodeDefinition.REGISTRY_KEY).listElements()
                 .filter(definition -> !definition.value().hidden())
                 .map(definition -> definition.key())
                 .toList();
-        player.openMenu(new AddNodeMenuProvider(source, new AddNodeData(available, payload.x(), payload.y(),
+        player.openMenu(new AddNodeMenuProvider(menu, new AddNodeData(available, payload.x(), payload.y(),
                 AllowedValuesSnapshot.capture(registries))));
     }
 

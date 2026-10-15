@@ -1,6 +1,5 @@
 package dev.robotgryphon.testmod;
 
-import dev.robotgryphon.testmod.menu.LevelCanvasSource;
 import dev.robotgryphon.testmod.menu.TestScreenMenuProvider;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
@@ -20,7 +19,7 @@ public class ScreenOpenerItem extends Item {
             return InteractionResult.SUCCESS;
 
         if (player instanceof ServerPlayer serverPlayer) {
-            serverPlayer.openMenu(new TestScreenMenuProvider(new LevelCanvasSource(level)));
+            serverPlayer.openMenu(new TestScreenMenuProvider(TestModMenus.levelCanvas(level)));
         }
         return InteractionResult.SUCCESS_SERVER;
     }

@@ -1,10 +1,16 @@
 package dev.robotgryphon.screenlib.client.ui.widget;
 
-import net.minecraft.client.Minecraft;
+import dev.robotgryphon.screenlib.graph.canvas.client.CanvasViewport;
+import dev.robotgryphon.screenlib.client.ui.state.DragState;
+import dev.robotgryphon.screenlib.client.ui.state.PendingConnection;
+
 import dev.robotgryphon.screenlib.client.GraphColors;
 import java.util.stream.Stream;
 import java.util.IdentityHashMap;
 import java.util.Map;
+
+import dev.robotgryphon.screenlib.client.ui.widget.node.NodePortsRenderer;
+import dev.robotgryphon.screenlib.client.ui.widget.node.NodeWidget;
 import dev.robotgryphon.screenlib.graph.Connection;
 import dev.robotgryphon.screenlib.client.NodeRenderer;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -14,10 +20,10 @@ import dev.robotgryphon.screenlib.client.ui.render.uniforms.NodeBackgroundUnifor
 import dev.robotgryphon.screenlib.client.ui.widget.property.NumericPropertyEditor;
 import dev.robotgryphon.screenlib.client.geometry.BezierCurve;
 import dev.robotgryphon.screenlib.client.geometry.CurveIndicator;
-import dev.robotgryphon.screenlib.graph.Canvas;
-import dev.robotgryphon.screenlib.graph.ports.Port;
+import dev.robotgryphon.screenlib.graph.canvas.client.ClientCanvasState;
+import dev.robotgryphon.screenlib.graph.nodes.ports.Port;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
-import dev.robotgryphon.screenlib.graph.ports.PortSide;
+import dev.robotgryphon.screenlib.graph.nodes.ports.PortSide;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
@@ -46,7 +52,7 @@ public class CanvasWidget extends AbstractWidget {
 
     private static final int IN_FLIGHT_COLOR = 0xFFFFD24A;
 
-    public final Canvas canvas;
+    public final ClientCanvasState canvas;
 
     private final DragState dragState = new DragState();
 
@@ -70,7 +76,7 @@ public class CanvasWidget extends AbstractWidget {
 
     private final ViewportToolbar toolbar = new ViewportToolbar(this);
 
-    public CanvasWidget(Canvas canvas, int x, int y, int width, int height,
+    public CanvasWidget(ClientCanvasState canvas, int x, int y, int width, int height,
                         Consumer<Vector2dc> onAddNodeRequested) {
         super(x, y, width, height, Component.empty());
         this.canvas = canvas;
@@ -78,7 +84,7 @@ public class CanvasWidget extends AbstractWidget {
     }
 
     List<NodeWidget> nodeWidgets() {
-        List<Node> nodes = this.canvas.nodes();
+        List<Node> nodes = this.canvas.graph().nodes();
         boolean current = nodes.size() == this.widgets.size();
         for (int i = 0; current && i < nodes.size(); i++) {
             current = this.widgets.get(i).node() == nodes.get(i);
@@ -92,7 +98,7 @@ public class CanvasWidget extends AbstractWidget {
         for (Node node : nodes) {
             NodeWidget widget = this.widgetsByNode.get(node);
             if (widget == null) {
-                widget = new NodeWidget(node, this.dragState);
+                widget = new NodeWidget(node, this.canvas, this.dragState);
             }
             kept.put(node, widget);
             rebuilt.add(widget);
@@ -192,7 +198,7 @@ public class CanvasWidget extends AbstractWidget {
         if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
             final Vector2dc canvasPos = this.viewport.screenToCanvas(event.x(), event.y());
             final NodeWidget hitNode = this.findNodesNear(canvasPos).findFirst().orElse(null);
-            if (hitNode != null && hitNode.node().isHosted()) {
+            if (hitNode != null && this.canvas.isRequired(hitNode.node())) {
                 return true;
             }
 
@@ -222,7 +228,7 @@ public class CanvasWidget extends AbstractWidget {
         if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
             Connection hovered = findConnectionUnderCursor(clicked);
             if (hovered != null && isInDeleteButton(hovered, clicked)) {
-                canvas.removeConnection(hovered);
+                canvas.graph().connections().remove(hovered);
                 return true;
             }
         }
@@ -294,7 +300,7 @@ public class CanvasWidget extends AbstractWidget {
                         .filter(p2 -> !p2.node().equals(p.source()))
                         .findFirst();
 
-                port.ifPresent(n -> canvas.connect(p.sourcePort(), n));
+                port.ifPresent(n -> canvas.graph().connections().connect(p.sourcePort(), n));
             }
             return true;
         }
@@ -312,7 +318,7 @@ public class CanvasWidget extends AbstractWidget {
     public void mouseMoved(double mouseX, double mouseY) {
         var canvasPos = this.viewport.screenToCanvas(mouseX, mouseY);
         for (NodeWidget widget : this.nodeWidgets()) {
-            widget.renders().mouseMoved(canvasPos.x(), canvasPos.y());
+            widget.mouseMoved(canvasPos.x(), canvasPos.y());
         }
     }
 
@@ -323,7 +329,7 @@ public class CanvasWidget extends AbstractWidget {
         }
         var canvasPos = this.viewport.screenToCanvas(mouseX, mouseY);
         var hit = this.findNodesNear(canvasPos).findFirst().orElse(null);
-        if (hit != null && hit.renders().mouseScrolled(canvasPos.x(), canvasPos.y(), scrollX, scrollY)) {
+        if (hit != null && hit.mouseScrolled(canvasPos.x(), canvasPos.y(), scrollX, scrollY)) {
             return true;
         }
         if (scrollY == 0) {
@@ -434,7 +440,7 @@ public class CanvasWidget extends AbstractWidget {
             this.findNodesNear(canvasMouse).findFirst()
                     .ifPresent(widget -> {
                         if (!widget.properties().tooltip(graphics, canvasMouse.x(), canvasMouse.y(), mouseX, mouseY)) {
-                            widget.renders().tooltip(graphics, canvasMouse.x(), canvasMouse.y(), mouseX, mouseY);
+                            widget.tooltip(graphics, canvasMouse.x(), canvasMouse.y(), mouseX, mouseY);
                         }
                     });
         }
@@ -462,7 +468,7 @@ public class CanvasWidget extends AbstractWidget {
                                     @Nullable Connection hovered) {
         List<BezierCurve> curves = new ArrayList<>();
         var dragType = this.dragState.type();
-        for (Connection c : canvas.connections()) {
+        for (Connection c : canvas.graph().connections().all()) {
             Vector2fc start = this.portAttachment(c.source(), c.sourcePort());
             Vector2fc end = this.portAttachment(c.target(), c.targetPort());
             CurveIndicator indicator = (c == hovered)
@@ -553,7 +559,7 @@ public class CanvasWidget extends AbstractWidget {
 
         float guiScale = (float) net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScale();
         float radiusScaled = NodeRenderer.PORT_RADIUS * this.viewport.zoom() * guiScale;
-        float hoverRadiusScaled = radiusScaled * RenderedPort.HOVER_RADIUS_FACTOR;
+        float hoverRadiusScaled = radiusScaled * NodePortsRenderer.HOVER_RADIUS_FACTOR;
         float featherScaled = 1f;
         float borderThicknessScaled = Math.max(1f, radiusScaled * 0.2f);
 
@@ -643,7 +649,7 @@ public class CanvasWidget extends AbstractWidget {
         final double hitR2 = CONNECTION_HIT_RADIUS * CONNECTION_HIT_RADIUS;
         Connection best = null;
         double bestD2 = hitR2;
-        java.util.List<Connection> all = canvas.connections();
+        java.util.List<Connection> all = canvas.graph().connections().all();
         for (int idx = all.size() - 1; idx >= 0; idx--) {
             Connection c = all.get(idx);
             Vector2fc[] e = connectionEndpoints(c);

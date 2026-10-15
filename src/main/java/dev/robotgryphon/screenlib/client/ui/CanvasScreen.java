@@ -2,27 +2,30 @@ package dev.robotgryphon.screenlib.client.ui;
 
 import net.minecraft.nbt.Tag;
 import net.minecraft.nbt.NbtOps;
-import dev.robotgryphon.screenlib.graph.schema.node.ComputedPropertyDefinition;
-import dev.robotgryphon.screenlib.graph.nodes.PropertyManager;
-import dev.robotgryphon.screenlib.graph.evaluation.NodeComputed;
-import dev.robotgryphon.screenlib.graph.evaluation.NodeClientData;
+import dev.robotgryphon.screenlib.graph.nodes.properties.schema.ComputedPropertyDefinition;
+import dev.robotgryphon.screenlib.graph.nodes.properties.PropertyManager;
+import dev.robotgryphon.screenlib.graph.sync.NodeComputed;
+import dev.robotgryphon.screenlib.graph.sync.NodeClientData;
 import io.netty.buffer.Unpooled;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import com.mojang.serialization.Codec;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.List;
-import java.util.IdentityHashMap;
+import java.util.HashMap;
 import dev.robotgryphon.screenlib.network.CanvasEvaluationPayload;
-import dev.robotgryphon.screenlib.graph.validation.NodeValidity;
+import dev.robotgryphon.screenlib.graph.sync.NodeValidity;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.client.ui.widget.CanvasWidget;
-import dev.robotgryphon.screenlib.graph.Canvas;
-import dev.robotgryphon.screenlib.graph.CanvasStateManager;
-import dev.robotgryphon.screenlib.graph.ViewportState;
+import dev.robotgryphon.screenlib.graph.canvas.client.ClientCanvasState;
+import dev.robotgryphon.screenlib.graph.canvas.client.CanvasViewports;
+import dev.robotgryphon.screenlib.graph.canvas.client.ViewportState;
 import dev.robotgryphon.screenlib.menu.CanvasMenu;
 import dev.robotgryphon.screenlib.network.RequestAddNodePayload;
+import dev.robotgryphon.screenlib.network.SubscribeClientDataPayload;
 import dev.robotgryphon.screenlib.network.UpdateCanvasStatePayload;
+import dev.robotgryphon.screenlib.client.appearance.NodeAppearances;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -36,7 +39,7 @@ import org.jspecify.annotations.Nullable;
 
 public class CanvasScreen<T extends CanvasMenu> extends Screen implements MenuAccess<T> {
     private final T menu;
-    private final Canvas canvas;
+    private final ClientCanvasState canvas;
     private int sentRevision = -1;
     private Optional<ViewportState> viewport;
     private @Nullable CanvasWidget canvasWidget;
@@ -45,8 +48,9 @@ public class CanvasScreen<T extends CanvasMenu> extends Screen implements MenuAc
     public CanvasScreen(T menu, Inventory unused, Component title) {
         super(title);
         this.menu = menu;
-        this.canvas = new Canvas(menu.allowedValues().resolve(Minecraft.getInstance().level.registryAccess()));
-        this.viewport = menu.state().viewport();
+        this.canvas = new ClientCanvasState(menu.allowedValues().resolve(Minecraft.getInstance().level.registryAccess()));
+        this.viewport = CanvasViewports.get(menu.state().id());
+        ClientPacketDistributor.sendToServer(new SubscribeClientDataPayload(NodeAppearances.subscriptions()));
         this.initCanvas();
     }
 
@@ -56,7 +60,8 @@ public class CanvasScreen<T extends CanvasMenu> extends Screen implements MenuAc
     }
 
     private void initCanvas() {
-        CanvasStateManager.loadState(canvas, this.menu.state());
+        this.canvas.setRequired(this.menu.requiredNodes());
+        this.canvas.load(this.menu.state());
     }
 
     @Override
@@ -81,26 +86,34 @@ public class CanvasScreen<T extends CanvasMenu> extends Screen implements MenuAc
     @Override
     public void tick() {
         super.tick();
-        if (this.canvas.revision() != this.sentRevision) {
+        if (this.canvas.graph().revision() != this.sentRevision) {
             this.sendState();
         }
     }
 
     private void captureViewport() {
         if (this.canvasWidget != null) {
-            this.viewport = Optional.of(this.canvasWidget.viewport().state(
-                    this.canvasWidget.getWidth(), this.canvasWidget.getHeight()));
+            ViewportState captured = this.canvasWidget.viewport().state(
+                    this.canvasWidget.getWidth(), this.canvasWidget.getHeight());
+            this.viewport = Optional.of(captured);
+            CanvasViewports.remember(this.canvas.id(), captured);
         }
+    }
+
+    @Override
+    public void removed() {
+        this.captureViewport();
+        super.removed();
     }
 
     private void sendState() {
         assert minecraft.level != null;
         this.captureViewport();
-        this.sentRevision = this.canvas.revision();
+        this.sentRevision = this.canvas.graph().revision();
         this.sentSequence++;
         final var regAccess = minecraft.level.registryAccess();
         ClientPacketDistributor.sendToServer(new UpdateCanvasStatePayload(
-                CanvasStateManager.toState(canvas, this.viewport, regAccess), this.sentSequence));
+                this.canvas.toState(regAccess), this.sentSequence));
     }
 
     @SuppressWarnings("unchecked")
@@ -108,12 +121,12 @@ public class CanvasScreen<T extends CanvasMenu> extends Screen implements MenuAc
         if (payload.sequence() != this.sentSequence) {
             return;
         }
-        List<Node> nodes = this.canvas.nodes();
+        List<Node> nodes = this.canvas.graph().nodes();
 
-        Map<Node, List<String>> results = new IdentityHashMap<>();
+        Map<UUID, List<String>> results = new HashMap<>();
         for (NodeValidity validity : payload.validity()) {
             if (validity.nodeIndex() >= 0 && validity.nodeIndex() < nodes.size()) {
-                results.put(nodes.get(validity.nodeIndex()), validity.errors());
+                results.put(nodes.get(validity.nodeIndex()).id(), validity.errors());
             }
         }
         this.canvas.setValidity(results);
@@ -122,25 +135,25 @@ public class CanvasScreen<T extends CanvasMenu> extends Screen implements MenuAc
         for (Node node : nodes) {
             node.propertyManager().clearComputed();
         }
-        for (Node node : nodes) {
-            node.renderManager().clear();
-        }
-        for (NodeClientData clientData : payload.clientData()) {
-            if (clientData.nodeIndex() < 0 || clientData.nodeIndex() >= nodes.size()) {
+        Map<UUID, Map<String, Object>> clientData = new HashMap<>();
+        for (NodeClientData data : payload.clientData()) {
+            if (data.nodeIndex() < 0 || data.nodeIndex() >= nodes.size()) {
                 continue;
             }
-            Node node = nodes.get(clientData.nodeIndex());
+            Node node = nodes.get(data.nodeIndex());
             for (ComputedPropertyDefinition definition : node.propertyManager().computedProperties()) {
-                if (!definition.name().equals(clientData.property())) {
+                if (!definition.name().equals(data.property())) {
                     continue;
                 }
                 definition.clientData().ifPresent(provider -> {
-                    var buffer = new RegistryFriendlyByteBuf(Unpooled.wrappedBuffer(clientData.data()),
+                    var buffer = new RegistryFriendlyByteBuf(Unpooled.wrappedBuffer(data.data()),
                             Minecraft.getInstance().level.registryAccess());
-                    node.renderManager().setState(definition.name(), provider.clientCodec().decode(buffer));
+                    clientData.computeIfAbsent(node.id(), ignored -> new HashMap<>())
+                            .put(definition.name(), provider.clientCodec().decode(buffer));
                 });
             }
         }
+        this.canvas.setClientData(clientData);
         for (NodeComputed computed : payload.computed()) {
             if (computed.nodeIndex() < 0 || computed.nodeIndex() >= nodes.size()) {
                 continue;
