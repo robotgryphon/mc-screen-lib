@@ -1,5 +1,8 @@
 package dev.robotgryphon.screenlib.client;
 
+import dev.robotgryphon.screenlib.client.render.block.BlockPreviewPiPRenderer;
+import dev.robotgryphon.screenlib.client.render.block.BlockPreviewRenderState;
+
 import dev.robotgryphon.screenlib.ScreenLib;
 import dev.robotgryphon.screenlib.client.appearance.NodeAppearances;
 import dev.robotgryphon.screenlib.client.render.NodeWidgets;
@@ -38,6 +41,7 @@ public class ScreenLibClient {
     private static void registerPips(RegisterPictureInPictureRenderersEvent pips) {
         pips.register(BezierCurveRenderState.class, BezierCurvePiPRenderer::new);
         pips.register(NodeBackgroundRenderState.class, NodeBackgroundPiPRenderer::new);
+        pips.register(BlockPreviewRenderState.class, BlockPreviewPiPRenderer::new);
     }
 
     private static void registerRenderPipelines(RegisterRenderPipelinesEvent pipelines) {

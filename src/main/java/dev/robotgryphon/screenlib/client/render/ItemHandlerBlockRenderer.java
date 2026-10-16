@@ -1,12 +1,13 @@
 package dev.robotgryphon.screenlib.client.render;
 
+import dev.robotgryphon.screenlib.client.render.block.BlockPreviews;
+
 import dev.robotgryphon.screenlib.graph.types.ItemHandlerAccess;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jspecify.annotations.Nullable;
 
@@ -14,7 +15,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ItemHandlerBlockRenderer implements PropertyValueRenderer<ItemHandlerAccess> {
-    private static final int ITEM_SIZE = 16;
     private static final int ICON_SIZE = 12;
     private static final int HOVER_FILL = 0x30FFFFFF;
 
@@ -32,20 +32,15 @@ public class ItemHandlerBlockRenderer implements PropertyValueRenderer<ItemHandl
     public boolean render(GuiGraphicsExtractor graphics, ItemHandlerAccess value, ScreenRectangle area,
                           int mouseX, int mouseY, float alpha) {
         BlockState state = blockAt(value);
-        ItemStack stack = state == null ? ItemStack.EMPTY : new ItemStack(state.getBlock());
-        if (stack.isEmpty()) {
+        if (state == null || state.isAir()) {
             return false;
         }
         if (area.containsPoint(mouseX, mouseY)) {
             graphics.fill(area.left(), area.top(), area.right(), area.bottom(), HOVER_FILL);
         }
-        float scale = ICON_SIZE / (float) ITEM_SIZE;
-        graphics.pose().pushMatrix();
-        graphics.pose().translate(area.left() + (area.width() - ICON_SIZE) / 2f,
-                area.top() + (area.height() - ICON_SIZE) / 2f);
-        graphics.pose().scale(scale, scale);
-        graphics.item(stack, 0, 0);
-        graphics.pose().popMatrix();
+        ScreenRectangle icon = new ScreenRectangle(area.left() + (area.width() - ICON_SIZE) / 2,
+                area.top() + (area.height() - ICON_SIZE) / 2, ICON_SIZE, ICON_SIZE);
+        BlockPreviews.submit(graphics, icon, value.level(), value.pos(), state);
         return true;
     }
 

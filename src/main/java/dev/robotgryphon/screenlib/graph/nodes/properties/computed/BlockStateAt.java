@@ -8,19 +8,15 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
-import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.List;
 import java.util.Optional;
 
-public class BlockStateAt implements ComputedProperty<BlockState>, ClientDataProvider<BlockState, BlockState> {
+public class BlockStateAt implements ComputedProperty<BlockState>, ClientDataProvider<BlockState, PlacedBlock> {
     public static final DataKey<BlockPos> POSITION = DataKey.required("position", ScreenLib.BLOCK_POS_DATA_TYPE);
     public static final DataKey<ResourceKey<Level>> LEVEL = DataKey.required("level", ScreenLib.LEVEL_DATA_TYPE);
-
-    private static final StreamCodec<RegistryFriendlyByteBuf, BlockState> CLIENT_CODEC =
-            ByteBufCodecs.fromCodecWithRegistries(BlockState.CODEC);
 
     @Override
     public DeferredHolder<GraphDataType<?>, ? extends GraphDataType<BlockState>> type() {
@@ -51,12 +47,12 @@ public class BlockStateAt implements ComputedProperty<BlockState>, ClientDataPro
     }
 
     @Override
-    public StreamCodec<RegistryFriendlyByteBuf, BlockState> clientCodec() {
-        return CLIENT_CODEC;
+    public StreamCodec<RegistryFriendlyByteBuf, PlacedBlock> clientCodec() {
+        return PlacedBlock.STREAM_CODEC.cast();
     }
 
     @Override
-    public Optional<BlockState> clientData(BlockState value, ComputeContext context) {
-        return Optional.of(value);
+    public Optional<PlacedBlock> clientData(BlockState value, ComputeContext context) {
+        return context.get(LEVEL).flatMap(level -> context.get(POSITION).map(pos -> new PlacedBlock(level, pos, value)));
     }
 }
