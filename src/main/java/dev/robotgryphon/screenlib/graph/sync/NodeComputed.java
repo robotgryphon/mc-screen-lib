@@ -1,19 +1,24 @@
 package dev.robotgryphon.screenlib.graph.sync;
 
-import net.minecraft.nbt.Tag;
+import dev.robotgryphon.screenlib.graph.nodes.properties.PropertyValues;
+import dev.robotgryphon.screenlib.graph.nodes.schema.NodeDefinition;
+import net.minecraft.core.Holder;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.UUID;
 
-public record NodeComputed(int nodeIndex, Map<String, Tag> values) {
-    public static final StreamCodec<RegistryFriendlyByteBuf, NodeComputed> STREAM_CODEC = StreamCodec.composite(
-            ByteBufCodecs.VAR_INT,
-            NodeComputed::nodeIndex,
-            ByteBufCodecs.map(HashMap::new, ByteBufCodecs.STRING_UTF8, ByteBufCodecs.TAG),
-            NodeComputed::values,
-            NodeComputed::new
-    );
+public record NodeComputed(UUID node, Holder<NodeDefinition> definition, PropertyValues values) {
+    public static final StreamCodec<RegistryFriendlyByteBuf, NodeComputed> STREAM_CODEC =
+            ByteBufCodecs.holderRegistry(NodeDefinition.REGISTRY_KEY).dispatch(NodeComputed::definition, NodeComputed::contentStreamCodec);
+
+    private static StreamCodec<RegistryFriendlyByteBuf, NodeComputed> contentStreamCodec(Holder<NodeDefinition> definition) {
+        return StreamCodec.composite(
+                UUIDUtil.STREAM_CODEC, NodeComputed::node,
+                definition.value().computedValuesStreamCodec(), NodeComputed::values,
+                (node, values) -> new NodeComputed(node, definition, values)
+        );
+    }
 }

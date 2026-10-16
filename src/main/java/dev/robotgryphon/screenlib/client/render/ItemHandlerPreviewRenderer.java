@@ -23,6 +23,11 @@ public class ItemHandlerPreviewRenderer implements NodeStateRenderer<ItemHandler
     private static final String[] SUFFIXES = {"k", "m", "b", "t", "q"};
 
     @Override
+    public Class<ItemHandlerContents> stateType() {
+        return ItemHandlerContents.class;
+    }
+
+    @Override
     public int width() {
         return COLUMNS * SLOT_SIZE;
     }

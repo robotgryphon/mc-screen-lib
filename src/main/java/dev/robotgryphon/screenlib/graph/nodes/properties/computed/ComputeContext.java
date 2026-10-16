@@ -1,7 +1,6 @@
 package dev.robotgryphon.screenlib.graph.nodes.properties.computed;
 
 import dev.robotgryphon.screenlib.graph.nodes.properties.DataKey;
-
 import dev.robotgryphon.screenlib.graph.nodes.Node;
 import net.minecraft.server.MinecraftServer;
 
@@ -23,14 +22,12 @@ public final class ComputeContext {
         return this.server;
     }
 
-    @SuppressWarnings("unchecked")
     public <T> Optional<T> get(DataKey<T> key) {
         String property = this.data.get(key.name());
         if (property == null) {
             return Optional.empty();
         }
-        return this.node.propertyManager().resolve(property)
-                .filter(value -> key.type().get().dataType().isInstance(value))
-                .map(value -> (T) value);
+        Class<T> type = key.type().get().dataType();
+        return this.node.propertyManager().resolve(property).filter(type::isInstance).map(type::cast);
     }
 }

@@ -1,15 +1,10 @@
 package dev.robotgryphon.screenlib.graph.validation;
 
 import dev.robotgryphon.screenlib.graph.sync.NodeValidity;
-
 import dev.robotgryphon.screenlib.graph.nodes.properties.schema.StoredPropertyDefinition;
-import com.mojang.serialization.Codec;
-import com.mojang.serialization.DataResult;
 import dev.robotgryphon.screenlib.graph.canvas.CanvasGraph;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
-import net.minecraft.nbt.NbtOps;
-import net.minecraft.nbt.Tag;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,11 +14,10 @@ public final class GraphValidator {
 
     public static List<NodeValidity> validate(CanvasGraph canvas) {
         List<NodeValidity> results = new ArrayList<>();
-        List<Node> nodes = canvas.nodes();
-        for (int i = 0; i < nodes.size(); i++) {
-            List<String> errors = errors(nodes.get(i));
+        for (Node node : canvas.nodes()) {
+            List<String> errors = errors(node);
             if (!errors.isEmpty()) {
-                results.add(new NodeValidity(i, errors));
+                results.add(new NodeValidity(node.id(), errors));
             }
         }
         return results;
@@ -41,15 +35,13 @@ public final class GraphValidator {
     private static void collectNodeErrors(Node node, List<String> errors) {
         String nodeTag = nodeTag(node);
         for (StoredPropertyDefinition<?> prop : node.propertyManager().stored()) {
-            GraphDataType<?> def = prop.type().value();
+            GraphDataType<?> def = prop.type();
             Object value = node.propertyManager().value(prop.name());
             if (value == null) continue;
 
-            DataResult<Tag> encoded = encodeProperty(def, value);
-            if (encoded.error().isPresent()) {
+            if (!def.dataType().isInstance(value)) {
                 errors.add(nodeTag + " property '" + prop.name()
-                        + "' value is not assignable to its declared type ("
-                        + encoded.error().get().message() + ")");
+                        + "' value is not assignable to its declared type");
                 continue;
             }
 
@@ -63,28 +55,18 @@ public final class GraphValidator {
         }
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    private static DataResult<Tag> encodeProperty(GraphDataType<?> def, Object value) {
-        Codec codec = def.codec();
-        try {
-            return codec.encodeStart(NbtOps.INSTANCE, value);
-        } catch (ClassCastException ex) {
-            return DataResult.error(ex::getMessage);
-        }
-    }
-
     private static void collectIncomingWireValueErrors(Node node,
                                                        CanvasGraph canvas,
                                                        List<String> errors) {
         String nodeTag = nodeTag(node);
         for (StoredPropertyDefinition<?> prop : node.propertyManager().stored()) {
-            GraphDataType<?> def = prop.type().value();
+            GraphDataType<?> def = prop.type();
             var allowed = canvas.allowedValues(prop.anyType());
             if (allowed.isEmpty()) continue;
 
-            if (!node.propertyManager().isDriven(prop.name())) continue;
+            if (!node.propertyManager().isDriven(prop)) continue;
 
-            Object delivered = node.propertyManager().resolve(prop.name()).orElse(null);
+            Object delivered = node.propertyManager().resolve(prop).orElse(null);
             if (delivered == null) continue;
 
             if (!allowed.get().contains(delivered)) {
@@ -102,7 +84,7 @@ public final class GraphValidator {
             if (prop.optional()) continue;
             if (node.propertyManager().value(prop.name()) != null) continue;
 
-            if (!node.propertyManager().isDriven(prop.name())) {
+            if (!node.propertyManager().isDriven(prop)) {
                 errors.add(nodeTag + " required property '"
                         + prop.name() + "' has no value and no inbound wire");
             }

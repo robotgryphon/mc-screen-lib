@@ -1,5 +1,7 @@
 package dev.robotgryphon.screenlib.graph;
 
+import dev.robotgryphon.screenlib.graph.nodes.properties.PropertyDataSource;
+import dev.robotgryphon.screenlib.graph.nodes.properties.schema.StoredPropertyDefinition;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.nodes.ports.Port;
 import dev.robotgryphon.screenlib.graph.nodes.ports.PortSide;
@@ -12,15 +14,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Optional;
 
 public final class ConnectionManager {
     private final List<Connection> connections = new ArrayList<>();
     private final AllowedValues allowedValues;
-    private final Runnable onChanged;
 
-    public ConnectionManager(AllowedValues allowedValues, Runnable onChanged) {
+    public ConnectionManager(AllowedValues allowedValues) {
         this.allowedValues = allowedValues;
-        this.onChanged = onChanged;
     }
 
     public List<Connection> all() {
@@ -49,19 +50,16 @@ public final class ConnectionManager {
             }
         }
         this.attach(new Connection(from.node(), from, to.node(), to));
-        this.onChanged.run();
         return true;
     }
 
     public void add(Connection connection) {
         this.attach(connection);
-        this.onChanged.run();
     }
 
     public void remove(Connection connection) {
         this.captureUpstreamIntoProperty(connection);
         this.detach(connection);
-        this.onChanged.run();
     }
 
     public void disconnect(Node node) {
@@ -77,7 +75,6 @@ public final class ConnectionManager {
             it.remove();
             unbind(connection);
         }
-        this.onChanged.run();
     }
 
     public void clear() {
@@ -85,30 +82,36 @@ public final class ConnectionManager {
             unbind(connection);
         }
         this.connections.clear();
-        this.onChanged.run();
     }
 
     private void captureUpstreamIntoProperty(Connection connection) {
-        if (!(connection.targetPort() instanceof PropertyInputPort targetPort)) return;
-        String propName = targetPort.propertyName();
+        if (connection.targetPort() instanceof PropertyInputPort target) {
+            this.capture(connection.target(), target.property());
+        }
+    }
 
-        Object value = connection.target().propertyManager().resolve(propName).orElse(null);
-        if (value == null) return;
-
-        var allowed = this.allowedValues.of(targetPort.type());
-        if (allowed.isPresent() && !allowed.get().contains(value)) {
+    private <T> void capture(Node node, StoredPropertyDefinition<T> property) {
+        Optional<T> value = node.propertyManager().resolve(property);
+        if (value.isEmpty()) {
             return;
         }
-        connection.target().propertyManager().set(propName, value);
+        var allowed = this.allowedValues.of(property.anyType());
+        if (allowed.isPresent() && !allowed.get().contains(value.get())) {
+            return;
+        }
+        node.propertyManager().set(property, value);
     }
 
     private void attach(Connection connection) {
         this.connections.add(connection);
         if (connection.sourcePort() instanceof PropertyOutputPort source
                 && connection.targetPort() instanceof PropertyInputPort target) {
-            connection.target().propertyManager().bind(target.propertyName(),
-                    new NodeProperty(connection.source(), source.propertyName()));
+            bind(connection.target(), target.property(), new NodeProperty<>(connection.source(), source.property()));
         }
+    }
+
+    private static <T> void bind(Node node, StoredPropertyDefinition<T> property, PropertyDataSource<?> source) {
+        node.propertyManager().bind(property, PropertyDataSource.as(property.type().dataType(), source));
     }
 
     private void detach(Connection connection) {
@@ -118,7 +121,7 @@ public final class ConnectionManager {
 
     private static void unbind(Connection connection) {
         if (connection.targetPort() instanceof PropertyInputPort target) {
-            connection.target().propertyManager().unbind(target.propertyName());
+            connection.target().propertyManager().unbind(target.property());
         }
     }
 }

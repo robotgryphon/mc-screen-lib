@@ -1,6 +1,7 @@
 package dev.robotgryphon.screenlib.client.ui.widget.property;
 
-import com.mojang.serialization.Codec;
+import dev.robotgryphon.screenlib.graph.nodes.properties.PropertyManager;
+import dev.robotgryphon.screenlib.graph.nodes.properties.schema.StoredPropertyDefinition;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -14,13 +15,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.util.ARGB;
 
 import java.util.Objects;
-import java.util.function.Consumer;
+import java.util.Optional;
 
-public final class NumericPropertyEditor extends PropertyEditor {
+public final class NumericPropertyEditor<T, N extends Number> extends PropertyEditor<T> {
     public static final int BUTTON_WIDTH = 12;
-
-    private static final float FLOAT_STEP = 0.1f;
-    private static final double DOUBLE_STEP = 0.1;
 
     private static final int BUTTON_GLYPH_COLOR = 0xFFB0B3BC;
     private static final int BUTTON_GLYPH_HOVER_COLOR = 0xFFFFFFFF;
@@ -28,10 +26,7 @@ public final class NumericPropertyEditor extends PropertyEditor {
     private static final Component MINUS_GLYPH = Component.literal("−");
     private static final Component PLUS_GLYPH = Component.literal("+");
 
-    private Number value;
-
-    private final Codec<?> codec;
-    private final Consumer<Number> onValueChanged;
+    private final NumericKind<N> kind;
 
     private final SpacerElement minusSpacer;
     private final SpacerElement plusSpacer;
@@ -41,12 +36,9 @@ public final class NumericPropertyEditor extends PropertyEditor {
     private boolean editing;
 
     public NumericPropertyEditor(int x, int y, int width, int height,
-                                 Number value, Codec<?> codec,
-                                 Consumer<Number> onValueChanged) {
-        super(x, y, width, height);
-        this.value = value;
-        this.codec = codec;
-        this.onValueChanged = onValueChanged;
+                                 PropertyManager properties, StoredPropertyDefinition<T> property, NumericKind<N> kind) {
+        super(x, y, width, height, properties, property);
+        this.kind = kind;
 
         Font font = Minecraft.getInstance().font;
         this.editBox = new EditBox(font, 0, 0,
@@ -70,12 +62,14 @@ public final class NumericPropertyEditor extends PropertyEditor {
         this.editBox.setY(this.editBox.getY() + textOffset);
     }
 
-    public Number getValue() {
-        return this.value;
+    private N number() {
+        return this.current().filter(this.kind.type()::isInstance).map(this.kind.type()::cast).orElse(this.kind.zero());
     }
 
-    public void setValue(Number value) {
-        this.value = value;
+    private void commitNumber(N next) {
+        if (!Objects.equals(next, this.number())) {
+            this.commit(Optional.of(this.toValue(next)));
+        }
     }
 
     @Override
@@ -124,7 +118,7 @@ public final class NumericPropertyEditor extends PropertyEditor {
         if (!this.editing) {
             int valueCenterX = this.editBox.getX() + this.editBox.getWidth() / 2;
             int valueColor = ARGB.multiply(VALUE_TEXT_COLOR, ARGB.white(this.alpha));
-            graphics.centeredText(font, Component.literal(this.value.toString()), valueCenterX, textY, valueColor);
+            graphics.centeredText(font, Component.literal(this.number().toString()), valueCenterX, textY, valueColor);
         } else {
             this.editBox.extractRenderState(graphics, mouseX, mouseY, partialTick);
         }
@@ -150,24 +144,7 @@ public final class NumericPropertyEditor extends PropertyEditor {
     }
 
     private void applyStep(int direction) {
-        Number next = step(direction);
-        if (!Objects.equals(next, this.value)) {
-            this.value = next;
-            this.onValueChanged.accept(next);
-        }
-    }
-
-    private Number step(int direction) {
-        if (this.codec == Codec.INT) {
-            return this.value.intValue() + direction;
-        }
-        if (this.codec == Codec.FLOAT) {
-            return roundToTenth(this.value.floatValue() + direction * FLOAT_STEP);
-        }
-        if (this.codec == Codec.DOUBLE) {
-            return roundToTenth(this.value.doubleValue() + direction * DOUBLE_STEP);
-        }
-        return this.value;
+        this.commitNumber(this.kind.step().apply(this.number(), direction));
     }
 
     public boolean isEditing() {
@@ -177,29 +154,14 @@ public final class NumericPropertyEditor extends PropertyEditor {
     public void enterEditMode() {
         if (this.editing) return;
         this.editing = true;
-        this.editBox.setValue(this.value.toString());
+        this.editBox.setValue(this.number().toString());
         this.editBox.moveCursorToEnd(false);
         this.editBox.setFocused(true);
     }
 
     public void commitEdit() {
         if (!this.editing) return;
-        String text = this.editBox.getValue().trim();
-        try {
-            Number parsed = null;
-            if (this.codec == Codec.INT) {
-                parsed = Integer.parseInt(text);
-            } else if (this.codec == Codec.FLOAT) {
-                parsed = Float.parseFloat(text);
-            } else if (this.codec == Codec.DOUBLE) {
-                parsed = Double.parseDouble(text);
-            }
-            if (parsed != null && !Objects.equals(parsed, this.value)) {
-                this.value = parsed;
-                this.onValueChanged.accept(parsed);
-            }
-        } catch (NumberFormatException ignored) {
-        }
+        this.kind.parse(this.editBox.getValue().trim()).ifPresent(this::commitNumber);
         this.editing = false;
         this.editBox.setFocused(false);
     }
@@ -238,13 +200,5 @@ public final class NumericPropertyEditor extends PropertyEditor {
         }
         commitEdit();
         return false;
-    }
-
-    private static float roundToTenth(float v) {
-        return Math.round(v * 10f) / 10f;
-    }
-
-    private static double roundToTenth(double v) {
-        return Math.round(v * 10.0) / 10.0;
     }
 }

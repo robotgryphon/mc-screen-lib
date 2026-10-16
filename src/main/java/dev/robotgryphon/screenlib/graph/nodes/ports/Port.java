@@ -13,4 +13,6 @@ public sealed interface Port permits InputPort, OutputPort {
     Holder<GraphDataType<?>> type();
 
     PortSide side();
+
+    String propertyName();
 }

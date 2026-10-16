@@ -7,7 +7,7 @@ import org.jspecify.annotations.Nullable;
 
 public class PropertyBuilder {
     private final String name;
-    private Holder<GraphDataType<?>> type;
+    private @Nullable Holder<GraphDataType<?>> type;
     private boolean optional;
     private boolean input;
     private boolean output;
@@ -54,10 +54,12 @@ public class PropertyBuilder {
         return this.output;
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    public PropertyDefinition build() {
+    public PropertyDefinition<?> build() {
         if (this.computed == null) {
-            return new StoredPropertyDefinition(this.name, this.type, this.optional);
+            if (this.type == null) {
+                throw new IllegalStateException("Stored property '" + this.name + "' needs a type");
+            }
+            return new StoredPropertyDefinition<>(this.name, this.type, this.type.value(), this.optional);
         }
         if (this.input || this.optional) {
             throw new IllegalStateException("Computed property '" + this.name + "' cannot be an input or optional");

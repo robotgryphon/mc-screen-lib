@@ -1,6 +1,8 @@
 package dev.robotgryphon.screenlib.graph.types;
 
 import com.mojang.serialization.Codec;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.core.Direction;
 import net.minecraft.core.RegistryAccess;
 
@@ -19,6 +21,11 @@ public class DirectionGraphDataType implements GraphDataType<Direction> {
     @Override
     public Codec<Direction> codec() {
         return Direction.CODEC;
+    }
+
+    @Override
+    public StreamCodec<? super RegistryFriendlyByteBuf, Direction> streamCodec() {
+        return Direction.STREAM_CODEC;
     }
 
     @Override

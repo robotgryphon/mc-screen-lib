@@ -1,6 +1,8 @@
 package dev.robotgryphon.screenlib.graph.types;
 
 import com.mojang.serialization.Codec;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.core.BlockPos;
 
 public class BlockPositionGraphDataType implements GraphDataType<BlockPos> {
@@ -12,5 +14,10 @@ public class BlockPositionGraphDataType implements GraphDataType<BlockPos> {
     @Override
     public Codec<BlockPos> codec() {
         return BlockPos.CODEC;
+    }
+
+    @Override
+    public StreamCodec<? super RegistryFriendlyByteBuf, BlockPos> streamCodec() {
+        return BlockPos.STREAM_CODEC;
     }
 }

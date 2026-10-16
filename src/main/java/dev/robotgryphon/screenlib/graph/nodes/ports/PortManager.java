@@ -6,6 +6,7 @@ import dev.robotgryphon.screenlib.graph.nodes.schema.NodeDefinition;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public final class PortManager {
     private final List<Port> ports;
@@ -19,12 +20,21 @@ public final class PortManager {
         }
         for (OutputPortDefinition output : def.outputs()) {
             def.property(output.property()).ifPresent(property -> built.add(new PropertyOutputPort(node,
-                    Node.propertyLabel(node.type(), property.name()), property.anyType(), property.name())));
+                    Node.propertyLabel(node.type(), property.name()), property)));
         }
         this.ports = List.copyOf(built);
     }
 
     public List<Port> ports() {
         return this.ports;
+    }
+
+    public Optional<Port> port(PortSide side, String property) {
+        for (Port port : this.ports) {
+            if (port.side() == side && port.propertyName().equals(property)) {
+                return Optional.of(port);
+            }
+        }
+        return Optional.empty();
     }
 }

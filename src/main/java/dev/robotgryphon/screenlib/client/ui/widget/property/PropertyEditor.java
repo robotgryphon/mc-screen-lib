@@ -1,5 +1,7 @@
 package dev.robotgryphon.screenlib.client.ui.widget.property;
 
+import dev.robotgryphon.screenlib.graph.nodes.properties.PropertyManager;
+import dev.robotgryphon.screenlib.graph.nodes.properties.schema.StoredPropertyDefinition;
 import dev.robotgryphon.screenlib.client.ui.render.pip.NodeBackgroundRenderState;
 import dev.robotgryphon.screenlib.client.ui.render.uniforms.NodeBackgroundUniform;
 import net.minecraft.client.Minecraft;
@@ -14,16 +16,35 @@ import org.joml.Vector2f;
 import org.joml.Vector4f;
 
 import java.util.List;
+import java.util.Optional;
 
-public abstract class PropertyEditor extends AbstractWidget {
+public abstract class PropertyEditor<T> extends AbstractWidget {
     public static final int CORNER_RADIUS = 2;
 
     protected static final int BG_COLOR = 0xCC1A1B22;
 
     protected static final int VALUE_TEXT_COLOR = 0xFFFFFFFF;
 
-    protected PropertyEditor(int x, int y, int width, int height) {
+    protected final PropertyManager properties;
+    protected final StoredPropertyDefinition<T> property;
+
+    protected PropertyEditor(int x, int y, int width, int height,
+                             PropertyManager properties, StoredPropertyDefinition<T> property) {
         super(x, y, width, height, Component.empty());
+        this.properties = properties;
+        this.property = property;
+    }
+
+    protected Optional<T> current() {
+        return this.properties.get(this.property);
+    }
+
+    protected void commit(Optional<T> value) {
+        this.properties.set(this.property, value);
+    }
+
+    protected T toValue(Object value) {
+        return this.property.type().dataType().cast(value);
     }
 
     @Override

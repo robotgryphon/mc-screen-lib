@@ -24,8 +24,7 @@ public final class NodeWidgets {
     public static final DeferredHolder<NodeStateRenderer<?>, ItemHandlerPreviewRenderer> ITEM_HANDLER_PREVIEW =
             RENDERERS.register("item_handler_preview", ItemHandlerPreviewRenderer::new);
 
-    @SuppressWarnings("unchecked")
-    public static <S> @Nullable NodeStateRenderer<S> get(ResourceKey<NodeStateRenderer<?>> type) {
-        return (NodeStateRenderer<S>) REGISTRY.getValue(type);
+    public static @Nullable NodeStateRenderer<?> get(ResourceKey<NodeStateRenderer<?>> type) {
+        return REGISTRY.getValue(type);
     }
 }

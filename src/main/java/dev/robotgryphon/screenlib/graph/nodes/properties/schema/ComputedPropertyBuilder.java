@@ -1,5 +1,6 @@
 package dev.robotgryphon.screenlib.graph.nodes.properties.schema;
 
+import org.jspecify.annotations.Nullable;
 import dev.robotgryphon.screenlib.graph.nodes.properties.DataKey;
 import dev.robotgryphon.screenlib.graph.nodes.properties.computed.ComputedProperty;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
@@ -25,7 +26,11 @@ public class ComputedPropertyBuilder {
         return this.data(key.name(), property);
     }
 
-    ComputedPropertyDefinition build(String name, Holder<GraphDataType<?>> type) {
-        return new ComputedPropertyDefinition(name, type, this.computation, Map.copyOf(this.data));
+    ComputedPropertyDefinition<?> build(String name, @Nullable Holder<GraphDataType<?>> declared) {
+        var definition = new ComputedPropertyDefinition<>(name, this.computation, this.computation.value(), Map.copyOf(this.data));
+        if (declared != null && declared.value() != definition.type()) {
+            throw new IllegalStateException("Computed property '" + name + "' declares a type its computation does not produce");
+        }
+        return definition;
     }
 }

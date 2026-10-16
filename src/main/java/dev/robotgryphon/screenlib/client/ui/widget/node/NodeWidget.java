@@ -1,19 +1,14 @@
 package dev.robotgryphon.screenlib.client.ui.widget.node;
 
 import dev.robotgryphon.screenlib.graph.canvas.client.ClientCanvasState;
-
 import dev.robotgryphon.screenlib.graph.canvas.client.CanvasViewport;
 import dev.robotgryphon.screenlib.client.ui.state.DragState;
-
-import java.util.List;
-import java.util.ArrayList;
-import java.util.Objects;
-import java.util.Optional;
 import dev.robotgryphon.screenlib.graph.nodes.properties.schema.StoredPropertyDefinition;
 import dev.robotgryphon.screenlib.client.appearance.NodeAppearances;
 import dev.robotgryphon.screenlib.client.appearance.WidgetAppearance;
 import dev.robotgryphon.screenlib.client.ui.widget.property.DropdownEditor;
 import dev.robotgryphon.screenlib.client.NodeRenderer;
+import dev.robotgryphon.screenlib.client.render.BoundState;
 import dev.robotgryphon.screenlib.client.render.NodeStateRenderer;
 import dev.robotgryphon.screenlib.client.render.NodeWidgets;
 import dev.robotgryphon.screenlib.client.render.PropertyValueRenderer;
@@ -36,6 +31,11 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.util.ARGB;
 import net.minecraft.util.Mth;
 import org.jspecify.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 public class NodeWidget extends AbstractWidget {
     private static final int BACKGROUND_COLOR = 0xCC1F1F23;
@@ -295,6 +295,9 @@ public class NodeWidget extends AbstractWidget {
     @Override
     public void onRelease(MouseButtonEvent event) {
         super.onRelease(event);
+        if (this.dragging) {
+            this.state.commitPosition(this.node);
+        }
         this.dragging = false;
     }
 
@@ -311,18 +314,20 @@ public class NodeWidget extends AbstractWidget {
 
         for (int i = 0; i < this.widgetDefinitions.size(); i++) {
             WidgetAppearance widget = this.widgetDefinitions.get(i);
-            Object state = this.state(widget);
-            NodeStateRenderer<Object> renderer = renderer(widget);
-            if (state != null && renderer != null) {
-                renderer.render(graphics, state, this.stateArea(i), mouseX, mouseY, this.getAlpha());
-            }
+            ScreenRectangle area = this.stateArea(i);
+            this.bound(widget).ifPresent(bound -> bound.render(graphics, area, mouseX, mouseY, this.getAlpha()));
         }
 
         this.ports.extractRenderState(graphics, mouseX, mouseY, partialTick);
     }
 
-    private static @Nullable NodeStateRenderer<Object> renderer(WidgetAppearance widget) {
+    private static @Nullable NodeStateRenderer<?> renderer(WidgetAppearance widget) {
         return NodeWidgets.get(widget.type());
+    }
+
+    private Optional<? extends BoundState<?>> bound(WidgetAppearance widget) {
+        NodeStateRenderer<?> renderer = renderer(widget);
+        return renderer == null ? Optional.empty() : BoundState.of(renderer, this.state(widget));
     }
 
     private static List<Integer> stateHeights(List<WidgetAppearance> widgets) {
@@ -361,18 +366,16 @@ public class NodeWidget extends AbstractWidget {
 
     @FunctionalInterface
     private interface StateVisitor<R> {
-        R visit(NodeStateRenderer<Object> renderer, Object state, ScreenRectangle area);
+        R visit(BoundState<?> bound, ScreenRectangle area);
     }
 
     private <R> Optional<R> firstStateResult(StateVisitor<Optional<R>> visitor) {
         for (int i = 0; i < this.widgetDefinitions.size(); i++) {
-            WidgetAppearance widget = this.widgetDefinitions.get(i);
-            Object state = this.state(widget);
-            NodeStateRenderer<Object> renderer = renderer(widget);
-            if (state == null || renderer == null) {
+            Optional<? extends BoundState<?>> bound = this.bound(this.widgetDefinitions.get(i));
+            if (bound.isEmpty()) {
                 continue;
             }
-            Optional<R> result = visitor.visit(renderer, state, this.stateArea(i));
+            Optional<R> result = visitor.visit(bound.get(), this.stateArea(i));
             if (result.isPresent()) {
                 return result;
             }
@@ -381,32 +384,32 @@ public class NodeWidget extends AbstractWidget {
     }
 
     private boolean stateClicked(MouseButtonEvent event, boolean doubleClick) {
-        return this.firstStateResult((renderer, state, area) ->
-                contains(area, event.x(), event.y()) && renderer.mouseClicked(state, area, event, doubleClick)
+        return this.firstStateResult((bound, area) ->
+                contains(area, event.x(), event.y()) && bound.mouseClicked(area, event, doubleClick)
                         ? Optional.of(true) : Optional.<Boolean>empty()).isPresent();
     }
 
     @Override
     public void mouseMoved(double mouseX, double mouseY) {
-        this.firstStateResult((renderer, state, area) -> {
-            renderer.mouseMoved(state, area, mouseX, mouseY);
+        this.firstStateResult((bound, area) -> {
+            bound.mouseMoved(area, mouseX, mouseY);
             return Optional.<Boolean>empty();
         });
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        return this.firstStateResult((renderer, state, area) ->
-                contains(area, mouseX, mouseY) && renderer.mouseScrolled(state, area, mouseX, mouseY, scrollX, scrollY)
+        return this.firstStateResult((bound, area) ->
+                contains(area, mouseX, mouseY) && bound.mouseScrolled(area, mouseX, mouseY, scrollX, scrollY)
                         ? Optional.of(true) : Optional.<Boolean>empty()).isPresent();
     }
 
     public void tooltip(GuiGraphicsExtractor graphics, double mouseX, double mouseY, int screenX, int screenY) {
-        this.firstStateResult((renderer, state, area) -> {
+        this.firstStateResult((bound, area) -> {
             if (!contains(area, mouseX, mouseY)) {
                 return Optional.<Boolean>empty();
             }
-            renderer.tooltip(graphics, state, area, Mth.floor(mouseX), Mth.floor(mouseY), screenX, screenY);
+            bound.tooltip(graphics, area, Mth.floor(mouseX), Mth.floor(mouseY), screenX, screenY);
             return Optional.of(true);
         });
     }

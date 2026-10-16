@@ -3,12 +3,7 @@ package dev.robotgryphon.screenlib.client.ui.widget;
 import dev.robotgryphon.screenlib.graph.canvas.client.CanvasViewport;
 import dev.robotgryphon.screenlib.client.ui.state.DragState;
 import dev.robotgryphon.screenlib.client.ui.state.PendingConnection;
-
 import dev.robotgryphon.screenlib.client.GraphColors;
-import java.util.stream.Stream;
-import java.util.IdentityHashMap;
-import java.util.Map;
-
 import dev.robotgryphon.screenlib.client.ui.widget.node.NodePortsRenderer;
 import dev.robotgryphon.screenlib.client.ui.widget.node.NodeWidget;
 import dev.robotgryphon.screenlib.graph.Connection;
@@ -41,8 +36,11 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 public class CanvasWidget extends AbstractWidget {
     private static final double CONNECTION_HIT_RADIUS = 4.0;
@@ -187,7 +185,7 @@ public class CanvasWidget extends AbstractWidget {
             return true;
         }
 
-        NumericPropertyEditor editingEditor = this.findEditingEditor();
+        NumericPropertyEditor<?, ?> editingEditor = this.findEditingEditor();
         if (editingEditor != null) {
             final var canvasClickEvent = convertMouseButtonEvent(event);
             if (editingEditor.handleClickWhileEditing(canvasClickEvent, doubleClick)) {
@@ -228,7 +226,7 @@ public class CanvasWidget extends AbstractWidget {
         if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
             Connection hovered = findConnectionUnderCursor(clicked);
             if (hovered != null && isInDeleteButton(hovered, clicked)) {
-                canvas.graph().connections().remove(hovered);
+                canvas.disconnect(hovered);
                 return true;
             }
         }
@@ -300,7 +298,7 @@ public class CanvasWidget extends AbstractWidget {
                         .filter(p2 -> !p2.node().equals(p.source()))
                         .findFirst();
 
-                port.ifPresent(n -> canvas.graph().connections().connect(p.sourcePort(), n));
+                port.ifPresent(n -> canvas.connect(p.sourcePort(), n));
             }
             return true;
         }
@@ -342,7 +340,7 @@ public class CanvasWidget extends AbstractWidget {
 
     @Override
     public boolean keyPressed(@NonNull KeyEvent event) {
-        NumericPropertyEditor editor = this.findEditingEditor();
+        NumericPropertyEditor<?, ?> editor = this.findEditingEditor();
         if (editor != null) {
             return editor.keyPressed(event);
         }
@@ -352,7 +350,7 @@ public class CanvasWidget extends AbstractWidget {
 
     @Override
     public boolean charTyped(@NonNull CharacterEvent event) {
-        NumericPropertyEditor editor = this.findEditingEditor();
+        NumericPropertyEditor<?, ?> editor = this.findEditingEditor();
         if (editor != null) {
             return editor.charTyped(event);
         }
@@ -360,9 +358,9 @@ public class CanvasWidget extends AbstractWidget {
         return super.charTyped(event);
     }
 
-    private @Nullable NumericPropertyEditor findEditingEditor() {
+    private @Nullable NumericPropertyEditor<?, ?> findEditingEditor() {
         for (NodeWidget node : this.nodeWidgets()) {
-            NumericPropertyEditor editor = node.properties().activeNumericEditor();
+            NumericPropertyEditor<?, ?> editor = node.properties().activeNumericEditor();
             if (editor != null) {
                 return editor;
             }

@@ -34,28 +34,22 @@ public class Chip extends AbstractWidget {
     private final Component category;
     private final Component value;
     private final boolean dismissable;
-    private final @org.jspecify.annotations.Nullable Object data;
     private final int catTextWidth;
     private final int valTextWidth;
 
     private Chip(ChipHolder holder, int dotColor, Component category, Component value,
-                 boolean dismissable, @org.jspecify.annotations.Nullable Object data) {
+                 boolean dismissable) {
         super(0, 0, 0, CHIP_HEIGHT, value);
         this.holder = holder;
         this.dotColor = dotColor;
         this.category = category;
         this.value = value;
         this.dismissable = dismissable;
-        this.data = data;
 
         Font font = Minecraft.getInstance().font;
         this.catTextWidth = font.width(uppercased(this.category));
         this.valTextWidth = font.width(this.value);
         this.setWidth(computeWidth());
-    }
-
-    public @org.jspecify.annotations.Nullable Object data() {
-        return this.data;
     }
 
     public static Builder builder() {
@@ -176,7 +170,6 @@ public class Chip extends AbstractWidget {
         private Component category;
         private Component value;
         private boolean dismissable;
-        private @org.jspecify.annotations.Nullable Object data;
 
         private Builder() {
         }
@@ -201,11 +194,6 @@ public class Chip extends AbstractWidget {
             return this;
         }
 
-        public Builder data(@org.jspecify.annotations.Nullable Object data) {
-            this.data = data;
-            return this;
-        }
-
         Chip build(ChipHolder holder) {
             if (this.category == null) {
                 throw new IllegalStateException("Chip.Builder: category is required");
@@ -213,7 +201,7 @@ public class Chip extends AbstractWidget {
             if (this.value == null) {
                 throw new IllegalStateException("Chip.Builder: value is required");
             }
-            return new Chip(holder, this.dotColor, this.category, this.value, this.dismissable, this.data);
+            return new Chip(holder, this.dotColor, this.category, this.value, this.dismissable);
         }
     }
 }

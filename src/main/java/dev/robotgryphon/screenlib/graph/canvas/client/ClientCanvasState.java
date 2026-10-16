@@ -1,12 +1,20 @@
 package dev.robotgryphon.screenlib.graph.canvas.client;
 
+import dev.robotgryphon.screenlib.graph.nodes.properties.schema.StoredPropertyDefinition;
+import dev.robotgryphon.screenlib.graph.Connection;
+import dev.robotgryphon.screenlib.graph.nodes.ports.Port;
+import dev.robotgryphon.screenlib.graph.state.ConnectionState;
+import dev.robotgryphon.screenlib.network.CanvasEditPayload;
+import dev.robotgryphon.screenlib.network.ConnectNodesPayload;
+import dev.robotgryphon.screenlib.network.DisconnectNodesPayload;
+import dev.robotgryphon.screenlib.network.MoveNodePayload;
+import dev.robotgryphon.screenlib.network.RemoveNodePayload;
+import dev.robotgryphon.screenlib.network.SetNodePropertyPayload;
 import dev.robotgryphon.screenlib.graph.canvas.CanvasGraph;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.nodes.properties.AllowedValues;
 import dev.robotgryphon.screenlib.graph.state.CanvasState;
 import dev.robotgryphon.screenlib.graph.state.NodeState;
-import dev.robotgryphon.screenlib.graph.sync.CanvasStateManager;
-import net.minecraft.core.RegistryAccess;
 import org.joml.Vector2i;
 import org.joml.Vector2ic;
 import org.jspecify.annotations.Nullable;
@@ -15,8 +23,10 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 public final class ClientCanvasState {
     private static final Vector2ic ORIGIN = new Vector2i();
@@ -28,9 +38,15 @@ public final class ClientCanvasState {
     private final Map<UUID, String> focusedProperties = new HashMap<>();
     private Set<UUID> required = Set.of();
     private UUID id = UUID.randomUUID();
+    private Consumer<CanvasEditPayload> edits = edit -> {};
 
     public ClientCanvasState(AllowedValues allowedValues) {
         this.graph = new CanvasGraph(allowedValues);
+        this.graph.onPropertyChanged(this::propertyChanged);
+    }
+
+    public void onEdit(Consumer<CanvasEditPayload> edits) {
+        this.edits = edits;
     }
 
     public CanvasGraph graph() {
@@ -47,14 +63,24 @@ public final class ClientCanvasState {
         this.validity.clear();
         this.clientData.clear();
         this.focusedProperties.clear();
-        CanvasStateManager.loadState(this.graph, state);
+        this.graph.load(state);
         for (NodeState node : state.nodes()) {
             this.positions.put(node.id(), new Vector2i(node.position()));
         }
     }
 
-    public CanvasState toState(RegistryAccess registries) {
-        return CanvasStateManager.toState(this.id, this.graph, this::position, registries);
+    public void connect(Port from, Port to) {
+        if (this.graph.connections().connect(from, to)) {
+            this.edits.accept(new ConnectNodesPayload(new ConnectionState(
+                    from.node().id(), from.propertyName(), to.node().id(), to.propertyName())));
+        }
+    }
+
+    public void disconnect(Connection connection) {
+        this.graph.connections().remove(connection);
+        this.edits.accept(new DisconnectNodesPayload(new ConnectionState(
+                connection.source().id(), connection.sourcePort().propertyName(),
+                connection.target().id(), connection.targetPort().propertyName())));
     }
 
     public void removeNode(Node node) {
@@ -66,6 +92,15 @@ public final class ClientCanvasState {
         this.validity.remove(node.id());
         this.clientData.remove(node.id());
         this.focusedProperties.remove(node.id());
+        this.edits.accept(new RemoveNodePayload(node.id()));
+    }
+
+    public void commitPosition(Node node) {
+        this.edits.accept(new MoveNodePayload(node.id(), new Vector2i(this.position(node))));
+    }
+
+    private <T> void propertyChanged(Node node, StoredPropertyDefinition<T> property, Optional<T> value) {
+        this.edits.accept(new SetNodePropertyPayload<>(node.id(), node.definition(), property, value));
     }
 
     public Vector2ic position(Node node) {

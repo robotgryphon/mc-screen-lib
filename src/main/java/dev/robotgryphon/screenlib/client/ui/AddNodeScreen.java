@@ -29,7 +29,6 @@ import net.minecraft.world.entity.player.Inventory;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 import dev.robotgryphon.screenlib.menu.AddNodeMenu;
 import dev.robotgryphon.screenlib.network.AddNodeResultPayload;
-import java.util.Optional;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
@@ -38,6 +37,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -76,7 +76,7 @@ public class AddNodeScreen extends Screen implements MenuAccess<AddNodeMenu> {
         this.options = menu.data().available().stream()
                 .flatMap(key -> definitions.get(key).stream())
                 .toList();
-        this.previewCanvas = new ClientCanvasState(menu.data().allowedValues().resolve(registries));
+        this.previewCanvas = new ClientCanvasState(menu.data().allowedValues().resolve());
     }
 
     @Override

@@ -1,6 +1,9 @@
 package dev.robotgryphon.screenlib.graph.types;
 
 import com.mojang.serialization.Codec;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 
 public class DoubleGraphDataType implements GraphDataType<Double> {
     @Override
@@ -11,5 +14,10 @@ public class DoubleGraphDataType implements GraphDataType<Double> {
     @Override
     public Codec<Double> codec() {
         return Codec.DOUBLE;
+    }
+
+    @Override
+    public StreamCodec<? super RegistryFriendlyByteBuf, Double> streamCodec() {
+        return ByteBufCodecs.DOUBLE;
     }
 }

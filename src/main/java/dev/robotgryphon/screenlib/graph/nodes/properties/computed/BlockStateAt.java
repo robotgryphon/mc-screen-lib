@@ -1,7 +1,8 @@
 package dev.robotgryphon.screenlib.graph.nodes.properties.computed;
 
+import net.neoforged.neoforge.registries.DeferredHolder;
+import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import dev.robotgryphon.screenlib.graph.nodes.properties.DataKey;
-
 import dev.robotgryphon.screenlib.ScreenLib;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -20,6 +21,16 @@ public class BlockStateAt implements ComputedProperty<BlockState>, ClientDataPro
 
     private static final StreamCodec<RegistryFriendlyByteBuf, BlockState> CLIENT_CODEC =
             ByteBufCodecs.fromCodecWithRegistries(BlockState.CODEC);
+
+    @Override
+    public DeferredHolder<GraphDataType<?>, ? extends GraphDataType<BlockState>> type() {
+        return ScreenLib.BLOCKSTATE_DATA_TYPE;
+    }
+
+    @Override
+    public Optional<ClientDataProvider<BlockState, ?>> clientDataProvider() {
+        return Optional.of(this);
+    }
 
     @Override
     public List<DataKey<?>> requires() {

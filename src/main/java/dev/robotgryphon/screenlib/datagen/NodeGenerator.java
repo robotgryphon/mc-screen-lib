@@ -29,8 +29,6 @@ public class NodeGenerator {
 
         var blockPos = ScreenLib.BLOCK_POS_DATA_TYPE;
         var direction = ScreenLib.DIRECTION_DATA_TYPE;
-
-        var itemHandler = ScreenLib.ITEM_HANDLER_DATA_TYPE;
         var level = ScreenLib.LEVEL_DATA_TYPE;
 
         ctx.register(nodeType("integer"), new NodeDefinitionBuilder()
@@ -49,7 +47,7 @@ public class NodeGenerator {
                 .addProperty("x", prop -> prop.type(intType).input())
                 .addProperty("y", prop -> prop.type(intType).input())
                 .addProperty("z", prop -> prop.type(intType).input())
-                .addProperty("position", prop -> prop.type(blockPos)
+                .addProperty("position", prop -> prop
                         .output()
                         .computed(ScreenLib.BLOCK_POSITION_FROM_COORDINATES)
                         .data(BlockPositionFromCoordinates.X, "x")
@@ -70,7 +68,7 @@ public class NodeGenerator {
                 .addProperty("position", prop -> prop.type(blockPos).input())
                 .addProperty("level", prop -> prop.type(level).input())
                 .addProperty("side", prop -> prop.type(direction).optional().input().output())
-                .addProperty("storage", prop -> prop.type(itemHandler)
+                .addProperty("storage", prop -> prop
                         .output()
                         .computed(ScreenLib.ITEM_HANDLER_AT)
                         .data(ItemHandlerAt.POSITION, "position")

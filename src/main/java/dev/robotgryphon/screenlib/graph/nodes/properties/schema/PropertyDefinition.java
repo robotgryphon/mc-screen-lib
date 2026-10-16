@@ -12,17 +12,17 @@ import net.minecraft.core.Holder;
 import java.util.Locale;
 import java.util.stream.Stream;
 
-public sealed interface PropertyDefinition
+public sealed interface PropertyDefinition<T>
         permits StoredPropertyDefinition, ConstantPropertyDefinition, ComputedPropertyDefinition {
-    Codec<PropertyDefinition> CODEC = Codec.lazyInitialized(() -> new MapCodec<PropertyDefinition>() {
+    Codec<PropertyDefinition<?>> CODEC = Codec.lazyInitialized(() -> new MapCodec<PropertyDefinition<?>>() {
         @Override
-        public <T> Stream<T> keys(DynamicOps<T> ops) {
+        public <O> Stream<O> keys(DynamicOps<O> ops) {
             return Stream.of(StoredPropertyDefinition.MAP_CODEC, ConstantPropertyDefinition.MAP_CODEC,
                     ComputedPropertyDefinition.MAP_CODEC).flatMap(codec -> codec.keys(ops)).distinct();
         }
 
         @Override
-        public <T> DataResult<PropertyDefinition> decode(DynamicOps<T> ops, MapLike<T> input) {
+        public <O> DataResult<PropertyDefinition<?>> decode(DynamicOps<O> ops, MapLike<O> input) {
             if (input.get("computation") != null) {
                 return ComputedPropertyDefinition.MAP_CODEC.decode(ops, input).map(property -> property);
             }
@@ -33,11 +33,11 @@ public sealed interface PropertyDefinition
         }
 
         @Override
-        public <T> RecordBuilder<T> encode(PropertyDefinition input, DynamicOps<T> ops, RecordBuilder<T> prefix) {
+        public <O> RecordBuilder<O> encode(PropertyDefinition<?> input, DynamicOps<O> ops, RecordBuilder<O> prefix) {
             return switch (input) {
                 case StoredPropertyDefinition<?> stored -> StoredPropertyDefinition.MAP_CODEC.encode(stored, ops, prefix);
-                case ConstantPropertyDefinition constant -> ConstantPropertyDefinition.MAP_CODEC.encode(constant, ops, prefix);
-                case ComputedPropertyDefinition computed -> ComputedPropertyDefinition.MAP_CODEC.encode(computed, ops, prefix);
+                case ConstantPropertyDefinition<?> constant -> ConstantPropertyDefinition.MAP_CODEC.encode(constant, ops, prefix);
+                case ComputedPropertyDefinition<?> computed -> ComputedPropertyDefinition.MAP_CODEC.encode(computed, ops, prefix);
             };
         }
     }.codec().validate(property -> property.name().equals(property.name().toLowerCase(Locale.ROOT))
@@ -47,4 +47,6 @@ public sealed interface PropertyDefinition
     String name();
 
     Holder<GraphDataType<?>> anyType();
+
+    GraphDataType<T> type();
 }

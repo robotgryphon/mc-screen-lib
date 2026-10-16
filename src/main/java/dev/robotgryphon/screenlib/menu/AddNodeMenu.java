@@ -1,17 +1,13 @@
 package dev.robotgryphon.screenlib.menu;
 
+import dev.robotgryphon.screenlib.graph.nodes.properties.PropertyValues;
 import dev.robotgryphon.screenlib.ScreenLib;
-import com.mojang.serialization.Codec;
-import com.mojang.serialization.DataResult;
-import com.mojang.serialization.Dynamic;
 import dev.robotgryphon.screenlib.graph.state.CanvasState;
 import dev.robotgryphon.screenlib.graph.nodes.context.NodeCreationContext;
 import dev.robotgryphon.screenlib.graph.nodes.schema.NodeDefinition;
 import dev.robotgryphon.screenlib.graph.state.NodeState;
 import dev.robotgryphon.screenlib.graph.nodes.properties.schema.StoredPropertyDefinition;
 import net.minecraft.core.Holder;
-import net.minecraft.nbt.NbtOps;
-import net.minecraft.nbt.Tag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
@@ -23,9 +19,7 @@ import org.joml.Vector2i;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 public class AddNodeMenu extends AbstractContainerMenu {
@@ -66,19 +60,16 @@ public class AddNodeMenu extends AbstractContainerMenu {
         this.returnToCanvas(player);
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    private static Map<String, Dynamic<?>> initialProperties(Holder<NodeDefinition> definition, NodeCreationContext context) {
-        Map<String, Dynamic<?>> values = new HashMap<>();
+    private static PropertyValues initialProperties(Holder<NodeDefinition> definition, NodeCreationContext context) {
+        PropertyValues values = PropertyValues.EMPTY;
         for (var supplier : definition.value().context()) {
-            supplier.value().supply(context).forEach((name, value) -> {
+            for (var entry : supplier.value().supply(context).entrySet()) {
                 for (StoredPropertyDefinition<?> property : definition.value().stored()) {
-                    var type = property.type().value();
-                    if (property.name().equals(name) && type.dataType().isInstance(value)) {
-                        DataResult<Tag> result = ((Codec) type.codec()).encodeStart(NbtOps.INSTANCE, value);
-                        result.result().ifPresent(tag -> values.put(name, new Dynamic<>(NbtOps.INSTANCE, tag)));
+                    if (property.name().equals(entry.getKey()) && entry.getValue() != null) {
+                        values = values.withChecked(property, entry.getValue());
                     }
                 }
-            });
+            }
         }
         return values;
     }

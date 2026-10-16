@@ -1,7 +1,7 @@
 package dev.robotgryphon.screenlib.graph.canvas;
 
+import dev.robotgryphon.screenlib.graph.nodes.properties.PropertyValues;
 import dev.robotgryphon.screenlib.graph.state.CanvasState;
-
 import com.mojang.serialization.MapCodec;
 import dev.robotgryphon.screenlib.ScreenLib;
 import dev.robotgryphon.screenlib.graph.state.NodeState;
@@ -73,7 +73,7 @@ public final class CanvasDefinition {
                 continue;
             }
             int offset = (nodes.size() - this.state.nodes().size()) * NEW_NODE_OFFSET;
-            nodes.add(new NodeState(required.id(), definition.get(), new Vector2i(offset, offset), Map.of()));
+            nodes.add(new NodeState(required.id(), definition.get(), new Vector2i(offset, offset), PropertyValues.EMPTY));
         }
         if (nodes.size() == this.state.nodes().size()) {
             return false;

@@ -48,11 +48,11 @@ public final class NodeAppearances extends SimpleJsonResourceReloadListener<Node
     }
 
     private static boolean isDisplayable(ResourceKey<NodeDefinition> type, NodeDefinition definition, WidgetAppearance widget) {
-        if (!(definition.property(widget.property()).orElse(null) instanceof ComputedPropertyDefinition computed)) {
+        if (!(definition.property(widget.property()).orElse(null) instanceof ComputedPropertyDefinition<?> computed)) {
             warn(type, widget, "which is not a computed property");
             return false;
         }
-        if (computed.clientData().isEmpty()) {
+        if (computed.function().clientDataProvider().isEmpty()) {
             warn(type, widget, "whose computation does not provide client data");
             return false;
         }

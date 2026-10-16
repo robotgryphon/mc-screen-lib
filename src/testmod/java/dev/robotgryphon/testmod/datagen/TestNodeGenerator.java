@@ -25,12 +25,11 @@ public class TestNodeGenerator {
     private static void addNodeTypes(BootstrapContext<NodeDefinition> ctx) {
         var blockPos = ScreenLib.BLOCK_POS_DATA_TYPE;
         var level = ScreenLib.LEVEL_DATA_TYPE;
-        var blockState = ScreenLib.BLOCKSTATE_DATA_TYPE;
 
         ctx.register(GET_BLOCK, new NodeDefinitionBuilder()
                 .addProperty("position", prop -> prop.type(blockPos).input())
                 .addProperty("level", prop -> prop.type(level).input())
-                .addProperty("state", prop -> prop.type(blockState)
+                .addProperty("state", prop -> prop
                         .output()
                         .computed(ScreenLib.BLOCK_STATE_AT)
                         .data(BlockStateAt.POSITION, "position")

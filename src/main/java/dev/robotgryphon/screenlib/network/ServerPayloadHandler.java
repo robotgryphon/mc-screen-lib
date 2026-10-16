@@ -7,16 +7,14 @@ import dev.robotgryphon.screenlib.menu.AddNodeMenu;
 import dev.robotgryphon.screenlib.menu.AddNodeMenuProvider;
 import dev.robotgryphon.screenlib.menu.CanvasMenu;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.player.Player;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 public final class ServerPayloadHandler {
     private ServerPayloadHandler() {}
 
-    public static void handleUpdate(UpdateCanvasStatePayload payload, IPayloadContext context) {
-        Player player = context.player();
-        if (player.containerMenu instanceof CanvasMenu menu) {
-            menu.updateState(payload.state(), payload.sequence());
+    public static void handleCanvasEdit(CanvasEditPayload payload, IPayloadContext context) {
+        if (context.player().containerMenu instanceof CanvasMenu menu) {
+            menu.applyEdit(payload);
         }
     }
 

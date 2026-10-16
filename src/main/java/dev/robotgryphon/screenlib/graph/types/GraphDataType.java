@@ -4,7 +4,9 @@ import com.mojang.serialization.Codec;
 import dev.robotgryphon.screenlib.ScreenLib;
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.codec.RegistryCodecs;
 import net.minecraft.resources.ResourceKey;
@@ -26,6 +28,8 @@ public interface GraphDataType<T> {
     Class<T> dataType();
 
     Codec<T> codec();
+
+    StreamCodec<? super RegistryFriendlyByteBuf, T> streamCodec();
 
     default Optional<T> defaultValueRaw() {
         return Optional.empty();

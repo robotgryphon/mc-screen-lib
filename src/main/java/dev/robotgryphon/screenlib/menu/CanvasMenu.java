@@ -7,7 +7,9 @@ import dev.robotgryphon.screenlib.graph.sync.CanvasEvaluation;
 import dev.robotgryphon.screenlib.graph.evaluation.CanvasEvaluator;
 import dev.robotgryphon.screenlib.graph.sync.ClientDataSubscription;
 import dev.robotgryphon.screenlib.graph.sync.AllowedValuesSnapshot;
+import dev.robotgryphon.screenlib.network.CanvasEditPayload;
 import dev.robotgryphon.screenlib.network.CanvasEvaluationPayload;
+import dev.robotgryphon.screenlib.network.CanvasSyncPayload;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -23,6 +25,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -39,7 +42,6 @@ public abstract class CanvasMenu extends AbstractContainerMenu {
     private Set<ClientDataSubscription> subscriptions = Set.of();
     private CanvasEvaluator.@Nullable Session session;
     private @Nullable CanvasEvaluation lastSent;
-    private int sequence;
     private int ticks;
 
     protected CanvasMenu(MenuType<?> type, int containerId, Inventory inv, CanvasSupplier source,
@@ -51,6 +53,10 @@ public abstract class CanvasMenu extends AbstractContainerMenu {
         this.state = source.reconcile(inv.player.registryAccess());
         this.allowedValues = AllowedValuesSnapshot.capture(inv.player.registryAccess());
         this.requiredNodes = source.canvas().required().stream().map(NodeReference::id).toList();
+        if (this.player != null) {
+            var server = this.player.level().getServer();
+            this.session = CanvasEvaluator.open(this.state, server.registryAccess(), server);
+        }
     }
 
     protected CanvasMenu(MenuType<?> type, int containerId, RegistryFriendlyByteBuf data) {
@@ -95,14 +101,18 @@ public abstract class CanvasMenu extends AbstractContainerMenu {
         this.push(true);
     }
 
-    public void updateState(CanvasState newState, int sequence) {
-        this.sequence = sequence;
+    public void applyEdit(CanvasEditPayload edit) {
         if (this.source == null || this.player == null) {
-            this.state = newState;
             return;
         }
         var server = this.player.level().getServer();
-        this.source.update(newState, server);
+        Optional<CanvasState> edited = edit.apply(this.source.canvas().state(), server.registryAccess(),
+                Set.copyOf(this.requiredNodes));
+        if (edited.isEmpty()) {
+            PacketDistributor.sendToPlayer(this.player, new CanvasSyncPayload(this.source.canvas().state()));
+            return;
+        }
+        this.source.update(edited.get(), server);
         this.state = this.source.canvas().state();
         this.session = CanvasEvaluator.open(this.state, server.registryAccess(), server);
         this.push(true);
@@ -126,7 +136,7 @@ public abstract class CanvasMenu extends AbstractContainerMenu {
         }
         if (force || !evaluation.equals(this.lastSent)) {
             this.lastSent = evaluation;
-            PacketDistributor.sendToPlayer(this.player, new CanvasEvaluationPayload(this.sequence,
+            PacketDistributor.sendToPlayer(this.player, new CanvasEvaluationPayload(
                     evaluation.validity(), evaluation.computed(), evaluation.clientData()));
         }
     }

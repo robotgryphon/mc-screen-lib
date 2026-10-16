@@ -5,6 +5,8 @@ import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.input.MouseButtonEvent;
 
 public interface NodeStateRenderer<S> {
+    Class<S> stateType();
+
     int width();
 
     int height();

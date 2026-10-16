@@ -1,12 +1,10 @@
 package dev.robotgryphon.screenlib.client.ui.widget.node;
 
+import dev.robotgryphon.screenlib.client.ui.widget.property.NumericKind;
 import dev.robotgryphon.screenlib.client.appearance.NodeAppearance;
 import dev.robotgryphon.screenlib.client.appearance.NodeAppearances;
-
 import dev.robotgryphon.screenlib.graph.canvas.client.CanvasViewport;
-
 import dev.robotgryphon.screenlib.graph.nodes.properties.schema.ComputedPropertyDefinition;
-import com.mojang.serialization.Codec;
 import dev.robotgryphon.screenlib.client.NodeRenderer;
 import dev.robotgryphon.screenlib.client.render.PropertyRenderers;
 import dev.robotgryphon.screenlib.client.render.PropertyValueRenderer;
@@ -20,7 +18,6 @@ import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.nodes.properties.schema.PropertyDefinition;
 import dev.robotgryphon.screenlib.graph.nodes.properties.schema.StoredPropertyDefinition;
 import dev.robotgryphon.screenlib.graph.nodes.properties.PropertyManager;
-import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -83,14 +80,14 @@ public class NodePropertiesRenderer implements Renderable {
         }
     }
 
-    public static List<ComputedPropertyDefinition> visibleComputed(Node node) {
+    public static List<ComputedPropertyDefinition<?>> visibleComputed(Node node) {
         NodeAppearance appearance = NodeAppearances.get(node.type());
         return node.propertyManager().computedProperties().stream()
                 .filter(definition -> !appearance.property(definition.name()).hideLabel())
                 .toList();
     }
 
-    public static Optional<PropertyValueRenderer<Object>> valueRenderer(Node node, PropertyDefinition definition) {
+    public static Optional<PropertyValueRenderer<?>> valueRenderer(Node node, PropertyDefinition<?> definition) {
         return NodeAppearances.get(node.type()).property(definition.name()).renderer().map(PropertyRenderers::get);
     }
 
@@ -123,12 +120,10 @@ public class NodePropertiesRenderer implements Renderable {
 
         for (int i = 0; i < properties.size(); i++) {
             StoredPropertyDefinition<?> prop = properties.get(i);
-            if (this.propertyManager.isDriven(prop.name())) continue;
+            if (this.propertyManager.isDriven(prop)) continue;
 
-            PropertyEditor editor = this.propertyRows.get(i).editor();
+            PropertyEditor<?> editor = this.propertyRows.get(i).editor();
             if (editor == null) continue;
-
-            this.propertyRows.get(i).syncEditorValueFromNode();
 
             if (editor.mouseClicked(event, doubleClick)) {
                 return true;
@@ -149,9 +144,9 @@ public class NodePropertiesRenderer implements Renderable {
         this.owner.state().setFocusedProperty(this.node, null);
     }
 
-    public @Nullable NumericPropertyEditor activeNumericEditor() {
+    public @Nullable NumericPropertyEditor<?, ?> activeNumericEditor() {
         for (PropertyRow row : this.propertyRows) {
-            if (row.editor() instanceof NumericPropertyEditor editor && editor.isEditing()) {
+            if (row.editor() instanceof NumericPropertyEditor<?, ?> editor && editor.isEditing()) {
                 return editor;
             }
         }
@@ -160,7 +155,7 @@ public class NodePropertiesRenderer implements Renderable {
 
     public void renderFocusedPropertyPopup(GuiGraphicsExtractor graphics, CanvasViewport viewport,
                                            int mouseX, int mouseY) {
-        DropdownPopup popup = buildFocusedPropertyPopup(viewport);
+        DropdownPopup<?> popup = buildFocusedPropertyPopup(viewport);
         if (popup != null) {
             popup.render(graphics, mouseX, mouseY);
         }
@@ -168,7 +163,7 @@ public class NodePropertiesRenderer implements Renderable {
 
     public boolean handleFocusedPropertyPopupClick(CanvasViewport viewport,
                                                    double screenMouseX, double screenMouseY) {
-        DropdownPopup popup = buildFocusedPropertyPopup(viewport);
+        DropdownPopup<?> popup = buildFocusedPropertyPopup(viewport);
         if (popup == null) return false;
         return popup.mouseClicked(screenMouseX, screenMouseY);
     }
@@ -190,21 +185,11 @@ public class NodePropertiesRenderer implements Renderable {
 
     private record FocusedRow(StoredPropertyDefinition<?> prop, int rowIndex) {}
 
-    private @Nullable DropdownPopup buildFocusedPropertyPopup(CanvasViewport viewport) {
+    private @Nullable DropdownPopup<?> buildFocusedPropertyPopup(CanvasViewport viewport) {
         FocusedRow focused = resolveFocusedProperty();
         if (focused == null) {
             return null;
         }
-        StoredPropertyDefinition<?> prop = focused.prop();
-
-        GraphDataType<?> def = prop.type().value();
-        List<Object> options = new ArrayList<>();
-        options.add(PropertyValues.CLEAR);
-        options.addAll(this.node.canvas.allowedValues(prop.anyType()).orElseThrow());
-
-        String name = prop.name();
-        Object currentValue = this.propertyManager.value(name);
-
         int editorWidth = this.owner.valueWidth(focused.rowIndex());
         int editorHeight = NodeRenderer.PROPERTY_PITCH;
         int editorX = this.owner.getX() + this.owner.getWidth()
@@ -212,29 +197,18 @@ public class NodePropertiesRenderer implements Renderable {
         int editorY = this.rowTop(focused.rowIndex());
 
         Vector2dc screenAnchor = viewport.canvasToScreen(editorX, editorY + editorHeight);
-        int popupX = (int) screenAnchor.x();
-        int popupY = (int) screenAnchor.y();
         int popupWidth = Math.max(editorWidth, (int) (editorWidth * viewport.zoom()));
-
-        final String propName = name;
-        return new DropdownPopup(popupX, popupY, popupWidth,
-                options, currentValue, picked -> {
-                    this.propertyManager.set(propName, picked == PropertyValues.CLEAR ? null : picked);
-                    this.owner.state().setFocusedProperty(this.node, null);
-                });
+        return this.buildPopup(focused.prop(), (int) screenAnchor.x(), (int) screenAnchor.y(), popupWidth);
     }
 
-    private static boolean isNumericCodec(Codec<?> codec) {
-        return codec == Codec.INT || codec == Codec.FLOAT || codec == Codec.DOUBLE;
-    }
-
-    private Number currentNumericValue(StoredPropertyDefinition<?> prop) {
-        Object current = this.propertyManager.value(prop.name());
-        Codec<?> codec = prop.type().value().codec();
-        if (codec == Codec.INT) return current instanceof Integer iv ? iv : 0;
-        if (codec == Codec.FLOAT) return current instanceof Float fv ? fv : 0f;
-        if (codec == Codec.DOUBLE) return current instanceof Double dv ? dv : 0.0;
-        return 0;
+    private <T> DropdownPopup<T> buildPopup(StoredPropertyDefinition<T> property, int x, int y, int width) {
+        List<Optional<T>> options = new ArrayList<>();
+        options.add(Optional.empty());
+        this.node.canvas.allowedValues(property).orElse(List.of()).forEach(value -> options.add(Optional.of(value)));
+        return new DropdownPopup<>(x, y, width, options, this.propertyManager.get(property), picked -> {
+            this.propertyManager.set(property, picked);
+            this.owner.state().setFocusedProperty(this.node, null);
+        });
     }
 
     @Override
@@ -260,7 +234,7 @@ public class NodePropertiesRenderer implements Renderable {
         }
         StoredPropertyDefinition<?> prop = this.propertyManager.stored().get(rowIndex);
 
-        boolean driven = this.propertyManager.isDriven(prop.name());
+        boolean driven = this.propertyManager.isDriven(prop);
         Object upstreamValue = driven ? this.resolveDrivenValue(prop) : null;
         boolean undriven = driven && upstreamValue == null;
 
@@ -282,10 +256,9 @@ public class NodePropertiesRenderer implements Renderable {
         }
 
         PropertyRow row = this.propertyRows.get(rowIndex);
-        PropertyEditor editor = row.editor();
+        PropertyEditor<?> editor = row.editor();
 
         if (!driven && editor != null) {
-            row.syncEditorValueFromNode();
             editor.setAlpha(alpha);
             editor.extractRenderState(graphics, mouseX, mouseY, 0f);
         } else if (!this.renderValue(graphics, prop, undriven ? null : (driven ? upstreamValue : this.propertyManager.value(prop.name())),
@@ -314,7 +287,7 @@ public class NodePropertiesRenderer implements Renderable {
                                    int rowIndex, int rowLeft, int rowTop, int rowWidth, int rowHeight) {
         var definition = visibleComputed(this.node)
                 .get(rowIndex - this.propertyManager.stored().size());
-        float alpha = this.owner.effectiveAlpha(definition.type());
+        float alpha = this.owner.effectiveAlpha(definition.anyType());
         int textY = rowTop + (rowHeight - font.lineHeight) / 2 + 1;
 
         graphics.text(font, NodeRenderer.propertyLabel(this.node, definition.name()),
@@ -331,15 +304,25 @@ public class NodePropertiesRenderer implements Renderable {
                 ARGB.multiply(PROPERTY_VALUE_DRIVEN_COLOR, ARGB.white(alpha)), false);
     }
 
-    private boolean renderValue(GuiGraphicsExtractor graphics, PropertyDefinition definition, @Nullable Object value,
+    private boolean renderValue(GuiGraphicsExtractor graphics, PropertyDefinition<?> definition, @Nullable Object value,
                                 int rowLeft, int rowTop, int rowWidth, int rowHeight,
                                 int mouseX, int mouseY, float alpha) {
         var renderer = valueRenderer(this.node, definition).orElse(null);
-        if (renderer == null || !renderer.valueType().isInstance(value)) {
-            return false;
-        }
-        return renderer.render(graphics, value, valueArea(renderer, rowLeft, rowTop, rowWidth, rowHeight),
-                mouseX, mouseY, alpha);
+        return renderer != null && renderValue(renderer, graphics, value,
+                valueArea(renderer, rowLeft, rowTop, rowWidth, rowHeight), mouseX, mouseY, alpha);
+    }
+
+    private static <T> boolean renderValue(PropertyValueRenderer<T> renderer, GuiGraphicsExtractor graphics,
+                                           @Nullable Object value, ScreenRectangle area, int mouseX, int mouseY, float alpha) {
+        Class<T> type = renderer.valueType();
+        return type.isInstance(value) && renderer.render(graphics, type.cast(value), area, mouseX, mouseY, alpha);
+    }
+
+    private static <T> boolean renderTooltip(PropertyValueRenderer<T> renderer, GuiGraphicsExtractor graphics,
+                                             @Nullable Object value, ScreenRectangle area, int mouseX, int mouseY,
+                                             int screenX, int screenY) {
+        Class<T> type = renderer.valueType();
+        return type.isInstance(value) && renderer.tooltip(graphics, type.cast(value), area, mouseX, mouseY, screenX, screenY);
     }
 
     private static ScreenRectangle valueArea(PropertyValueRenderer<?> renderer,
@@ -355,13 +338,13 @@ public class NodePropertiesRenderer implements Renderable {
             return this.propertyManager.computedValue(definition.name());
         }
         StoredPropertyDefinition<?> prop = stored.get(rowIndex);
-        if (this.propertyManager.isDriven(prop.name())) {
+        if (this.propertyManager.isDriven(prop)) {
             return this.resolveDrivenValue(prop);
         }
         return this.propertyRows.get(rowIndex).editor() == null ? this.propertyManager.value(prop.name()) : null;
     }
 
-    private PropertyDefinition definition(int rowIndex) {
+    private PropertyDefinition<?> definition(int rowIndex) {
         List<StoredPropertyDefinition<?>> stored = this.propertyManager.stored();
         return rowIndex < stored.size()
                 ? stored.get(rowIndex)
@@ -380,9 +363,7 @@ public class NodePropertiesRenderer implements Renderable {
             if (!area.containsPoint(x, y)) {
                 continue;
             }
-            Object value = this.displayedValue(row.rowIndex);
-            return renderer.valueType().isInstance(value)
-                    && renderer.tooltip(graphics, value, area, x, y, screenX, screenY);
+            return renderTooltip(renderer, graphics, this.displayedValue(row.rowIndex), area, x, y, screenX, screenY);
         }
         return false;
     }
@@ -390,7 +371,7 @@ public class NodePropertiesRenderer implements Renderable {
     private final class PropertyRow implements LayoutElement, Renderable {
         private final int rowIndex;
 
-        private final @Nullable PropertyEditor editor;
+        private final @Nullable PropertyEditor<?> editor;
 
         private int x;
         private int y;
@@ -407,50 +388,17 @@ public class NodePropertiesRenderer implements Renderable {
             this.editor = buildEditor(rowIndex);
         }
 
-        private @Nullable PropertyEditor buildEditor(int rowIndex) {
+        private @Nullable PropertyEditor<?> buildEditor(int rowIndex) {
             if (rowIndex >= NodePropertiesRenderer.this.propertyManager.stored().size()) {
                 return null;
             }
-            StoredPropertyDefinition<?> prop = NodePropertiesRenderer.this.propertyManager.stored().get(rowIndex);
-            Codec<?> codec = prop.type().value().codec();
-            final String propName = prop.name();
-            int editorW = NodePropertiesRenderer.this.owner.valueWidth(rowIndex);
-            int editorH = NodeRenderer.PROPERTY_PITCH;
-            if (isNumericCodec(codec)) {
-                Number seed = NodePropertiesRenderer.this.currentNumericValue(prop);
-                return new NumericPropertyEditor(0, 0, editorW, editorH,
-                        seed, codec,
-                        next -> NodePropertiesRenderer.this.propertyManager.set(propName, next));
-            }
-            if (isDropdownProperty(prop)) {
-                Object current = NodePropertiesRenderer.this.propertyManager.value(propName);
-                return new DropdownEditor(0, 0, editorW, editorH, current,
-                        () -> NodePropertiesRenderer.this.owner.state().setFocusedProperty(NodePropertiesRenderer.this.node, propName));
-            }
-            if (codec == Codec.BOOL) {
-                Object current = NodePropertiesRenderer.this.propertyManager.value(propName);
-                boolean seed = current instanceof Boolean b && b;
-                return new BooleanPropertyEditor(0, 0, editorW, editorH, seed,
-                        next -> NodePropertiesRenderer.this.propertyManager.set(propName, next));
-            }
-            return null;
+            return NodePropertiesRenderer.this.createEditor(
+                    NodePropertiesRenderer.this.propertyManager.stored().get(rowIndex),
+                    NodePropertiesRenderer.this.owner.valueWidth(rowIndex), NodeRenderer.PROPERTY_PITCH);
         }
 
-        @Nullable PropertyEditor editor() {
+        @Nullable PropertyEditor<?> editor() {
             return this.editor;
-        }
-
-        void syncEditorValueFromNode() {
-            if (this.editor == null) return;
-            StoredPropertyDefinition<?> prop = NodePropertiesRenderer.this.propertyManager.stored().get(this.rowIndex);
-            Object current = NodePropertiesRenderer.this.propertyManager.value(prop.name());
-            if (this.editor instanceof NumericPropertyEditor n) {
-                n.setValue(NodePropertiesRenderer.this.currentNumericValue(prop));
-            } else if (this.editor instanceof DropdownEditor d) {
-                d.setValue(current);
-            } else if (this.editor instanceof BooleanPropertyEditor b) {
-                b.setValue(current instanceof Boolean v && v);
-            }
         }
 
         @Override public int getX() { return this.x; }
@@ -489,16 +437,31 @@ public class NodePropertiesRenderer implements Renderable {
         }
     }
 
-    private @Nullable Object resolveDrivenValue(StoredPropertyDefinition<?> property) {
-        Object value = this.propertyManager.resolve(property.name()).orElse(null);
-        if (value != null) {
-            return value;
+    private <T> @Nullable PropertyEditor<T> createEditor(StoredPropertyDefinition<T> property, int width, int height) {
+        Class<T> type = property.type().dataType();
+        var numeric = NumericKind.of(type);
+        if (numeric.isPresent()) {
+            return this.numericEditor(property, numeric.get(), width, height);
         }
-        Codec<?> codec = property.anyType().value().codec();
-        if (codec == Codec.INT) return 0;
-        if (codec == Codec.FLOAT) return 0f;
-        if (codec == Codec.DOUBLE) return 0.0;
+        if (isDropdownProperty(property)) {
+            return new DropdownEditor<>(0, 0, width, height, this.propertyManager, property,
+                    () -> this.owner.state().setFocusedProperty(this.node, property.name()));
+        }
+        if (type == Boolean.class) {
+            return new BooleanPropertyEditor<>(0, 0, width, height, this.propertyManager, property);
+        }
         return null;
+    }
+
+    private <T, N extends Number> PropertyEditor<T> numericEditor(StoredPropertyDefinition<T> property, NumericKind<N> kind,
+                                                                  int width, int height) {
+        return new NumericPropertyEditor<>(0, 0, width, height, this.propertyManager, property, kind);
+    }
+
+    private @Nullable Object resolveDrivenValue(StoredPropertyDefinition<?> property) {
+        return this.propertyManager.resolve(property).<Object>map(value -> value)
+                .or(() -> NumericKind.of(property.type().dataType()).map(NumericKind::zero))
+                .orElse(null);
     }
 
     private static String formatPropertyValue(@Nullable Object value) {

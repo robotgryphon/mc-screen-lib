@@ -1,14 +1,15 @@
 package dev.robotgryphon.screenlib.client.ui.widget.property;
 
+import dev.robotgryphon.screenlib.graph.nodes.properties.PropertyManager;
+import dev.robotgryphon.screenlib.graph.nodes.properties.schema.StoredPropertyDefinition;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.ARGB;
 
-public final class DropdownEditor extends PropertyEditor {
+public final class DropdownEditor<T> extends PropertyEditor<T> {
     private static final int BG_HOVER_COLOR = 0xCC242530;
     private static final int CHEVRON_COLOR = 0xFFB0B3BC;
     private static final int CHEVRON_HOVER_COLOR = 0xFFFFFFFF;
@@ -16,14 +17,11 @@ public final class DropdownEditor extends PropertyEditor {
     private static final int H_PADDING = 6;
     private static final int CHEVRON_HALF_WIDTH = 2;
 
-    private Object value;
-
     private final Runnable onOpenRequested;
 
     public DropdownEditor(int x, int y, int width, int height,
-                          Object value, Runnable onOpenRequested) {
-        super(x, y, width, height);
-        this.value = value;
+                          PropertyManager properties, StoredPropertyDefinition<T> property, Runnable onOpenRequested) {
+        super(x, y, width, height, properties, property);
         this.onOpenRequested = onOpenRequested;
     }
 
@@ -35,18 +33,10 @@ public final class DropdownEditor extends PropertyEditor {
         return widest + 3 * H_PADDING + 2 * CHEVRON_HALF_WIDTH + 1;
     }
 
-    public Object getValue() {
-        return this.value;
-    }
-
-    public void setValue(Object value) {
-        this.value = value;
-    }
-
     @Override
     protected void extractWidgetRenderState(GuiGraphicsExtractor graphics,
                                             int mouseX, int mouseY, float partialTick) {
-        String display = this.value == null ? "—" : PropertyValues.display(this.value);
+        String display = this.current().map(PropertyValues::display).orElse("—");
         render(graphics, Minecraft.getInstance().font,
                 getX(), getY(), getWidth(), getHeight(),
                 mouseX, mouseY, display, getAlpha());

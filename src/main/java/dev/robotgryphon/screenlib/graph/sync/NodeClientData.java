@@ -1,15 +1,16 @@
 package dev.robotgryphon.screenlib.graph.sync;
 
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 
-import java.util.Arrays;
+import java.util.UUID;
 
-public record NodeClientData(int nodeIndex, String property, byte[] data) {
+public record NodeClientData(UUID node, String property, byte[] data) {
     public static final StreamCodec<RegistryFriendlyByteBuf, NodeClientData> STREAM_CODEC = StreamCodec.composite(
-            ByteBufCodecs.VAR_INT,
-            NodeClientData::nodeIndex,
+            UUIDUtil.STREAM_CODEC,
+            NodeClientData::node,
             ByteBufCodecs.STRING_UTF8,
             NodeClientData::property,
             ByteBufCodecs.BYTE_ARRAY,

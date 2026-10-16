@@ -1,14 +1,15 @@
 package dev.robotgryphon.screenlib.client.ui.widget.property;
 
+import dev.robotgryphon.screenlib.graph.nodes.properties.PropertyManager;
+import dev.robotgryphon.screenlib.graph.nodes.properties.schema.StoredPropertyDefinition;
 import dev.robotgryphon.screenlib.client.ui.widget.RoundedShapes;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.util.ARGB;
 
-import java.util.function.Consumer;
+import java.util.Optional;
 
-public final class BooleanPropertyEditor extends PropertyEditor {
+public final class BooleanPropertyEditor<T> extends PropertyEditor<T> {
     private static final int TRACK_WIDTH = 20;
     private static final int TRACK_HEIGHT = 10;
     private static final int THUMB_INSET = 1;
@@ -21,36 +22,25 @@ public final class BooleanPropertyEditor extends PropertyEditor {
     private static final int THUMB_ON_COLOR = 0xFF1F1F23;
     private static final int HOVER_OVERLAY = 0x22FFFFFF;
 
-    private boolean value;
-
-    private final Consumer<Boolean> onValueChanged;
-
     public BooleanPropertyEditor(int x, int y, int width, int height,
-                                 boolean value, Consumer<Boolean> onValueChanged) {
-        super(x, y, width, height);
-        this.value = value;
-        this.onValueChanged = onValueChanged;
+                                 PropertyManager properties, StoredPropertyDefinition<T> property) {
+        super(x, y, width, height, properties, property);
     }
 
-    public boolean getValue() {
-        return this.value;
-    }
-
-    public void setValue(boolean value) {
-        this.value = value;
+    private boolean value() {
+        return this.current().filter(Boolean.class::isInstance).map(Boolean.class::cast).orElse(false);
     }
 
     @Override
     protected void extractWidgetRenderState(GuiGraphicsExtractor graphics,
                                             int mouseX, int mouseY, float partialTick) {
         render(graphics, getX(), getY(), getWidth(), getHeight(),
-                mouseX, mouseY, this.value, getAlpha());
+                mouseX, mouseY, this.value(), getAlpha());
     }
 
     @Override
     public void onClick(MouseButtonEvent event, boolean doubleClick) {
-        this.value = !this.value;
-        this.onValueChanged.accept(this.value);
+        this.commit(Optional.of(this.toValue(!this.value())));
     }
 
     public static void render(GuiGraphicsExtractor graphics,

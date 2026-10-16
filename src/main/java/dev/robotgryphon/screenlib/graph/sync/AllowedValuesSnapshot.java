@@ -1,17 +1,11 @@
 package dev.robotgryphon.screenlib.graph.sync;
 
 import dev.robotgryphon.screenlib.graph.nodes.properties.AllowedValues;
-
-import com.mojang.serialization.Codec;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.core.RegistryAccess;
-import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.NbtOps;
-import net.minecraft.nbt.Tag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.resources.ResourceKey;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -20,45 +14,57 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-public record AllowedValuesSnapshot(Map<ResourceKey<GraphDataType<?>>, ListTag> values) {
-    public static final StreamCodec<RegistryFriendlyByteBuf, AllowedValuesSnapshot> STREAM_CODEC = StreamCodec.composite(
-            ByteBufCodecs.map(HashMap::new, ResourceKey.streamCodec(GraphDataType.REGISTRY_KEY), ByteBufCodecs.TAG.map(tag -> (ListTag) tag, tag -> tag)),
-            AllowedValuesSnapshot::values,
-            AllowedValuesSnapshot::new
-    );
+public record AllowedValuesSnapshot(List<Entry<?>> entries) {
+    private static final StreamCodec<RegistryFriendlyByteBuf, GraphDataType<?>> TYPE_STREAM_CODEC =
+            ByteBufCodecs.registry(GraphDataType.REGISTRY_KEY);
 
-    @SuppressWarnings("unchecked")
+    public static final StreamCodec<RegistryFriendlyByteBuf, AllowedValuesSnapshot> STREAM_CODEC = StreamCodec.of(
+            (buffer, snapshot) -> {
+                ByteBufCodecs.writeCount(buffer, snapshot.entries().size(), Integer.MAX_VALUE);
+                snapshot.entries().forEach(entry -> entry.write(buffer));
+            },
+            buffer -> {
+                int size = ByteBufCodecs.readCount(buffer, Integer.MAX_VALUE);
+                List<Entry<?>> entries = new ArrayList<>(size);
+                for (int i = 0; i < size; i++) {
+                    entries.add(Entry.read(TYPE_STREAM_CODEC.decode(buffer), buffer));
+                }
+                return new AllowedValuesSnapshot(List.copyOf(entries));
+            });
+
     public static AllowedValuesSnapshot capture(RegistryAccess registries) {
-        var ops = registries.createSerializationContext(NbtOps.INSTANCE);
-        Map<ResourceKey<GraphDataType<?>>, ListTag> captured = new HashMap<>();
-        registries.lookupOrThrow(GraphDataType.REGISTRY_KEY).listElements().forEach(holder -> {
-            Optional<Collection<Object>> values = AllowedValues.unchecked(holder.value().allowedValues(registries));
-            if (values.isEmpty()) {
-                return;
-            }
-            Codec<Object> codec = (Codec<Object>) holder.value().codec();
-            ListTag list = new ListTag();
-            for (Object value : values.get()) {
-                codec.encodeStart(ops, value).result().ifPresent(list::add);
-            }
-            captured.put(holder.key(), list);
-        });
-        return new AllowedValuesSnapshot(captured);
+        List<Entry<?>> entries = new ArrayList<>();
+        registries.lookupOrThrow(GraphDataType.REGISTRY_KEY).listElements()
+                .forEach(holder -> Entry.capture(holder.value(), registries).ifPresent(entries::add));
+        return new AllowedValuesSnapshot(List.copyOf(entries));
     }
 
-    @SuppressWarnings("unchecked")
-    public AllowedValues resolve(RegistryAccess registries) {
-        var ops = registries.createSerializationContext(NbtOps.INSTANCE);
-        var types = registries.lookupOrThrow(GraphDataType.REGISTRY_KEY);
-        Map<ResourceKey<GraphDataType<?>>, Collection<Object>> decoded = new HashMap<>();
-        this.values.forEach((key, list) -> types.get(key).ifPresent(holder -> {
-            Codec<Object> codec = (Codec<Object>) holder.value().codec();
-            List<Object> out = new ArrayList<>();
-            for (Tag tag : list) {
-                codec.parse(ops, tag).result().ifPresent(out::add);
+    public AllowedValues resolve() {
+        Map<GraphDataType<?>, Collection<Object>> resolved = new HashMap<>();
+        for (Entry<?> entry : this.entries) {
+            resolved.put(entry.type(), List.copyOf(entry.values()));
+        }
+        return type -> Optional.ofNullable(resolved.get(type.value()));
+    }
+
+    public record Entry<T>(GraphDataType<T> type, List<T> values) {
+        static <T> Optional<Entry<T>> capture(GraphDataType<T> type, RegistryAccess registries) {
+            return type.allowedValues(registries).map(values -> new Entry<>(type, List.copyOf(values)));
+        }
+
+        static <T> Entry<T> read(GraphDataType<T> type, RegistryFriendlyByteBuf buffer) {
+            int size = ByteBufCodecs.readCount(buffer, Integer.MAX_VALUE);
+            List<T> values = new ArrayList<>(size);
+            for (int i = 0; i < size; i++) {
+                values.add(type.streamCodec().decode(buffer));
             }
-            decoded.put(key, List.copyOf(out));
-        }));
-        return type -> type.unwrapKey().map(decoded::get);
+            return new Entry<>(type, List.copyOf(values));
+        }
+
+        void write(RegistryFriendlyByteBuf buffer) {
+            TYPE_STREAM_CODEC.encode(buffer, this.type);
+            ByteBufCodecs.writeCount(buffer, this.values.size(), Integer.MAX_VALUE);
+            this.values.forEach(value -> this.type.streamCodec().encode(buffer, value));
+        }
     }
 }

@@ -21,8 +21,7 @@ public final class PropertyRenderers {
     public static final DeferredHolder<PropertyValueRenderer<?>, ItemHandlerBlockRenderer> ITEM_HANDLER_BLOCK =
             RENDERERS.register("item_handler_block", ItemHandlerBlockRenderer::new);
 
-    @SuppressWarnings("unchecked")
-    public static @Nullable PropertyValueRenderer<Object> get(ResourceKey<PropertyValueRenderer<?>> type) {
-        return (PropertyValueRenderer<Object>) REGISTRY.getValue(type);
+    public static @Nullable PropertyValueRenderer<?> get(ResourceKey<PropertyValueRenderer<?>> type) {
+        return REGISTRY.getValue(type);
     }
 }

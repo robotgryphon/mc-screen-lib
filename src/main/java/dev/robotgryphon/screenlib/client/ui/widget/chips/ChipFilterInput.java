@@ -14,7 +14,12 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -44,6 +49,7 @@ public class ChipFilterInput<F> extends AbstractWidget {
     private final CycleButton<F> modeButton;
     private final EditBox searchField;
     private final ChipHolder chipHolder;
+    private final Map<Chip, ChipFilter<F>> chipFilters = new IdentityHashMap<>();
 
     private F currentMode;
     private List<ChipSuggestion> activeSuggestions = List.of();
@@ -95,14 +101,17 @@ public class ChipFilterInput<F> extends AbstractWidget {
 
     public Stream<ChipFilter<F>> filters() {
         return this.chipHolder.chips()
-                .map(this::chipFilterOf)
-                .filter(f -> f != null);
+                .map(this.chipFilters::get)
+                .filter(Objects::nonNull);
     }
 
-    @SuppressWarnings("unchecked")
-    private @Nullable ChipFilter<F> chipFilterOf(Chip chip) {
-        Object data = chip.data();
-        return (data instanceof ChipFilter<?> filter) ? (ChipFilter<F>) filter : null;
+    private void addFilterChip(int dotColor, Component value, ChipFilter<F> filter) {
+        Chip chip = this.chipHolder.addChip(b -> b
+                .dotColor(dotColor)
+                .category(this.modeLabel.apply(filter.mode()))
+                .value(value)
+                .dismissable());
+        this.chipFilters.put(chip, filter);
     }
 
     public F currentMode() {
@@ -131,14 +140,7 @@ public class ChipFilterInput<F> extends AbstractWidget {
     }
 
     private void commitSuggestion(ChipSuggestion suggestion) {
-        F mode = this.currentMode;
-        Component category = this.modeLabel.apply(mode);
-        this.chipHolder.addChip(b -> b
-                .dotColor(suggestion.dotColor())
-                .category(category)
-                .value(suggestion.label())
-                .dismissable()
-                .data(new ChipFilter<>(mode, suggestion.value())));
+        this.addFilterChip(suggestion.dotColor(), suggestion.label(), new ChipFilter<>(this.currentMode, suggestion.value()));
         this.searchField.setValue("");
         this.activeSuggestions = List.of();
     }
@@ -153,12 +155,7 @@ public class ChipFilterInput<F> extends AbstractWidget {
             return false;
         }
         F mode = this.currentMode;
-        this.chipHolder.addChip(b -> b
-                .dotColor(this.modeColor.apply(mode))
-                .category(this.modeLabel.apply(mode))
-                .value(Component.literal(text))
-                .dismissable()
-                .data(new ChipFilter<>(mode, text)));
+        this.addFilterChip(this.modeColor.apply(mode), Component.literal(text), new ChipFilter<>(mode, text));
         this.searchField.setValue("");
         this.activeSuggestions = List.of();
         return true;
@@ -306,6 +303,9 @@ public class ChipFilterInput<F> extends AbstractWidget {
     }
 
     private void fireOnChange() {
+        Set<Chip> current = Collections.newSetFromMap(new IdentityHashMap<>());
+        this.chipHolder.chips().forEach(current::add);
+        this.chipFilters.keySet().retainAll(current);
         if (this.onChange != null) {
             this.onChange.run();
         }

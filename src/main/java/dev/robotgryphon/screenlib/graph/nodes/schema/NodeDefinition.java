@@ -1,10 +1,12 @@
 package dev.robotgryphon.screenlib.graph.nodes.schema;
 
+import dev.robotgryphon.screenlib.graph.nodes.properties.PropertyValues;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
 import dev.robotgryphon.screenlib.graph.nodes.properties.schema.ComputedPropertyDefinition;
 import dev.robotgryphon.screenlib.graph.nodes.properties.schema.ConstantPropertyDefinition;
 import dev.robotgryphon.screenlib.graph.nodes.properties.schema.PropertyDefinition;
 import dev.robotgryphon.screenlib.graph.nodes.properties.schema.StoredPropertyDefinition;
-
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -24,7 +26,7 @@ import java.util.Optional;
 
 public record NodeDefinition(List<InputPortDefinition> inputs,
                              List<OutputPortDefinition> outputs,
-                             List<PropertyDefinition> properties,
+                             List<PropertyDefinition<?>> properties,
                              List<Holder<NodeContextSupplier>> context,
                              boolean hidden) {
     public static final ResourceKey<Registry<NodeDefinition>> REGISTRY_KEY =
@@ -64,7 +66,7 @@ public record NodeDefinition(List<InputPortDefinition> inputs,
                 return DataResult.error(() -> "Output references unknown property '" + output.property() + "'");
             }
         }
-        for (ComputedPropertyDefinition computed : definition.computed()) {
+        for (ComputedPropertyDefinition<?> computed : definition.computed()) {
             var error = validateData(definition, computed);
             if (error.isPresent()) {
                 return DataResult.error(error::get);
@@ -73,7 +75,7 @@ public record NodeDefinition(List<InputPortDefinition> inputs,
         return DataResult.success(definition);
     }
 
-    private static Optional<String> validateData(NodeDefinition definition, ComputedPropertyDefinition computed) {
+    private static Optional<String> validateData(NodeDefinition definition, ComputedPropertyDefinition<?> computed) {
         String prefix = "Computed property '" + computed.name() + "'";
         for (var entry : computed.data().entrySet()) {
             if (definition.property(entry.getValue()).isEmpty()) {
@@ -106,7 +108,19 @@ public record NodeDefinition(List<InputPortDefinition> inputs,
         return Optional.empty();
     }
 
-    public Optional<PropertyDefinition> property(String name) {
+    public Codec<PropertyValues> storedValuesCodec() {
+        return PropertyValues.codec(this.stored());
+    }
+
+    public StreamCodec<RegistryFriendlyByteBuf, PropertyValues> storedValuesStreamCodec() {
+        return PropertyValues.streamCodec(this.stored());
+    }
+
+    public StreamCodec<RegistryFriendlyByteBuf, PropertyValues> computedValuesStreamCodec() {
+        return PropertyValues.streamCodec(this.computed());
+    }
+
+    public Optional<PropertyDefinition<?>> property(String name) {
         return this.properties.stream().filter(property -> property.name().equals(name)).findFirst();
     }
 
@@ -120,18 +134,18 @@ public record NodeDefinition(List<InputPortDefinition> inputs,
                 .toList();
     }
 
-    public List<ConstantPropertyDefinition> constants() {
+    public List<ConstantPropertyDefinition<?>> constants() {
         return this.properties.stream()
-                .<ConstantPropertyDefinition>mapMulti((property, out) -> {
-                    if (property instanceof ConstantPropertyDefinition constant) out.accept(constant);
+                .<ConstantPropertyDefinition<?>>mapMulti((property, out) -> {
+                    if (property instanceof ConstantPropertyDefinition<?> constant) out.accept(constant);
                 })
                 .toList();
     }
 
-    public List<ComputedPropertyDefinition> computed() {
+    public List<ComputedPropertyDefinition<?>> computed() {
         return this.properties.stream()
-                .<ComputedPropertyDefinition>mapMulti((property, out) -> {
-                    if (property instanceof ComputedPropertyDefinition computed) out.accept(computed);
+                .<ComputedPropertyDefinition<?>>mapMulti((property, out) -> {
+                    if (property instanceof ComputedPropertyDefinition<?> computed) out.accept(computed);
                 })
                 .toList();
     }

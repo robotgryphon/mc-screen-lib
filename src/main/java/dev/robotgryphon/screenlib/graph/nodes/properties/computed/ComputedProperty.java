@@ -1,7 +1,8 @@
 package dev.robotgryphon.screenlib.graph.nodes.properties.computed;
 
+import net.neoforged.neoforge.registries.DeferredHolder;
+import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import dev.robotgryphon.screenlib.graph.nodes.properties.DataKey;
-
 import dev.robotgryphon.screenlib.ScreenLib;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
@@ -18,7 +19,13 @@ public interface ComputedProperty<T> {
 
     Codec<Holder<ComputedProperty<?>>> HOLDER_CODEC = RegistryCodecs.holder(REGISTRY_KEY);
 
+    DeferredHolder<GraphDataType<?>, ? extends GraphDataType<T>> type();
+
     List<DataKey<?>> requires();
 
     Optional<T> compute(ComputeContext context);
+
+    default Optional<ClientDataProvider<T, ?>> clientDataProvider() {
+        return Optional.empty();
+    }
 }

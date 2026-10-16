@@ -1,6 +1,9 @@
 package dev.robotgryphon.screenlib.graph.types;
 
 import com.mojang.serialization.Codec;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 
 public class IntGraphDataType implements GraphDataType<Integer> {
     @Override
@@ -11,5 +14,10 @@ public class IntGraphDataType implements GraphDataType<Integer> {
     @Override
     public Codec<Integer> codec() {
         return Codec.INT;
+    }
+
+    @Override
+    public StreamCodec<? super RegistryFriendlyByteBuf, Integer> streamCodec() {
+        return ByteBufCodecs.VAR_INT;
     }
 }

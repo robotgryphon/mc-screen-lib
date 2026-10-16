@@ -16,6 +16,11 @@ public class BlockPreviewRenderer implements NodeStateRenderer<BlockState> {
     private static final int SIZE = 40;
 
     @Override
+    public Class<BlockState> stateType() {
+        return BlockState.class;
+    }
+
+    @Override
     public int width() {
         return SIZE;
     }

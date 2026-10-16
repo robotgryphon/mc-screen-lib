@@ -1,8 +1,9 @@
 package dev.robotgryphon.screenlib.graph.nodes.properties;
 
+import dev.robotgryphon.screenlib.graph.nodes.properties.schema.PropertyDefinition;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
-
 import dev.robotgryphon.screenlib.graph.nodes.properties.schema.ComputedPropertyDefinition;
+import dev.robotgryphon.screenlib.graph.nodes.properties.schema.ConstantPropertyDefinition;
 import dev.robotgryphon.screenlib.graph.nodes.properties.schema.StoredPropertyDefinition;
 import dev.robotgryphon.screenlib.graph.nodes.schema.NodeDefinition;
 import org.jspecify.annotations.Nullable;
@@ -18,30 +19,41 @@ public final class PropertyManager {
 
     private final Node node;
     private final List<StoredPropertyDefinition<?>> stored;
-    private final List<ComputedPropertyDefinition> computed;
-    private final Map<String, Object> constants = new HashMap<>();
-    private final Map<String, Object> values = new HashMap<>();
-    private final Map<String, Object> computedValues = new HashMap<>();
-    private final Map<String, PropertyDataSource> sources = new HashMap<>();
+    private final List<ComputedPropertyDefinition<?>> computed;
+    private final List<ConstantPropertyDefinition<?>> constants;
+    private PropertyValues values = PropertyValues.EMPTY;
+    private PropertyValues computedValues = PropertyValues.EMPTY;
+    private final Map<String, PropertyDataSource<?>> sources = new HashMap<>();
     private final Set<String> resolving = new HashSet<>();
 
     public PropertyManager(Node node, NodeDefinition definition) {
         this.node = node;
         this.stored = definition.stored();
         this.computed = definition.computed();
-        definition.constants().forEach(constant -> this.constants.put(constant.name(), constant.value()));
+        this.constants = definition.constants();
         for (StoredPropertyDefinition<?> property : this.stored) {
-            property.type().value().defaultValueRaw()
-                    .ifPresent(value -> this.values.put(property.name(), value));
+            this.values = withDefault(this.values, property);
         }
+    }
+
+    private static <T> PropertyValues withDefault(PropertyValues values, StoredPropertyDefinition<T> property) {
+        return values.with(property, property.type().defaultValueRaw());
     }
 
     public List<StoredPropertyDefinition<?>> stored() {
         return this.stored;
     }
 
-    public List<ComputedPropertyDefinition> computedProperties() {
+    public List<ComputedPropertyDefinition<?>> computedProperties() {
         return this.computed;
+    }
+
+    public PropertyValues values() {
+        return this.values;
+    }
+
+    public <T> Optional<T> get(StoredPropertyDefinition<T> property) {
+        return this.values.get(property);
     }
 
     public @Nullable Object value(String name) {
@@ -50,58 +62,116 @@ public final class PropertyManager {
             return stored;
         }
         Object computed = this.computedValues.get(name);
-        return computed != null ? computed : this.constants.get(name);
+        if (computed != null) {
+            return computed;
+        }
+        for (ConstantPropertyDefinition<?> constant : this.constants) {
+            if (constant.name().equals(name)) {
+                return constant.value();
+            }
+        }
+        return null;
+    }
+
+    public void load(PropertyValues saved) {
+        this.values = this.values.merge(saved);
     }
 
     public void set(String name, @Nullable Object value) {
+        for (StoredPropertyDefinition<?> property : this.stored) {
+            if (property.name().equals(name)) {
+                this.setChecked(property, value);
+                return;
+            }
+        }
+    }
+
+    private <T> void setChecked(StoredPropertyDefinition<T> property, @Nullable Object value) {
+        Class<T> type = property.type().dataType();
         if (value == null) {
-            this.values.remove(name);
-        } else {
-            this.values.put(name, value);
+            this.set(property, Optional.empty());
+        } else if (type.isInstance(value)) {
+            this.set(property, Optional.of(type.cast(value)));
         }
-        this.node.canvas.touch();
     }
 
-    public void bind(String name, PropertyDataSource source) {
-        this.sources.put(name, source);
+    public <T> void set(StoredPropertyDefinition<T> property, Optional<T> value) {
+        this.values = this.values.with(property, value);
+        this.node.canvas.propertyChanged(this.node, property, value);
     }
 
-    public void unbind(String name) {
-        this.sources.remove(name);
+    public <T> void bind(StoredPropertyDefinition<T> property, PropertyDataSource<T> source) {
+        this.sources.put(property.name(), source);
     }
 
-    public boolean isDriven(String name) {
-        return this.sources.containsKey(name);
+    public void unbind(StoredPropertyDefinition<?> property) {
+        this.sources.remove(property.name());
     }
 
-    public Optional<Object> resolve(String name) {
-        PropertyDataSource source = this.sources.get(name);
+    public boolean isDriven(StoredPropertyDefinition<?> property) {
+        return this.sources.containsKey(property.name());
+    }
+
+    public <T> Optional<T> resolve(PropertyDefinition<T> property) {
+        return switch (property) {
+            case StoredPropertyDefinition<T> stored -> this.resolveStored(stored);
+            case ComputedPropertyDefinition<T> computed -> this.computedValues.get(computed);
+            case ConstantPropertyDefinition<T> constant -> Optional.of(constant.value());
+        };
+    }
+
+    private <T> Optional<T> resolveStored(StoredPropertyDefinition<T> property) {
+        PropertyDataSource<?> source = this.sources.get(property.name());
         if (source == null) {
-            return Optional.ofNullable(this.value(name));
+            return this.values.get(property);
         }
-        if (!this.resolving.add(name)) {
+        if (!this.resolving.add(property.name())) {
             return Optional.empty();
         }
         try {
-            return source.resolve();
+            return PropertyDataSource.as(property.type().dataType(), source).resolve();
         } finally {
-            this.resolving.remove(name);
+            this.resolving.remove(property.name());
         }
+    }
+
+    public Optional<Object> resolve(String name) {
+        return this.property(name).flatMap(this::resolveAny);
+    }
+
+    private <T> Optional<Object> resolveAny(PropertyDefinition<T> property) {
+        return this.resolve(property).map(value -> value);
+    }
+
+    public Optional<PropertyDefinition<?>> property(String name) {
+        return this.node.definition().value().property(name);
     }
 
     public @Nullable Object computedValue(String name) {
         return this.computedValues.get(name);
     }
 
-    public void setComputedValue(String name, @Nullable Object value) {
-        if (value == null) {
-            this.computedValues.remove(name);
-        } else {
-            this.computedValues.put(name, value);
+    public <T> Optional<T> computed(ComputedPropertyDefinition<T> property) {
+        return this.computedValues.get(property);
+    }
+
+    public <T> boolean setComputed(ComputedPropertyDefinition<T> property, Optional<T> value) {
+        if (this.computedValues.get(property).equals(value)) {
+            return false;
         }
+        this.computedValues = this.computedValues.with(property, value);
+        return true;
+    }
+
+    public PropertyValues computedValues() {
+        return this.computedValues;
+    }
+
+    public void loadComputed(PropertyValues values) {
+        this.computedValues = values;
     }
 
     public void clearComputed() {
-        this.computedValues.clear();
+        this.computedValues = PropertyValues.EMPTY;
     }
 }

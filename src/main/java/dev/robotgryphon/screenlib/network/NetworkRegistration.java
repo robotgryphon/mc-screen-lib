@@ -10,11 +10,13 @@ public final class NetworkRegistration {
     public static void register(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar("1");
 
-        registrar.playToServer(
-                UpdateCanvasStatePayload.TYPE,
-                UpdateCanvasStatePayload.STREAM_CODEC,
-                ServerPayloadHandler::handleUpdate
-        );
+        registrar.playToServer(MoveNodePayload.TYPE, MoveNodePayload.STREAM_CODEC, ServerPayloadHandler::handleCanvasEdit);
+        registrar.playToServer(SetNodePropertyPayload.TYPE, SetNodePropertyPayload.STREAM_CODEC, ServerPayloadHandler::handleCanvasEdit);
+        registrar.playToServer(ConnectNodesPayload.TYPE, ConnectNodesPayload.STREAM_CODEC, ServerPayloadHandler::handleCanvasEdit);
+        registrar.playToServer(DisconnectNodesPayload.TYPE, DisconnectNodesPayload.STREAM_CODEC, ServerPayloadHandler::handleCanvasEdit);
+        registrar.playToServer(RemoveNodePayload.TYPE, RemoveNodePayload.STREAM_CODEC, ServerPayloadHandler::handleCanvasEdit);
+
+        registrar.playToClient(CanvasSyncPayload.TYPE, CanvasSyncPayload.STREAM_CODEC, ClientPayloadHandler::handleSync);
 
         registrar.playToServer(
                 SubscribeClientDataPayload.TYPE,

@@ -40,4 +40,26 @@ public record CanvasState(UUID id, List<NodeState> nodes, List<ConnectionState> 
     public CanvasState withContents(List<NodeState> nodes, List<ConnectionState> connections) {
         return new CanvasState(this.id, nodes, connections);
     }
+
+    public Optional<NodeState> node(UUID id) {
+        return this.nodes.stream().filter(node -> node.id().equals(id)).findFirst();
+    }
+
+    public CanvasState withNode(NodeState replacement) {
+        return this.withContents(this.nodes.stream()
+                .map(node -> node.id().equals(replacement.id()) ? replacement : node)
+                .toList(), this.connections);
+    }
+
+    public CanvasState withoutNode(UUID id) {
+        return this.withContents(
+                this.nodes.stream().filter(node -> !node.id().equals(id)).toList(),
+                this.connections.stream()
+                        .filter(connection -> !connection.sourceNode().equals(id) && !connection.targetNode().equals(id))
+                        .toList());
+    }
+
+    public CanvasState withConnections(List<ConnectionState> connections) {
+        return this.withContents(this.nodes, connections);
+    }
 }

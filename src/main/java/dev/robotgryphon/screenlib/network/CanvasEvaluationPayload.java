@@ -11,7 +11,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 
 import java.util.List;
 
-public record CanvasEvaluationPayload(int sequence, List<NodeValidity> validity,
+public record CanvasEvaluationPayload(List<NodeValidity> validity,
                                       List<NodeComputed> computed,
                                       List<NodeClientData> clientData) implements CustomPacketPayload {
     public static final Type<CanvasEvaluationPayload> TYPE =
@@ -19,8 +19,6 @@ public record CanvasEvaluationPayload(int sequence, List<NodeValidity> validity,
 
     public static final StreamCodec<RegistryFriendlyByteBuf, CanvasEvaluationPayload> STREAM_CODEC =
             StreamCodec.composite(
-                    ByteBufCodecs.VAR_INT,
-                    CanvasEvaluationPayload::sequence,
                     NodeValidity.STREAM_CODEC.apply(ByteBufCodecs.list()),
                     CanvasEvaluationPayload::validity,
                     NodeComputed.STREAM_CODEC.apply(ByteBufCodecs.list()),

@@ -1,7 +1,8 @@
 package dev.robotgryphon.screenlib.graph.nodes.properties.computed;
 
+import net.neoforged.neoforge.registries.DeferredHolder;
+import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import dev.robotgryphon.screenlib.graph.nodes.properties.DataKey;
-
 import dev.robotgryphon.screenlib.ScreenLib;
 import net.minecraft.core.BlockPos;
 
@@ -12,6 +13,11 @@ public class BlockPositionFromCoordinates implements ComputedProperty<BlockPos> 
     public static final DataKey<Integer> X = DataKey.required("x", ScreenLib.INTEGER_DATA_TYPE);
     public static final DataKey<Integer> Y = DataKey.required("y", ScreenLib.INTEGER_DATA_TYPE);
     public static final DataKey<Integer> Z = DataKey.required("z", ScreenLib.INTEGER_DATA_TYPE);
+
+    @Override
+    public DeferredHolder<GraphDataType<?>, ? extends GraphDataType<BlockPos>> type() {
+        return ScreenLib.BLOCK_POS_DATA_TYPE;
+    }
 
     @Override
     public List<DataKey<?>> requires() {
