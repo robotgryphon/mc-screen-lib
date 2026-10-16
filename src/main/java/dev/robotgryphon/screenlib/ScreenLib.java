@@ -7,17 +7,14 @@ import dev.robotgryphon.screenlib.graph.nodes.properties.computed.ComputedProper
 import dev.robotgryphon.screenlib.graph.nodes.properties.computed.ItemHandlerAt;
 import dev.robotgryphon.screenlib.graph.nodes.context.NodeContextSupplier;
 import dev.robotgryphon.screenlib.graph.nodes.context.PlayerPosition;
-import dev.robotgryphon.screenlib.menu.AddNodeMenu;
 import dev.robotgryphon.screenlib.network.NetworkRegistration;
 import dev.robotgryphon.screenlib.graph.types.*;
 import dev.robotgryphon.screenlib.graph.nodes.schema.NodeDefinition;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
-import net.minecraft.world.inventory.MenuType;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NewDatapackRegistryEvent;
@@ -33,12 +30,6 @@ public class ScreenLib {
 
     public static final DeferredRegister<GraphDataType<?>> LIB_DATA_TYPES =
             DeferredRegister.create(GraphDataType.REGISTRY_KEY, MOD_ID);
-
-    public static final DeferredRegister<MenuType<?>> MENU_TYPES =
-            DeferredRegister.create(Registries.MENU, MOD_ID);
-
-    public static final DeferredHolder<MenuType<?>, MenuType<AddNodeMenu>> ADD_NODE_MENU =
-            MENU_TYPES.register("add_node", () -> IMenuTypeExtension.create(AddNodeMenu::new));
 
     public static final DeferredRegister<ComputedProperty<?>> COMPUTED_PROPERTIES =
             DeferredRegister.create(ComputedProperty.REGISTRY_KEY, MOD_ID);
@@ -89,7 +80,6 @@ public class ScreenLib {
         LIB_DATA_TYPES.register(modBus);
         COMPUTED_PROPERTIES.register(modBus);
         CONTEXT_SUPPLIERS.register(modBus);
-        MENU_TYPES.register(modBus);
     }
 
     public static Identifier id(String path) {

@@ -27,21 +27,31 @@ public class ContextMenu {
 
     public ContextMenu(int x, int y, List<Item> items) {
         this.items = List.copyOf(items);
-
-        Font font = Minecraft.getInstance().font;
-        int maxLabel = 0;
-        for (Item it : this.items) {
-            maxLabel = Math.max(maxLabel, font.width(it.label()));
-        }
-
         this.x = x;
         this.y = y;
-        this.width = maxLabel + 2 * H_PADDING;
-        this.height = this.items.size() * ROW_HEIGHT + 2 * V_PADDING;
+        this.width = width(this.items);
+        this.height = height(this.items);
     }
 
     public static ContextMenu above(int x, int bottom, List<Item> items) {
-        return new ContextMenu(x, bottom - items.size() * ROW_HEIGHT - 2 * V_PADDING, items);
+        return new ContextMenu(x, bottom - height(items), items);
+    }
+
+    public static ContextMenu leftOf(int right, int bottom, List<Item> items) {
+        return new ContextMenu(right - width(items), bottom - height(items), items);
+    }
+
+    private static int width(List<Item> items) {
+        Font font = Minecraft.getInstance().font;
+        int maxLabel = 0;
+        for (Item it : items) {
+            maxLabel = Math.max(maxLabel, font.width(it.label()));
+        }
+        return maxLabel + 2 * H_PADDING;
+    }
+
+    private static int height(List<Item> items) {
+        return items.size() * ROW_HEIGHT + 2 * V_PADDING;
     }
 
     public boolean contains(double mouseX, double mouseY) {

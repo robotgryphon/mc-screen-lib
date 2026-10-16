@@ -28,6 +28,6 @@ public final class BlockPreviews {
         }
         float size = Math.min(bottomRight.x() - topLeft.x(), bottomRight.y() - topLeft.y());
         graphics.submitPictureInPictureRenderState(new BlockPreviewRenderState(level, pos, state,
-                new ScreenRectangle(x0, y0, x1 - x0, y1 - y0), size * BLOCK_SCALE));
+                new ScreenRectangle(x0, y0, x1 - x0, y1 - y0), size * BLOCK_SCALE, graphics.peekScissorStack()));
     }
 }

@@ -3,6 +3,15 @@ package dev.robotgryphon.screenlib.menu;
 import dev.robotgryphon.screenlib.graph.canvas.CanvasSupplier;
 import dev.robotgryphon.screenlib.graph.nodes.NodeReference;
 import dev.robotgryphon.screenlib.graph.state.CanvasState;
+import dev.robotgryphon.screenlib.graph.state.NodeState;
+import dev.robotgryphon.screenlib.graph.nodes.context.NodeCreationContext;
+import dev.robotgryphon.screenlib.graph.nodes.properties.PropertyValues;
+import dev.robotgryphon.screenlib.graph.nodes.properties.schema.StoredPropertyDefinition;
+import dev.robotgryphon.screenlib.graph.nodes.schema.NodeDefinition;
+import net.minecraft.core.Holder;
+import net.minecraft.resources.ResourceKey;
+import org.joml.Vector2i;
+import org.joml.Vector2ic;
 import dev.robotgryphon.screenlib.graph.sync.CanvasEvaluation;
 import dev.robotgryphon.screenlib.graph.evaluation.CanvasEvaluator;
 import dev.robotgryphon.screenlib.graph.sync.ClientDataSubscription;
@@ -23,6 +32,7 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -116,6 +126,43 @@ public abstract class CanvasMenu extends AbstractContainerMenu {
         this.state = this.source.canvas().state();
         this.session = CanvasEvaluator.open(this.state, server.registryAccess(), server);
         this.push(true);
+    }
+
+    public void addNode(ServerPlayer player, ResourceKey<NodeDefinition> type, Vector2ic position) {
+        if (this.source == null) {
+            return;
+        }
+        Optional<Holder.Reference<NodeDefinition>> definition = player.registryAccess()
+                .lookupOrThrow(NodeDefinition.REGISTRY_KEY)
+                .get(type)
+                .filter(candidate -> !candidate.value().hidden());
+        if (definition.isEmpty()) {
+            return;
+        }
+        var server = player.level().getServer();
+        CanvasState current = this.source.canvas().state();
+        List<NodeState> nodes = new ArrayList<>(current.nodes());
+        nodes.add(new NodeState(UUID.randomUUID(), definition.get(), new Vector2i(position),
+                initialProperties(definition.get(), new NodeCreationContext(player, this.source))));
+        this.source.update(current.withContents(nodes, current.connections()), server);
+        this.state = this.source.canvas().state();
+        this.session = CanvasEvaluator.open(this.state, server.registryAccess(), server);
+        PacketDistributor.sendToPlayer(player, new CanvasSyncPayload(this.state));
+        this.push(true);
+    }
+
+    private static PropertyValues initialProperties(Holder<NodeDefinition> definition, NodeCreationContext context) {
+        PropertyValues values = PropertyValues.EMPTY;
+        for (var supplier : definition.value().context()) {
+            for (var entry : supplier.value().supply(context).entrySet()) {
+                for (StoredPropertyDefinition<?> property : definition.value().stored()) {
+                    if (property.name().equals(entry.getKey()) && entry.getValue() != null) {
+                        values = values.withChecked(property, entry.getValue());
+                    }
+                }
+            }
+        }
+        return values;
     }
 
     @Override

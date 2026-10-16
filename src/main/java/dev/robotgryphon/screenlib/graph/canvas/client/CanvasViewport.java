@@ -1,5 +1,6 @@
 package dev.robotgryphon.screenlib.graph.canvas.client;
 
+import net.minecraft.client.gui.navigation.ScreenRectangle;
 import org.joml.Matrix3x2fStack;
 import org.joml.Vector2d;
 import org.joml.Vector2dc;
@@ -23,15 +24,15 @@ public class CanvasViewport {
         this.panY += y;
     }
 
-    public ViewportState state(int screenWidth, int screenHeight) {
-        Vector2dc center = this.screenToCanvas(screenWidth / 2.0, screenHeight / 2.0);
+    public ViewportState state(ScreenRectangle area) {
+        Vector2dc center = this.screenToCanvas(area.left() + area.width() / 2.0, area.top() + area.height() / 2.0);
         return new ViewportState(center.x(), center.y(), this.zoom);
     }
 
-    public void apply(ViewportState state, int screenWidth, int screenHeight) {
+    public void apply(ViewportState state, ScreenRectangle area) {
         this.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, state.zoom()));
-        this.panX = (float) (screenWidth / 2.0 - state.centerX() * this.zoom);
-        this.panY = (float) (screenHeight / 2.0 - state.centerY() * this.zoom);
+        this.panX = (float) (area.left() + area.width() / 2.0 - state.centerX() * this.zoom);
+        this.panY = (float) (area.top() + area.height() / 2.0 - state.centerY() * this.zoom);
     }
 
     public float zoom() {

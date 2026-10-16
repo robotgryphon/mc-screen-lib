@@ -1,7 +1,6 @@
 package dev.robotgryphon.testmod;
 
 import com.mojang.logging.LogUtils;
-import dev.robotgryphon.testmod.menu.TestScreenMenuProvider;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
@@ -35,13 +34,6 @@ public class TestMod {
                             ChestFiller.fill(level, pos, level.getRandom());
                             context.getSource().sendSuccess(() -> Component.literal(
                                     "Filled chest at " + pos.getX() + ", " + pos.getY() + ", " + pos.getZ()), false);
-                            return 1;
-                        }))
-                .then(Commands.literal("screen")
-                        .requires(CommandSourceStack::isPlayer)
-                        .executes(context -> {
-                            var player = context.getSource().getPlayerOrException();
-                            player.openMenu(new TestScreenMenuProvider(TestModMenus.levelCanvas(player.level())));
                             return 1;
                         })));
     }

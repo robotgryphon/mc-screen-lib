@@ -11,7 +11,8 @@ public record NodeBackgroundRenderState(ScreenRectangle bounds,
                                         List<NodeBackgroundUniform.Entry> entries,
                                         float cornerRadiusScaled,
                                         float featherScaled,
-                                        float borderThicknessScaled)
+                                        float borderThicknessScaled,
+                                        @Nullable ScreenRectangle scissorArea)
         implements PictureInPictureRenderState {
     @Override
     public int x0() { return bounds.left(); }
@@ -27,7 +28,4 @@ public record NodeBackgroundRenderState(ScreenRectangle bounds,
 
     @Override
     public float scale() { return 1; }
-
-    @Override
-    public @Nullable ScreenRectangle scissorArea() { return null; }
 }

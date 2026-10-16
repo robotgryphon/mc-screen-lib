@@ -99,7 +99,7 @@ public abstract class PropertyEditor<T> extends AbstractWidget {
         float borderThicknessScaled = 0f;
 
         var state = new NodeBackgroundRenderState(textureBounds, List.of(entry),
-                cornerRadiusScaled, featherScaled, borderThicknessScaled);
+                cornerRadiusScaled, featherScaled, borderThicknessScaled, graphics.peekScissorStack());
         graphics.submitPictureInPictureRenderState(state);
     }
 

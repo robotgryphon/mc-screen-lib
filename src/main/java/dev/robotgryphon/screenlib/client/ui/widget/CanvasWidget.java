@@ -4,14 +4,14 @@ import dev.robotgryphon.screenlib.graph.canvas.client.CanvasViewport;
 import dev.robotgryphon.screenlib.client.ui.state.DragState;
 import dev.robotgryphon.screenlib.client.ui.state.PendingConnection;
 import dev.robotgryphon.screenlib.client.GraphColors;
-import dev.robotgryphon.screenlib.client.ui.widget.node.NodePortsRenderer;
+import dev.robotgryphon.screenlib.client.ui.widget.node.NodeBackgrounds;
 import dev.robotgryphon.screenlib.client.ui.widget.node.NodeWidget;
+import dev.robotgryphon.screenlib.client.ui.widget.canvas.CanvasBounds;
+import dev.robotgryphon.screenlib.graph.canvas.client.ViewportState;
+import net.minecraft.util.Mth;
 import dev.robotgryphon.screenlib.graph.Connection;
-import dev.robotgryphon.screenlib.client.NodeRenderer;
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.robotgryphon.screenlib.client.ui.render.pip.BezierCurveRenderState;
-import dev.robotgryphon.screenlib.client.ui.render.pip.NodeBackgroundRenderState;
-import dev.robotgryphon.screenlib.client.ui.render.uniforms.NodeBackgroundUniform;
 import dev.robotgryphon.screenlib.client.ui.widget.property.NumericPropertyEditor;
 import dev.robotgryphon.screenlib.client.geometry.BezierCurve;
 import dev.robotgryphon.screenlib.client.geometry.CurveIndicator;
@@ -21,7 +21,6 @@ import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.nodes.ports.PortSide;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -39,6 +38,7 @@ import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -49,6 +49,8 @@ public class CanvasWidget extends AbstractWidget {
     private static final float MISMATCHED_TYPE_ALPHA = 0.3f;
 
     private static final int IN_FLIGHT_COLOR = 0xFFFFD24A;
+
+    private static final double FIT_PADDING = 24;
 
     public final ClientCanvasState canvas;
 
@@ -70,18 +72,31 @@ public class CanvasWidget extends AbstractWidget {
 
     private @Nullable ContextMenu activeMenu;
 
-    private final Consumer<Vector2dc> onAddNodeRequested;
+    private Consumer<ContextMenu> menus = menu -> this.activeMenu = menu;
 
-    private final ViewportToolbar toolbar = new ViewportToolbar(this);
 
-    public CanvasWidget(ClientCanvasState canvas, int x, int y, int width, int height,
-                        Consumer<Vector2dc> onAddNodeRequested) {
+    public CanvasWidget(ClientCanvasState canvas, int x, int y, int width, int height) {
         super(x, y, width, height, Component.empty());
         this.canvas = canvas;
-        this.onAddNodeRequested = onAddNodeRequested;
     }
 
-    List<NodeWidget> nodeWidgets() {
+    public void menus(Consumer<ContextMenu> menus) {
+        this.menus = menus;
+    }
+
+    @Override
+    public void setX(int x) {
+        this.viewport.pan(x - this.getX(), 0);
+        super.setX(x);
+    }
+
+    @Override
+    public void setY(int y) {
+        this.viewport.pan(0, y - this.getY());
+        super.setY(y);
+    }
+
+    public List<NodeWidget> nodeWidgets() {
         List<Node> nodes = this.canvas.graph().nodes();
         boolean current = nodes.size() == this.widgets.size();
         for (int i = 0; current && i < nodes.size(); i++) {
@@ -145,8 +160,43 @@ public class CanvasWidget extends AbstractWidget {
         return this.viewport;
     }
 
-    void openMenu(ContextMenu menu) {
-        this.activeMenu = menu;
+    public void openMenu(ContextMenu menu) {
+        this.menus.accept(menu);
+    }
+
+    public void zoomTo(float zoom) {
+        this.viewport.zoomAround(zoom, this.getX() + this.getWidth() / 2.0, this.getY() + this.getHeight() / 2.0);
+    }
+
+    public void centerOn(double canvasX, double canvasY, float zoom) {
+        this.viewport.apply(new ViewportState(canvasX, canvasY, zoom), this.getRectangle());
+    }
+
+    public void fitToContent() {
+        Optional<CanvasBounds> content = this.contentBounds();
+        if (content.isEmpty()) {
+            this.centerOn(0, 0, 1f);
+            return;
+        }
+        CanvasBounds bounds = content.get().grow(FIT_PADDING);
+        float zoom = (float) Math.min(this.getWidth() / bounds.width(), this.getHeight() / bounds.height());
+        this.centerOn(bounds.centerX(), bounds.centerY(), Mth.clamp(zoom, CanvasViewport.MIN_ZOOM, 1f));
+    }
+
+    public Optional<CanvasBounds> contentBounds() {
+        CanvasBounds result = null;
+        for (NodeWidget widget : this.nodeWidgets()) {
+            CanvasBounds node = new CanvasBounds(widget.getX(), widget.getY(),
+                    widget.getX() + widget.getWidth(), widget.getY() + widget.getHeight());
+            result = result == null ? node : result.union(node);
+        }
+        return Optional.ofNullable(result);
+    }
+
+    public CanvasBounds viewBounds() {
+        Vector2dc min = this.viewport.screenToCanvas(this.getX(), this.getY());
+        Vector2dc max = this.viewport.screenToCanvas(this.getRight(), this.getBottom());
+        return new CanvasBounds(min.x(), min.y(), max.x(), max.y());
     }
 
     @Override
@@ -172,10 +222,6 @@ public class CanvasWidget extends AbstractWidget {
             return true;
         }
 
-        if (this.toolbar.mouseClicked(event.x(), event.y(), event.button() == InputConstants.MOUSE_BUTTON_LEFT)) {
-            return true;
-        }
-
         NodeWidget popupNode = this.findPopupNode();
         if (popupNode != null) {
             if (popupNode.properties().handleFocusedPropertyPopupClick(this.viewport, event.x(), event.y())) {
@@ -196,27 +242,18 @@ public class CanvasWidget extends AbstractWidget {
         if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
             final Vector2dc canvasPos = this.viewport.screenToCanvas(event.x(), event.y());
             final NodeWidget hitNode = this.findNodesNear(canvasPos).findFirst().orElse(null);
-            if (hitNode != null && this.canvas.isRequired(hitNode.node())) {
+            if (hitNode == null || this.canvas.isRequired(hitNode.node())) {
                 return true;
             }
 
-            List<ContextMenu.Item> items;
-            if (hitNode != null) {
-                items = List.of(new ContextMenu.Item(
-                        Component.literal("Remove Node"),
-                        () -> {
-                            canvas.removeNode(hitNode.node());
-                            if (this.focusedNode == hitNode) {
-                                this.focusedNode = null;
-                            }
-                        }));
-            } else {
-                items = List.of(new ContextMenu.Item(
-                        Component.literal("Add Node"),
-                        () -> this.onAddNodeRequested.accept(canvasPos)));
-            }
-
-            this.activeMenu = new ContextMenu((int) event.x(), (int) event.y(), items);
+            this.openMenu(new ContextMenu((int) event.x(), (int) event.y(), List.of(new ContextMenu.Item(
+                    Component.literal("Remove Node"),
+                    () -> {
+                        canvas.removeNode(hitNode.node());
+                        if (this.focusedNode == hitNode) {
+                            this.focusedNode = null;
+                        }
+                    }))));
             return true;
         }
 
@@ -258,9 +295,6 @@ public class CanvasWidget extends AbstractWidget {
     public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
         final var asCanvasEvent = convertMouseButtonEvent(event);
 
-        if (this.toolbar.mouseDragged(event.x(), event.y())) {
-            return true;
-        }
         if (this.panning) {
             this.viewport.pan((float) dx, (float) dy);
             return true;
@@ -280,9 +314,6 @@ public class CanvasWidget extends AbstractWidget {
         final var canvasSpace = this.viewport.screenToCanvas(event.x(), event.y());
         final var asCanvasEvent = convertMouseButtonEvent(event);
 
-        if (this.toolbar.mouseReleased()) {
-            return true;
-        }
         if (this.panning) {
             this.panning = false;
             return true;
@@ -322,9 +353,6 @@ public class CanvasWidget extends AbstractWidget {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (this.toolbar.contains(mouseX, mouseY)) {
-            return true;
-        }
         var canvasPos = this.viewport.screenToCanvas(mouseX, mouseY);
         var hit = this.findNodesNear(canvasPos).findFirst().orElse(null);
         if (hit != null && hit.mouseScrolled(canvasPos.x(), canvasPos.y(), scrollX, scrollY)) {
@@ -370,6 +398,7 @@ public class CanvasWidget extends AbstractWidget {
 
     @Override
     protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        graphics.enableScissor(this.getX(), this.getY(), this.getRight(), this.getBottom());
         graphics.pose().pushMatrix();
         this.viewport.transformPose(graphics.pose());
 
@@ -403,26 +432,24 @@ public class CanvasWidget extends AbstractWidget {
         for (List<NodeWidget> layer : staticByLayer) {
             if (layer.isEmpty()) continue;
             graphics.nextStratum();
-            extractNodeBackgrounds(graphics, layer, false);
+            NodeBackgrounds.nodes(graphics, this.viewport, layer, false);
             for (NodeWidget node : layer) {
                 node.extractRenderState(graphics, (int) canvasMouse.x(), (int) canvasMouse.y(), partialTick);
             }
-            extractPortCircles(graphics, layer, canvasMouse);
+            NodeBackgrounds.ports(graphics, this.viewport, layer, canvasMouse);
         }
 
         if (!draggedNodes.isEmpty()) {
             graphics.nextStratum();
-            extractNodeBackgrounds(graphics, draggedNodes, true);
+            NodeBackgrounds.nodes(graphics, this.viewport, draggedNodes, true);
             for (NodeWidget node : draggedNodes) {
                 node.extractRenderState(graphics, (int) canvasMouse.x(), (int) canvasMouse.y(), partialTick);
             }
-            extractPortCircles(graphics, draggedNodes, canvasMouse);
+            NodeBackgrounds.ports(graphics, this.viewport, draggedNodes, canvasMouse);
         }
 
         graphics.pose().popMatrix();
-
-        graphics.nextStratum();
-        this.toolbar.render(graphics, mouseX, mouseY);
+        graphics.disableScissor();
 
         if (this.activeMenu != null) {
             graphics.nextStratum();
@@ -433,8 +460,8 @@ public class CanvasWidget extends AbstractWidget {
         if (popupNode != null) {
             graphics.nextStratum();
             popupNode.properties().renderFocusedPropertyPopup(graphics, this.viewport, mouseX, mouseY);
-        } else if (this.activeMenu == null && this.pending == null && !this.panning && this.canvasHasNoDraggedNode()
-                && !this.toolbar.contains(mouseX, mouseY)) {
+        } else if (this.isHovered() && this.activeMenu == null && this.pending == null && !this.panning
+                && this.canvasHasNoDraggedNode()) {
             this.findNodesNear(canvasMouse).findFirst()
                     .ifPresent(widget -> {
                         if (!widget.properties().tooltip(graphics, canvasMouse.x(), canvasMouse.y(), mouseX, mouseY)) {
@@ -490,106 +517,6 @@ public class CanvasWidget extends AbstractWidget {
 
         for (var curve : curves) {
             final var state = BezierCurveRenderState.from(graphics, curve);
-            graphics.submitPictureInPictureRenderState(state);
-        }
-    }
-
-    private void extractNodeBackgrounds(GuiGraphicsExtractor graphics,
-                                        List<NodeWidget> nodes,
-                                        boolean dropShadow) {
-        if (nodes.isEmpty()) {
-            return;
-        }
-
-        int minX = Integer.MAX_VALUE;
-        int minY = Integer.MAX_VALUE;
-        int maxX = Integer.MIN_VALUE;
-        int maxY = Integer.MIN_VALUE;
-        for (NodeWidget widget : nodes) {
-            ScreenRectangle b = widget.screenBounds(this.viewport);
-            minX = Math.min(minX, b.left());
-            minY = Math.min(minY, b.top());
-            maxX = Math.max(maxX, b.right());
-            maxY = Math.max(maxY, b.bottom());
-        }
-        int basePad = 1;
-        int shadowPad = dropShadow
-                ? Math.max(2, Math.round(NodeWidget.NODE_CORNER_RADIUS * this.viewport.zoom() * 2f))
-                : 0;
-        boolean anyGlow = false;
-        for (NodeWidget widget : nodes) {
-            if (widget.hasVisibleGlow()) {
-                anyGlow = true;
-                break;
-            }
-        }
-        int glowPad = anyGlow
-                ? Math.max(2, Math.round(NodeWidget.NODE_CORNER_RADIUS * this.viewport.zoom()))
-                : 0;
-        int leftPad = basePad + Math.max(shadowPad, glowPad);
-        int topPad = basePad + Math.max(shadowPad, glowPad);
-        int rightPad = basePad + Math.max(shadowPad, glowPad);
-        int bottomPad = basePad + Math.max(shadowPad, glowPad);
-        minX -= leftPad; minY -= topPad;
-        maxX += rightPad; maxY += bottomPad;
-        ScreenRectangle textureBounds = new ScreenRectangle(minX, minY, maxX - minX, maxY - minY);
-
-        float guiScale = (float) net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScale();
-        float cornerRadiusScaled = NodeWidget.NODE_CORNER_RADIUS * this.viewport.zoom() * guiScale;
-        float featherScaled = 1f;
-        float borderThicknessScaled = Math.max(1f,
-                0.5f * this.viewport.zoom() * guiScale);
-
-        List<NodeBackgroundUniform.Entry> entries = new ArrayList<>(nodes.size());
-        for (NodeWidget widget : nodes) {
-            entries.add(widget.buildBackgroundEntry(this.viewport, minX, minY, guiScale, dropShadow));
-        }
-
-        var state = new NodeBackgroundRenderState(textureBounds, entries,
-                cornerRadiusScaled, featherScaled, borderThicknessScaled);
-        graphics.submitPictureInPictureRenderState(state);
-    }
-
-    private void extractPortCircles(GuiGraphicsExtractor graphics,
-                                    List<NodeWidget> nodes,
-                                    Vector2dc canvasMouse) {
-        if (nodes.isEmpty()) return;
-
-        float guiScale = (float) net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScale();
-        float radiusScaled = NodeRenderer.PORT_RADIUS * this.viewport.zoom() * guiScale;
-        float hoverRadiusScaled = radiusScaled * NodePortsRenderer.HOVER_RADIUS_FACTOR;
-        float featherScaled = 1f;
-        float borderThicknessScaled = Math.max(1f, radiusScaled * 0.2f);
-
-        int minX = Integer.MAX_VALUE;
-        int minY = Integer.MAX_VALUE;
-        int maxX = Integer.MIN_VALUE;
-        int maxY = Integer.MIN_VALUE;
-        for (NodeWidget widget : nodes) {
-            ScreenRectangle b = widget.screenBounds(this.viewport);
-            minX = Math.min(minX, b.left());
-            minY = Math.min(minY, b.top());
-            maxX = Math.max(maxX, b.right());
-            maxY = Math.max(maxY, b.bottom());
-        }
-        int pad = (int) Math.ceil(hoverRadiusScaled / guiScale) + 1;
-        minX -= pad; minY -= pad;
-        maxX += pad; maxY += pad;
-        ScreenRectangle textureBounds = new ScreenRectangle(minX, minY, maxX - minX, maxY - minY);
-
-        List<NodeBackgroundUniform.Entry> entries = new ArrayList<>();
-        for (NodeWidget widget : nodes) {
-            widget.ports().appendPortEntries(this.viewport, minX, minY, guiScale,
-                    canvasMouse.x(), canvasMouse.y(), entries);
-        }
-        if (entries.isEmpty()) return;
-
-        int max = NodeBackgroundUniform.Storage.MAX_NODES;
-        for (int from = 0; from < entries.size(); from += max) {
-            int to = Math.min(from + max, entries.size());
-            List<NodeBackgroundUniform.Entry> chunk = entries.subList(from, to);
-            var state = new NodeBackgroundRenderState(textureBounds, List.copyOf(chunk),
-                    radiusScaled, featherScaled, borderThicknessScaled);
             graphics.submitPictureInPictureRenderState(state);
         }
     }

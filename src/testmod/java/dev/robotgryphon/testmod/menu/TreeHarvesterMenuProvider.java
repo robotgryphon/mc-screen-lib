@@ -8,22 +8,18 @@ import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.level.block.entity.BlockEntity;
 
-import java.util.function.Predicate;
-
-public record TestScreenMenuProvider(CanvasSupplier source, Predicate<Player> validFor) implements MenuProvider {
-    public TestScreenMenuProvider(CanvasSupplier source) {
-        this(source, player -> true);
-    }
-
+public record TreeHarvesterMenuProvider(CanvasSupplier source, BlockEntity blockEntity, Component title)
+        implements MenuProvider {
     @Override
     public Component getDisplayName() {
-        return Component.empty();
+        return this.title;
     }
 
     @Override
-    public AbstractContainerMenu createMenu(int containerId, Inventory inv, Player player) {
-        return new TestScreenMenu(containerId, inv, this.source, this, this.validFor);
+    public AbstractContainerMenu createMenu(int containerId, Inventory inventory, Player player) {
+        return new TreeHarvesterMenu(containerId, inventory, this.source, this, this.blockEntity);
     }
 
     @Override

@@ -8,10 +8,14 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
-import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
+import dev.robotgryphon.screenlib.graph.canvas.client.CanvasViewport;
+import dev.robotgryphon.screenlib.graph.canvas.client.ViewportState;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
+import org.joml.Vector2d;
 import org.joml.Vector2fc;
 
+import java.util.List;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 
@@ -29,6 +33,8 @@ public class NodePreviewWidget extends AbstractWidget {
     private static final int CELL_BORDER_SELECTED = 0xFFFFD24A;
     private static final int LABEL_COLOR = 0xFFE0E0E0;
 
+    private static final int OFFSCREEN = -10_000;
+
     private static final int HIGHLIGHT_HALO_COLOR = 0xFFFFD24A;
     private static final int HIGHLIGHT_HALO_RADIUS = NodeRenderer.PORT_RADIUS + 4;
 
@@ -37,25 +43,17 @@ public class NodePreviewWidget extends AbstractWidget {
     private final Component name;
     private final int scaledNodeMaxH;
     private final BooleanSupplier isSelected;
-    private final Runnable onSelect;
     private Set<Port> highlightedPorts = Set.of();
 
     public NodePreviewWidget(int width, int height, int scaledNodeMaxH,
                              Node node, NodeWidget widget, Component name,
-                             BooleanSupplier isSelected, Runnable onSelect) {
+                             BooleanSupplier isSelected) {
         super(0, 0, width, height, name);
         this.node = node;
         this.widget = widget;
         this.name = name;
         this.scaledNodeMaxH = scaledNodeMaxH;
         this.isSelected = isSelected;
-        this.onSelect = onSelect;
-    }
-
-    @Override
-    public void onClick(MouseButtonEvent event, boolean doubleClick) {
-        super.onClick(event, doubleClick);
-        this.onSelect.run();
     }
 
     public void setHighlightedPorts(Set<Port> ports) {
@@ -84,9 +82,15 @@ public class NodePreviewWidget extends AbstractWidget {
         int nodeRenderX = x + (w - nodeRenderW) / 2;
         int nodeRenderY = y + CELL_PADDING + (this.scaledNodeMaxH - nodeRenderH) / 2;
 
+        CanvasViewport viewport = new CanvasViewport();
+        viewport.apply(new ViewportState(this.widget.getX(), this.widget.getY(), PREVIEW_SCALE),
+                new ScreenRectangle(nodeRenderX, nodeRenderY, 0, 0));
+        List<NodeWidget> nodes = List.of(this.widget);
+
+        graphics.nextStratum();
         graphics.pose().pushMatrix();
-        graphics.pose().translate((float) nodeRenderX, (float) nodeRenderY);
-        graphics.pose().scale(PREVIEW_SCALE, PREVIEW_SCALE);
+        viewport.transformPose(graphics.pose());
+        NodeBackgrounds.nodes(graphics, viewport, nodes, false);
 
         if (!this.highlightedPorts.isEmpty()) {
             for (Port port : this.node.portManager().ports()) {
@@ -98,7 +102,8 @@ public class NodePreviewWidget extends AbstractWidget {
             }
         }
 
-        this.widget.extractRenderState(graphics, -10000, -10000, partialTick);
+        this.widget.extractRenderState(graphics, OFFSCREEN, OFFSCREEN, partialTick);
+        NodeBackgrounds.ports(graphics, viewport, nodes, new Vector2d(OFFSCREEN, OFFSCREEN));
         graphics.pose().popMatrix();
 
         Font font = Minecraft.getInstance().font;

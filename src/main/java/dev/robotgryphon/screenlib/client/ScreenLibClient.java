@@ -6,8 +6,10 @@ import dev.robotgryphon.screenlib.client.render.block.BlockPreviewRenderState;
 import dev.robotgryphon.screenlib.ScreenLib;
 import dev.robotgryphon.screenlib.client.appearance.NodeAppearances;
 import dev.robotgryphon.screenlib.client.render.NodeWidgets;
+import dev.robotgryphon.screenlib.client.ui.widget.canvas.CanvasTools;
+import dev.robotgryphon.screenlib.client.ui.widget.panel.PanelTypes;
+import dev.robotgryphon.screenlib.client.ui.widget.toolbar.ToolbarButtons;
 import dev.robotgryphon.screenlib.client.render.PropertyRenderers;
-import dev.robotgryphon.screenlib.client.ui.AddNodeScreen;
 import dev.robotgryphon.screenlib.client.ui.render.ExRenderPipelines;
 import dev.robotgryphon.screenlib.client.ui.render.pip.BezierCurvePiPRenderer;
 import dev.robotgryphon.screenlib.client.ui.render.pip.BezierCurveRenderState;
@@ -18,7 +20,6 @@ import dev.robotgryphon.screenlib.graph.canvas.client.CanvasViewports;
 import net.neoforged.neoforge.client.event.AddClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.neoforged.neoforge.client.event.RegisterPictureInPictureRenderersEvent;
 import net.neoforged.neoforge.client.event.RegisterRenderPipelinesEvent;
 
@@ -31,10 +32,12 @@ public class ScreenLibClient {
     public ScreenLibClient(IEventBus modEventBus) {
         modEventBus.addListener(ScreenLibClient::registerPips);
         modEventBus.addListener(ScreenLibClient::registerRenderPipelines);
-        modEventBus.addListener(ScreenLibClient::registerMenuScreens);
         modEventBus.addListener(ScreenLibClient::registerReloadListeners);
         NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut event) -> CanvasViewports.clear());
         NodeWidgets.RENDERERS.register(modEventBus);
+        ToolbarButtons.BUTTONS.register(modEventBus);
+        PanelTypes.PANELS.register(modEventBus);
+        CanvasTools.register(modEventBus);
         PropertyRenderers.RENDERERS.register(modEventBus);
     }
 
@@ -51,9 +54,5 @@ public class ScreenLibClient {
 
     private static void registerReloadListeners(AddClientReloadListenersEvent event) {
         event.addListener(NodeAppearances.ID, NodeAppearances.INSTANCE);
-    }
-
-    private static void registerMenuScreens(RegisterMenuScreensEvent event) {
-        event.register(ScreenLib.ADD_NODE_MENU.get(), AddNodeScreen::new);
     }
 }

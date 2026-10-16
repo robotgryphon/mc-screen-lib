@@ -1,12 +1,12 @@
 package dev.robotgryphon.testmod.block;
 
 import dev.robotgryphon.screenlib.ScreenLibCapabilities;
+import dev.robotgryphon.testmod.menu.TreeHarvesterMenuProvider;
+
 import dev.robotgryphon.testmod.TestModBlocks;
-import dev.robotgryphon.testmod.menu.TestScreenMenuProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.Container;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
@@ -52,8 +52,7 @@ public class TreeHarvesterBlock extends Block implements EntityBlock {
         var canvas = level.getCapability(ScreenLibCapabilities.CANVAS, pos);
         var blockEntity = level.getBlockEntity(pos);
         if (player instanceof ServerPlayer serverPlayer && canvas != null && blockEntity != null) {
-            serverPlayer.openMenu(new TestScreenMenuProvider(canvas,
-                    viewer -> Container.stillValidBlockEntity(blockEntity, viewer)));
+            serverPlayer.openMenu(new TreeHarvesterMenuProvider(canvas, blockEntity, this.getName()));
         }
         return InteractionResult.SUCCESS_SERVER;
     }

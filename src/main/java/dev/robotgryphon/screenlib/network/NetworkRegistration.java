@@ -30,16 +30,6 @@ public final class NetworkRegistration {
                 ClientPayloadHandler::handleEvaluation
         );
 
-        registrar.playToServer(
-                RequestAddNodePayload.TYPE,
-                RequestAddNodePayload.STREAM_CODEC,
-                ServerPayloadHandler::handleRequestAddNode
-        );
-
-        registrar.playToServer(
-                AddNodeResultPayload.TYPE,
-                AddNodeResultPayload.STREAM_CODEC,
-                ServerPayloadHandler::handleAddNodeResult
-        );
+        registrar.playToServer(AddNodePayload.TYPE, AddNodePayload.STREAM_CODEC, ServerPayloadHandler::handleAddNode);
     }
 }

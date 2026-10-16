@@ -9,7 +9,8 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.jspecify.annotations.Nullable;
 
 public record BlockPreviewRenderState(ResourceKey<Level> level, BlockPos pos, BlockState state,
-                                      ScreenRectangle bounds, float scale) implements PictureInPictureRenderState {
+                                      ScreenRectangle bounds, float scale,
+                                      @Nullable ScreenRectangle scissorArea) implements PictureInPictureRenderState {
     @Override
     public int x0() {
         return this.bounds.left();
@@ -28,10 +29,5 @@ public record BlockPreviewRenderState(ResourceKey<Level> level, BlockPos pos, Bl
     @Override
     public int y1() {
         return this.bounds.bottom();
-    }
-
-    @Override
-    public @Nullable ScreenRectangle scissorArea() {
-        return null;
     }
 }

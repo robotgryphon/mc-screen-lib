@@ -1,23 +1,33 @@
 package dev.robotgryphon.screenlib.client.network;
 
-import dev.robotgryphon.screenlib.client.ui.CanvasScreen;
+import dev.robotgryphon.screenlib.client.ui.CanvasSession;
+import dev.robotgryphon.screenlib.client.ui.core.UiScreen;
+import dev.robotgryphon.screenlib.client.ui.widget.canvas.CanvasPanel;
 import dev.robotgryphon.screenlib.network.CanvasEvaluationPayload;
 import dev.robotgryphon.screenlib.network.CanvasSyncPayload;
 import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
+import java.util.List;
+
 public final class ClientPayloadHandler {
     private ClientPayloadHandler() {}
 
-    public static void handleEvaluation(CanvasEvaluationPayload payload, IPayloadContext context) {
-        if (Minecraft.getInstance().gui.screen() instanceof CanvasScreen<?> screen) {
-            screen.applyEvaluation(payload);
+    private static List<CanvasSession> sessions() {
+        if (Minecraft.getInstance().gui.screen() instanceof UiScreen screen) {
+            return screen.host().panels(CanvasPanel.class).stream()
+                    .map(CanvasPanel::session)
+                    .distinct()
+                    .toList();
         }
+        return List.of();
+    }
+
+    public static void handleEvaluation(CanvasEvaluationPayload payload, IPayloadContext context) {
+        sessions().forEach(session -> session.applyEvaluation(payload));
     }
 
     public static void handleSync(CanvasSyncPayload payload, IPayloadContext context) {
-        if (Minecraft.getInstance().gui.screen() instanceof CanvasScreen<?> screen) {
-            screen.applySync(payload.state());
-        }
+        sessions().forEach(session -> session.applySync(payload.state()));
     }
 }
