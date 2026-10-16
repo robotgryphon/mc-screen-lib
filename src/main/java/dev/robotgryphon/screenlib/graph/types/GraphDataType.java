@@ -3,16 +3,12 @@ package dev.robotgryphon.screenlib.graph.types;
 import com.mojang.serialization.Codec;
 import dev.robotgryphon.screenlib.ScreenLib;
 import net.minecraft.core.Holder;
-import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.codec.RegistryCodecs;
 import net.minecraft.resources.ResourceKey;
-
-import java.util.Collection;
-import java.util.Optional;
 
 public interface GraphDataType<T> {
     ResourceKey<Registry<GraphDataType<?>>> REGISTRY_KEY =
@@ -30,12 +26,4 @@ public interface GraphDataType<T> {
     Codec<T> codec();
 
     StreamCodec<? super RegistryFriendlyByteBuf, T> streamCodec();
-
-    default Optional<T> defaultValueRaw() {
-        return Optional.empty();
-    }
-
-    default Optional<Collection<T>> allowedValues(RegistryAccess registries) {
-        return Optional.empty();
-    }
 }

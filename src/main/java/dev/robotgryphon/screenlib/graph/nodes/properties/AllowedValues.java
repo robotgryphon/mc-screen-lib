@@ -1,5 +1,6 @@
 package dev.robotgryphon.screenlib.graph.nodes.properties;
 
+import dev.robotgryphon.screenlib.graph.types.RestrictedDataType;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistryAccess;
@@ -12,6 +13,8 @@ public interface AllowedValues {
     Optional<Collection<Object>> of(Holder<GraphDataType<?>> type);
 
     static AllowedValues live(RegistryAccess registries) {
-        return type -> type.value().allowedValues(registries).map(Collections::unmodifiableCollection);
+        return type -> type.value() instanceof RestrictedDataType<?> restricted
+                ? Optional.of(Collections.unmodifiableCollection(restricted.allowedValues(registries)))
+                : Optional.empty();
     }
 }

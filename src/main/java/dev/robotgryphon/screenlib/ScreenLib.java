@@ -14,9 +14,6 @@ import dev.robotgryphon.screenlib.graph.nodes.schema.NodeDefinition;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.inventory.MenuType;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
@@ -68,8 +65,8 @@ public class ScreenLib {
 
     public static final DeferredHolder<GraphDataType<?>, LevelGraphDataType> LEVEL_DATA_TYPE = LIB_DATA_TYPES.register("level", LevelGraphDataType::new);
 
-    public static final DeferredHolder<GraphDataType<?>, SimpleGraphDataType<BlockState>> BLOCKSTATE_DATA_TYPE = LIB_DATA_TYPES.register("blockstate", ()
-            -> new SimpleGraphDataType<>(BlockState.class, BlockState.CODEC, ByteBufCodecs.idMapper(Block.BLOCK_STATE_REGISTRY)));
+    public static final DeferredHolder<GraphDataType<?>, BlockStateGraphDataType> BLOCKSTATE_DATA_TYPE =
+            LIB_DATA_TYPES.register("blockstate", BlockStateGraphDataType::new);
 
     public static final DeferredHolder<ComputedProperty<?>, BlockStateAt> BLOCK_STATE_AT =
             COMPUTED_PROPERTIES.register("block_state_at", BlockStateAt::new);

@@ -1,5 +1,6 @@
 package dev.robotgryphon.screenlib.graph.nodes.properties;
 
+import dev.robotgryphon.screenlib.graph.types.DataTypeWithDefault;
 import dev.robotgryphon.screenlib.graph.nodes.properties.schema.PropertyDefinition;
 import dev.robotgryphon.screenlib.graph.nodes.Node;
 import dev.robotgryphon.screenlib.graph.nodes.properties.schema.ComputedPropertyDefinition;
@@ -37,7 +38,9 @@ public final class PropertyManager {
     }
 
     private static <T> PropertyValues withDefault(PropertyValues values, StoredPropertyDefinition<T> property) {
-        return values.with(property, property.type().defaultValueRaw());
+        return property.type() instanceof DataTypeWithDefault<T> withDefault
+                ? values.with(property, Optional.of(withDefault.defaultValue()))
+                : values;
     }
 
     public List<StoredPropertyDefinition<?>> stored() {

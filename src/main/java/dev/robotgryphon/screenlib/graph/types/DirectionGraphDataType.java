@@ -7,10 +7,9 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.RegistryAccess;
 
 import java.util.Collection;
-import java.util.Optional;
 import java.util.Set;
 
-public class DirectionGraphDataType implements GraphDataType<Direction> {
+public class DirectionGraphDataType implements RestrictedDataType<Direction> {
     private static final Set<Direction> ALLOWED = Set.of(Direction.values());
 
     @Override
@@ -29,7 +28,7 @@ public class DirectionGraphDataType implements GraphDataType<Direction> {
     }
 
     @Override
-    public Optional<Collection<Direction>> allowedValues(RegistryAccess registries) {
-        return Optional.of(ALLOWED);
+    public Collection<Direction> allowedValues(RegistryAccess registries) {
+        return ALLOWED;
     }
 }

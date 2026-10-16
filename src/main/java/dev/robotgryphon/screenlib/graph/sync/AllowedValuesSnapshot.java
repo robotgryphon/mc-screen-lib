@@ -1,5 +1,6 @@
 package dev.robotgryphon.screenlib.graph.sync;
 
+import dev.robotgryphon.screenlib.graph.types.RestrictedDataType;
 import dev.robotgryphon.screenlib.graph.nodes.properties.AllowedValues;
 import dev.robotgryphon.screenlib.graph.types.GraphDataType;
 import net.minecraft.core.RegistryAccess;
@@ -49,7 +50,9 @@ public record AllowedValuesSnapshot(List<Entry<?>> entries) {
 
     public record Entry<T>(GraphDataType<T> type, List<T> values) {
         static <T> Optional<Entry<T>> capture(GraphDataType<T> type, RegistryAccess registries) {
-            return type.allowedValues(registries).map(values -> new Entry<>(type, List.copyOf(values)));
+            return type instanceof RestrictedDataType<T> restricted
+                    ? Optional.of(new Entry<>(type, List.copyOf(restricted.allowedValues(registries))))
+                    : Optional.empty();
         }
 
         static <T> Entry<T> read(GraphDataType<T> type, RegistryFriendlyByteBuf buffer) {

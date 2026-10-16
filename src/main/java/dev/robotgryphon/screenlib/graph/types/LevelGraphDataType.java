@@ -9,9 +9,8 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 
 import java.util.Collection;
-import java.util.Optional;
 
-public class LevelGraphDataType implements GraphDataType<ResourceKey<Level>> {
+public class LevelGraphDataType implements RestrictedDataType<ResourceKey<Level>> {
     @Override
     public Class<ResourceKey<Level>> dataType() {
         //noinspection unchecked
@@ -29,8 +28,8 @@ public class LevelGraphDataType implements GraphDataType<ResourceKey<Level>> {
     }
 
     @Override
-    public Optional<Collection<ResourceKey<Level>>> allowedValues(RegistryAccess registries) {
+    public Collection<ResourceKey<Level>> allowedValues(RegistryAccess registries) {
         var reg = registries.lookupOrThrow(Registries.DIMENSION);
-        return Optional.of(reg.listElementIds().toList());
+        return reg.listElementIds().toList();
     }
 }

@@ -5,9 +5,7 @@ import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 
-import java.util.Optional;
-
-public class BooleanGraphDataType implements GraphDataType<Boolean> {
+public class BooleanGraphDataType implements DataTypeWithDefault<Boolean> {
     @Override
     public Class<Boolean> dataType() {
         return Boolean.class;
@@ -24,7 +22,7 @@ public class BooleanGraphDataType implements GraphDataType<Boolean> {
     }
 
     @Override
-    public Optional<Boolean> defaultValueRaw() {
-        return Optional.of(false);
+    public Boolean defaultValue() {
+        return false;
     }
 }
