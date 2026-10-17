@@ -27,11 +27,8 @@ public final class TestToolbars {
 
     public static final DeferredRegister<PanelType<?>> PANELS = DeferredRegister.create(PanelTypes.REGISTRY_KEY, TestMod.MOD_ID);
 
-    public static final ResourceKey<PanelType<?>> PROVIDED_PANEL = panel("provided", "Provided nodes");
     public static final ResourceKey<PanelType<?>> FAVORITES_PANEL = panel("favorites", "Favorite nodes");
 
-    public static final ResourceKey<ToolbarButton> PROVIDED = register("provided",
-            IconToolbarButton.panelTab(ToolbarIcons.PROVIDED, Component.literal("Provided nodes"), PROVIDED_PANEL));
     public static final ResourceKey<ToolbarButton> FAVORITES = register("favorites",
             IconToolbarButton.panelTab(ToolbarIcons.FAVORITES, Component.literal("Favorite nodes"), FAVORITES_PANEL));
     public static final ResourceKey<ToolbarButton> ADD_NODE = register("add_node",
@@ -47,7 +44,7 @@ public final class TestToolbars {
     }
 
     public static void addTo(UiLayout layout, UiHost host) {
-        layout.anchor(Toolbars.create(host, ToolbarOrientation.HORIZONTAL, List.of(List.of(PROVIDED, FAVORITES, ADD_NODE))),
+        layout.anchor(Toolbars.create(host, ToolbarOrientation.HORIZONTAL, List.of(List.of(CanvasTools.PROVIDED, FAVORITES, ADD_NODE))),
                 HorizontalAnchor.LEFT, VerticalAnchor.TOP, 5, 5);
     }
 }

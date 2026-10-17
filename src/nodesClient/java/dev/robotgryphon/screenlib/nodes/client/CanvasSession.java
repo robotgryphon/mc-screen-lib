@@ -13,6 +13,8 @@ import dev.robotgryphon.screenlib.nodes.common.sync.NodeValidity;
 import dev.robotgryphon.screenlib.nodes.common.menu.CanvasContainerMenu;
 import dev.robotgryphon.screenlib.nodes.common.network.CanvasEvaluationPayload;
 import dev.robotgryphon.screenlib.nodes.common.network.AddNodePayload;
+import dev.robotgryphon.screenlib.nodes.common.network.AddProvidedNodePayload;
+import dev.robotgryphon.screenlib.nodes.api.ProvidedNodeReference;
 import dev.robotgryphon.screenlib.graph.schema.NodeDefinition;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.Mth;
@@ -37,7 +39,6 @@ public final class CanvasSession {
     public CanvasSession(CanvasContainerMenu menu) {
         this.menu = menu;
         this.canvas = new ClientCanvasState(menu.allowedValues().resolve());
-        this.canvas.setRequired(menu.requiredNodes());
         this.canvas.load(menu.state());
         this.canvas.onEdit(ClientPacketDistributor::sendToServer);
         ClientPacketDistributor.sendToServer(new SubscribeClientDataPayload(NodeAppearances.subscriptions()));
@@ -61,6 +62,24 @@ public final class CanvasSession {
 
     public void addNode(ResourceKey<NodeDefinition> type, Vector2dc canvasPos) {
         ClientPacketDistributor.sendToServer(new AddNodePayload(type,
+                new Vector2i(Mth.floor(canvasPos.x()), Mth.floor(canvasPos.y()))));
+    }
+
+    public List<ResourceKey<NodeDefinition>> providedNodes() {
+        return this.menu.providedNodes();
+    }
+
+    public boolean isUnplaced(ResourceKey<NodeDefinition> provided) {
+        UUID id = ProvidedNodeReference.idFor(provided);
+        return this.canvas.graph().nodes().stream().noneMatch(node -> node.id().equals(id));
+    }
+
+    public boolean hasUnplacedProvided() {
+        return this.providedNodes().stream().anyMatch(this::isUnplaced);
+    }
+
+    public void addProvidedNode(ResourceKey<NodeDefinition> type, Vector2dc canvasPos) {
+        ClientPacketDistributor.sendToServer(new AddProvidedNodePayload(type,
                 new Vector2i(Mth.floor(canvasPos.x()), Mth.floor(canvasPos.y()))));
     }
 

@@ -8,8 +8,6 @@ import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.codec.StreamCodec;
 
 import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 
 public record DisconnectNodesPayload(ConnectionState connection) implements CanvasEditPayload {
     public static final Type<DisconnectNodesPayload> TYPE = new Type<>(ScreenLib.id("disconnect_nodes"));
@@ -20,7 +18,7 @@ public record DisconnectNodesPayload(ConnectionState connection) implements Canv
     );
 
     @Override
-    public Optional<CanvasState> apply(CanvasState state, RegistryAccess registries, Set<UUID> required) {
+    public Optional<CanvasState> apply(CanvasState state, RegistryAccess registries) {
         if (!state.connections().contains(this.connection)) {
             return Optional.empty();
         }

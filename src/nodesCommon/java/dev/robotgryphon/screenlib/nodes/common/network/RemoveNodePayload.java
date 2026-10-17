@@ -8,7 +8,6 @@ import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.codec.StreamCodec;
 
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 public record RemoveNodePayload(UUID node) implements CanvasEditPayload {
@@ -20,8 +19,8 @@ public record RemoveNodePayload(UUID node) implements CanvasEditPayload {
     );
 
     @Override
-    public Optional<CanvasState> apply(CanvasState state, RegistryAccess registries, Set<UUID> required) {
-        if (required.contains(this.node) || state.node(this.node).isEmpty()) {
+    public Optional<CanvasState> apply(CanvasState state, RegistryAccess registries) {
+        if (state.node(this.node).isEmpty()) {
             return Optional.empty();
         }
         return Optional.of(state.withoutNode(this.node));

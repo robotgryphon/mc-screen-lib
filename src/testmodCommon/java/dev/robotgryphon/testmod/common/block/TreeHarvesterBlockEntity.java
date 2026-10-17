@@ -2,7 +2,7 @@ package dev.robotgryphon.testmod.common.block;
 
 import dev.robotgryphon.screenlib.nodes.api.canvas.CanvasSupplier;
 import dev.robotgryphon.screenlib.nodes.api.canvas.CanvasDefinition;
-import dev.robotgryphon.screenlib.nodes.api.RequiredNodeReference;
+import dev.robotgryphon.screenlib.nodes.api.ProvidedNodeReference;
 import dev.robotgryphon.screenlib.nodes.api.state.CanvasState;
 import dev.robotgryphon.screenlib.graph.schema.types.ItemHandlerAccess;
 import dev.robotgryphon.testmod.common.TestModBlocks;
@@ -50,7 +50,7 @@ public class TreeHarvesterBlockEntity extends BlockEntity {
 
     private final CanvasDefinition canvas = new CanvasDefinition();
 
-    private final RequiredNodeReference treeCutter = this.canvas.require(TreeCutterUpgradeNode.KEY);
+    private final ProvidedNodeReference treeCutter = this.canvas.provide(TreeCutterUpgradeNode.KEY);
 
     private final CanvasSupplier canvasSupplier = CanvasSupplier.of(this.canvas)
             .watch(this.treeCutter, TreeCutterUpgradeNode.TOOLS, this::onToolsStorageChanged)

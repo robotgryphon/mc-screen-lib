@@ -32,6 +32,6 @@ public class TestModClient {
                 .panel(Placement.inset(5, TOOLBAR_SPACE, 5, 5), CanvasPanels.forMenu(menu, title))
                 .layout(TestToolbars::addTo)
                 .tabs(Placement.anchored(HorizontalAnchor.LEFT, VerticalAnchor.TOP, 5, TOOLBAR_SPACE),
-                        List.of(TestToolbars.PROVIDED_PANEL, TestToolbars.FAVORITES_PANEL, CanvasTools.ADD_NODE_PANEL)));
+                        List.of(CanvasTools.PROVIDED_PANEL, TestToolbars.FAVORITES_PANEL, CanvasTools.ADD_NODE_PANEL)));
     }
 }

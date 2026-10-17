@@ -243,7 +243,7 @@ public class CanvasWidget extends AbstractWidget {
         if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
             final Vector2dc canvasPos = this.viewport.screenToCanvas(event.x(), event.y());
             final NodeWidget hitNode = this.findNodesNear(canvasPos).findFirst().orElse(null);
-            if (hitNode == null || this.canvas.isRequired(hitNode.node())) {
+            if (hitNode == null) {
                 return true;
             }
 

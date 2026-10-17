@@ -10,20 +10,21 @@ import org.joml.Vector2ic;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.UUID;
 
 public interface CanvasMenuBackend {
     CanvasState state();
 
     AllowedValuesSnapshot allowedValues();
 
-    List<UUID> requiredNodes();
+    List<ResourceKey<NodeDefinition>> providedNodes();
 
     void subscribe(Collection<ClientDataSubscription> subscriptions);
 
     void applyEdit(CanvasEditPayload edit);
 
     void addNode(ResourceKey<NodeDefinition> type, Vector2ic position);
+
+    void addProvidedNode(ResourceKey<NodeDefinition> type, Vector2ic position);
 
     void tick();
 }

@@ -10,7 +10,6 @@ import net.minecraft.network.codec.StreamCodec;
 import org.joml.Vector2ic;
 
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 public record MoveNodePayload(UUID node, Vector2ic position) implements CanvasEditPayload {
@@ -23,7 +22,7 @@ public record MoveNodePayload(UUID node, Vector2ic position) implements CanvasEd
     );
 
     @Override
-    public Optional<CanvasState> apply(CanvasState state, RegistryAccess registries, Set<UUID> required) {
+    public Optional<CanvasState> apply(CanvasState state, RegistryAccess registries) {
         return state.node(this.node).map(node -> state.withNode(node.withPosition(this.position)));
     }
 

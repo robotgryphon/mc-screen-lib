@@ -13,8 +13,6 @@ import net.minecraft.network.codec.StreamCodec;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 
 public record ConnectNodesPayload(ConnectionState connection) implements CanvasEditPayload {
     public static final Type<ConnectNodesPayload> TYPE = new Type<>(ScreenLib.id("connect_nodes"));
@@ -25,7 +23,7 @@ public record ConnectNodesPayload(ConnectionState connection) implements CanvasE
     );
 
     @Override
-    public Optional<CanvasState> apply(CanvasState state, RegistryAccess registries, Set<UUID> required) {
+    public Optional<CanvasState> apply(CanvasState state, RegistryAccess registries) {
         if (this.connection.sourceNode().equals(this.connection.targetNode())) {
             return Optional.empty();
         }

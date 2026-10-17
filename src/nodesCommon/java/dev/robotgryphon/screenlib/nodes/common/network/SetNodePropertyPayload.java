@@ -15,7 +15,6 @@ import net.minecraft.network.codec.StreamCodec;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 public record SetNodePropertyPayload<T>(UUID node, Holder<NodeDefinition> definition,
@@ -59,7 +58,7 @@ public record SetNodePropertyPayload<T>(UUID node, Holder<NodeDefinition> defini
     }
 
     @Override
-    public Optional<CanvasState> apply(CanvasState state, RegistryAccess registries, Set<UUID> required) {
+    public Optional<CanvasState> apply(CanvasState state, RegistryAccess registries) {
         var node = state.node(this.node).filter(found -> found.definition().value() == this.definition.value());
         if (node.isEmpty()) {
             return Optional.empty();

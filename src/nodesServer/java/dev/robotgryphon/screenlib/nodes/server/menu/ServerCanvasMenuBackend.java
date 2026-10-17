@@ -3,7 +3,7 @@ package dev.robotgryphon.screenlib.nodes.server.menu;
 import dev.robotgryphon.screenlib.nodes.api.canvas.CanvasSupplier;
 import dev.robotgryphon.screenlib.nodes.server.canvas.ServerCanvasSupplier;
 import dev.robotgryphon.screenlib.nodes.server.evaluation.CanvasEvaluator;
-import dev.robotgryphon.screenlib.nodes.api.NodeReference;
+import dev.robotgryphon.screenlib.nodes.api.ProvidedNodeReference;
 import dev.robotgryphon.screenlib.graph.schema.context.NodeCreationContext;
 import dev.robotgryphon.screenlib.graph.schema.properties.PropertyValues;
 import dev.robotgryphon.screenlib.graph.schema.properties.StoredPropertyDefinition;
@@ -29,6 +29,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -40,7 +41,7 @@ public final class ServerCanvasMenuBackend implements CanvasMenuBackend {
     private final ServerCanvasSupplier source;
     private final ServerPlayer player;
     private final AllowedValuesSnapshot allowedValues;
-    private final List<UUID> requiredNodes;
+    private final List<ResourceKey<NodeDefinition>> providedNodes;
 
     private CanvasState state;
     private CanvasEvaluator.Session session;
@@ -51,9 +52,9 @@ public final class ServerCanvasMenuBackend implements CanvasMenuBackend {
     private ServerCanvasMenuBackend(ServerCanvasSupplier source, ServerPlayer player) {
         this.source = source;
         this.player = player;
-        this.state = source.reconcile(player.registryAccess());
+        this.state = source.canvas().state();
         this.allowedValues = AllowedValuesSnapshot.capture(player.registryAccess());
-        this.requiredNodes = source.canvas().required().stream().map(NodeReference::id).toList();
+        this.providedNodes = source.canvas().provided().stream().map(ProvidedNodeReference::type).toList();
         this.session = this.openSession();
     }
 
@@ -84,8 +85,8 @@ public final class ServerCanvasMenuBackend implements CanvasMenuBackend {
     }
 
     @Override
-    public List<UUID> requiredNodes() {
-        return this.requiredNodes;
+    public List<ResourceKey<NodeDefinition>> providedNodes() {
+        return this.providedNodes;
     }
 
     @Override
@@ -97,8 +98,7 @@ public final class ServerCanvasMenuBackend implements CanvasMenuBackend {
     @Override
     public void applyEdit(CanvasEditPayload edit) {
         MinecraftServer server = this.server();
-        Optional<CanvasState> edited = edit.apply(this.source.canvas().state(), server.registryAccess(),
-                Set.copyOf(this.requiredNodes));
+        Optional<CanvasState> edited = edit.apply(this.source.canvas().state(), server.registryAccess());
         if (edited.isEmpty()) {
             PacketDistributor.sendToPlayer(this.player, new CanvasSyncPayload(this.source.canvas().state()));
             return;
@@ -116,10 +116,31 @@ public final class ServerCanvasMenuBackend implements CanvasMenuBackend {
         if (definition.isEmpty()) {
             return;
         }
+        this.insert(new NodeState(UUID.randomUUID(), definition.get(), new Vector2i(position),
+                initialProperties(definition.get(), new NodeCreationContext(this.player), Map.of())));
+    }
+
+    @Override
+    public void addProvidedNode(ResourceKey<NodeDefinition> type, Vector2ic position) {
+        Optional<ProvidedNodeReference> provided = this.source.canvas().provided(type);
+        if (provided.isEmpty() || this.source.canvas().state().node(provided.get().id()).isPresent()) {
+            PacketDistributor.sendToPlayer(this.player, new CanvasSyncPayload(this.source.canvas().state()));
+            return;
+        }
+        Optional<Holder.Reference<NodeDefinition>> definition = this.player.registryAccess()
+                .lookupOrThrow(NodeDefinition.REGISTRY_KEY)
+                .get(type);
+        if (definition.isEmpty()) {
+            return;
+        }
+        this.insert(new NodeState(provided.get().id(), definition.get(), new Vector2i(position),
+                initialProperties(definition.get(), new NodeCreationContext(this.player), provided.get().values())));
+    }
+
+    private void insert(NodeState node) {
         CanvasState current = this.source.canvas().state();
         List<NodeState> nodes = new ArrayList<>(current.nodes());
-        nodes.add(new NodeState(UUID.randomUUID(), definition.get(), new Vector2i(position),
-                initialProperties(definition.get(), new NodeCreationContext(this.player))));
+        nodes.add(node);
         this.commit(current.withContents(nodes, current.connections()));
         PacketDistributor.sendToPlayer(this.player, new CanvasSyncPayload(this.state));
         this.push(true);
@@ -148,14 +169,20 @@ public final class ServerCanvasMenuBackend implements CanvasMenuBackend {
         }
     }
 
-    private static PropertyValues initialProperties(Holder<NodeDefinition> definition, NodeCreationContext context) {
+    private static PropertyValues initialProperties(Holder<NodeDefinition> definition, NodeCreationContext context,
+                                                    Map<String, Object> preset) {
         PropertyValues values = PropertyValues.EMPTY;
         for (var supplier : definition.value().context()) {
-            for (var entry : supplier.value().supply(context).entrySet()) {
-                for (StoredPropertyDefinition<?> property : definition.value().stored()) {
-                    if (property.name().equals(entry.getKey()) && entry.getValue() != null) {
-                        values = values.withChecked(property, entry.getValue());
-                    }
+            values = apply(values, definition, supplier.value().supply(context));
+        }
+        return apply(values, definition, preset);
+    }
+
+    private static PropertyValues apply(PropertyValues values, Holder<NodeDefinition> definition, Map<String, ?> entries) {
+        for (var entry : entries.entrySet()) {
+            for (StoredPropertyDefinition<?> property : definition.value().stored()) {
+                if (property.name().equals(entry.getKey()) && entry.getValue() != null) {
+                    values = values.withChecked(property, entry.getValue());
                 }
             }
         }

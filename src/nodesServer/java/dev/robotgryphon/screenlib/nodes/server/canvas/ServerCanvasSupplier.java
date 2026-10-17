@@ -7,13 +7,6 @@ import dev.robotgryphon.screenlib.graph.schema.properties.DataKey;
 import dev.robotgryphon.screenlib.nodes.server.evaluation.CanvasEvaluator;
 import dev.robotgryphon.screenlib.nodes.server.evaluation.NodeSnapshot;
 import dev.robotgryphon.screenlib.nodes.api.NodeReference;
-import dev.robotgryphon.screenlib.core.ScreenLib;
-import dev.robotgryphon.screenlib.nodes.api.RequiredNodeReference;
-import dev.robotgryphon.screenlib.graph.schema.properties.PropertyValues;
-import dev.robotgryphon.screenlib.graph.schema.NodeDefinition;
-import dev.robotgryphon.screenlib.nodes.api.state.NodeState;
-import org.joml.Vector2i;
-import net.minecraft.core.RegistryAccess;
 import net.minecraft.server.MinecraftServer;
 import org.jspecify.annotations.Nullable;
 
@@ -21,16 +14,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 import dev.robotgryphon.screenlib.nodes.api.canvas.CanvasDefinition;
 
 public final class ServerCanvasSupplier implements CanvasSupplier {
     private static final Object UNSET = new Object();
-    private static final int NEW_NODE_OFFSET = 24;
 
     private final CanvasDefinition canvas;
     private final List<Watch<?>> watches = new ArrayList<>();
@@ -74,44 +63,8 @@ public final class ServerCanvasSupplier implements CanvasSupplier {
         return this;
     }
 
-    public CanvasState reconcile(RegistryAccess registries) {
-        if (this.reconcileRequired(registries)) {
-            this.onChanged.run();
-        }
-        return this.canvas.state();
-    }
-
-    private boolean reconcileRequired(RegistryAccess registries) {
-        CanvasState state = this.canvas.state();
-        var definitions = registries.lookupOrThrow(NodeDefinition.REGISTRY_KEY);
-        Set<UUID> present = state.nodes().stream().map(NodeState::id).collect(Collectors.toSet());
-        List<NodeState> nodes = new ArrayList<>(state.nodes());
-        for (RequiredNodeReference required : this.canvas.required()) {
-            if (present.contains(required.id())) {
-                continue;
-            }
-
-            var definition = definitions.get(required.type());
-            if (definition.isEmpty()) {
-                ScreenLib.LOGGER.error("Required node uses unknown node type {}", required.type().identifier());
-                continue;
-            }
-
-            int offset = (nodes.size() - state.nodes().size()) * NEW_NODE_OFFSET;
-            nodes.add(new NodeState(required.id(), definition.get(), new Vector2i(offset, offset), PropertyValues.EMPTY));
-        }
-
-        if (nodes.size() == state.nodes().size()) {
-            return false;
-        }
-
-        this.canvas.setState(state.withContents(nodes, state.connections()));
-        return true;
-    }
-
     public void update(CanvasState state, MinecraftServer server) {
         this.canvas.setState(this.canvas.state().withContents(state.nodes(), state.connections()));
-        this.reconcileRequired(server.registryAccess());
         this.onChanged.run();
         this.refresh(server);
     }
@@ -121,7 +74,7 @@ public final class ServerCanvasSupplier implements CanvasSupplier {
         if (this.watches.isEmpty()) {
             return;
         }
-        var session = CanvasEvaluator.open(this.reconcile(server.registryAccess()), server.registryAccess(), server);
+        var session = CanvasEvaluator.open(this.canvas.state(), server.registryAccess(), server);
         session.compute();
         this.dispatch(session);
     }

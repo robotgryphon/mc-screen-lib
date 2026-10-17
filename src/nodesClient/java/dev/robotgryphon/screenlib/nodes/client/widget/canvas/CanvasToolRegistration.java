@@ -31,6 +31,7 @@ public final class CanvasToolRegistration {
 
     public static void register(IEventBus modBus) {
         PANELS.register(CanvasTools.ADD_NODE_PANEL.identifier().getPath(), () -> (PanelType<AddNodePanel>) AddNodePanel::new);
+        PANELS.register(CanvasTools.PROVIDED_PANEL.identifier().getPath(), () -> (PanelType<ProvidedNodesPanel>) ProvidedNodesPanel::new);
         button(CanvasTools.FIT, IconToolbarButton
                 .builder(ToolbarIcons.FIT, Component.literal("Fit to content"))
                 .onClick((context, area) -> context.panel(CanvasPanel.class).ifPresent(panel -> panel.canvas().fitToContent()))
@@ -43,6 +44,14 @@ public final class CanvasToolRegistration {
                 .builder(ToolbarIcons.MINIMAP, Component.literal("Toggle minimap"))
                 .active(context -> context.panel(CanvasPanel.class).map(CanvasPanel::isMinimapOpen).orElse(false))
                 .onClick((context, area) -> context.panel(CanvasPanel.class).ifPresent(CanvasPanel::toggleMinimap))
+                .build());
+        button(CanvasTools.PROVIDED, IconToolbarButton
+                .builder(ToolbarIcons.PROVIDED, Component.literal("Provided nodes"))
+                .active(context -> context.isPanelOpen(CanvasTools.PROVIDED_PANEL))
+                .badge(context -> context.panel(CanvasPanel.class)
+                        .map(panel -> panel.session().hasUnplacedProvided())
+                        .orElse(false))
+                .onClick((context, area) -> context.togglePanel(CanvasTools.PROVIDED_PANEL))
                 .build());
         BUTTONS.register(modBus);
         PANELS.register(modBus);

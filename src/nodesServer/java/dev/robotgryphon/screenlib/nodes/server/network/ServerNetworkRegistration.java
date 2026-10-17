@@ -5,6 +5,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import dev.robotgryphon.screenlib.nodes.common.network.SetNodePropertyPayload;
 import dev.robotgryphon.screenlib.nodes.common.network.ConnectNodesPayload;
 import dev.robotgryphon.screenlib.nodes.common.network.AddNodePayload;
+import dev.robotgryphon.screenlib.nodes.common.network.AddProvidedNodePayload;
 import dev.robotgryphon.screenlib.nodes.common.network.MoveNodePayload;
 import dev.robotgryphon.screenlib.nodes.common.network.NetworkRegistration;
 import dev.robotgryphon.screenlib.nodes.common.network.SubscribeClientDataPayload;
@@ -24,5 +25,6 @@ public final class ServerNetworkRegistration {
         registrar.playToServer(SubscribeClientDataPayload.TYPE, SubscribeClientDataPayload.STREAM_CODEC,
                 ServerPayloadHandler::handleSubscribeClientData);
         registrar.playToServer(AddNodePayload.TYPE, AddNodePayload.STREAM_CODEC, ServerPayloadHandler::handleAddNode);
+        registrar.playToServer(AddProvidedNodePayload.TYPE, AddProvidedNodePayload.STREAM_CODEC, ServerPayloadHandler::handleAddProvidedNode);
     }
 }

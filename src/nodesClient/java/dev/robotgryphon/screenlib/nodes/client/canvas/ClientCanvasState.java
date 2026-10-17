@@ -19,12 +19,10 @@ import org.joml.Vector2i;
 import org.joml.Vector2ic;
 import org.jspecify.annotations.Nullable;
 
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -36,7 +34,6 @@ public final class ClientCanvasState {
     private final Map<UUID, List<String>> validity = new HashMap<>();
     private final Map<UUID, Map<String, Object>> clientData = new HashMap<>();
     private final Map<UUID, String> focusedProperties = new HashMap<>();
-    private Set<UUID> required = Set.of();
     private UUID id = UUID.randomUUID();
     private Consumer<CanvasEditPayload> edits = edit -> {};
 
@@ -84,9 +81,6 @@ public final class ClientCanvasState {
     }
 
     public void removeNode(Node node) {
-        if (this.isRequired(node)) {
-            return;
-        }
         this.graph.removeNode(node);
         this.positions.remove(node.id());
         this.validity.remove(node.id());
@@ -117,14 +111,6 @@ public final class ClientCanvasState {
 
     public void place(Node node, int x, int y) {
         this.positions.put(node.id(), new Vector2i(x, y));
-    }
-
-    public boolean isRequired(Node node) {
-        return this.required.contains(node.id());
-    }
-
-    public void setRequired(Collection<UUID> required) {
-        this.required = Set.copyOf(required);
     }
 
     public boolean isInvalid(Node node) {
