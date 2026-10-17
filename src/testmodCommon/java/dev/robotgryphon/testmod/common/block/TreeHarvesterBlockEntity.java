@@ -77,13 +77,13 @@ public class TreeHarvesterBlockEntity extends BlockEntity {
     private int scanIndex;
     private int planted;
 
-    private static final Codec<ResourceStack<ItemResource>> SAPLING_CODEC = RecordCodecBuilder.create(i -> i.group(
+    private static final Codec<ResourceStack<ItemResource>> UNBOUND_ITEM_RESOURCE_STACK_CODEC = RecordCodecBuilder.create(i -> i.group(
             ItemResource.OPTIONAL_CODEC.fieldOf("resource").forGetter(ResourceStack::resource),
             Codec.INT.optionalFieldOf("amount", 0).forGetter(ResourceStack::amount)
     ).apply(i, ResourceStack::new));
 
     private final ResourceStacksResourceHandler<ItemResource> saplings =
-            new ResourceStacksResourceHandler<>(1, ItemResource.EMPTY, SAPLING_CODEC) {
+            new ResourceStacksResourceHandler<>(1, ItemResource.EMPTY, UNBOUND_ITEM_RESOURCE_STACK_CODEC) {
                 @Override
                 public boolean isValid(int index, ItemResource resource) {
                     return isSapling(resource);
