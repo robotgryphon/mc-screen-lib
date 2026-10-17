@@ -24,7 +24,7 @@ runs
 run-data
 
 repo
-src/generated/
+src/core/generated/
 run-testmod
 run-testmod-server
-src/testmod/generated/
+src/testmodCommon/generated/

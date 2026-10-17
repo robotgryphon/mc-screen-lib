@@ -1,0 +1,9 @@
+package dev.robotgryphon.screenlib.ui.common.geometry;
+
+import org.joml.Vector2fc;
+
+public record CurveIndicator(Vector2fc center, float radius, boolean hovered) {
+    public CurveIndicator(Vector2fc center, float radius) {
+        this(center, radius, false);
+    }
+}
