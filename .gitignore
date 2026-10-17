@@ -28,3 +28,5 @@ src/core/generated/
 run-testmod
 run-testmod-server
 src/testmodCommon/generated/
+
+.DS_Store
